@@ -23,4 +23,5 @@
 | 2026-04-13 17:21 | code+doc | 补齐 BUG-003 schema 来源内层标记 | 按修复阶段派工，统一 runtime/inferred schema 在 `schema` 对象内的来源与可编辑标记，并补修复记录 | src/webui/routers/plugin.py；docs | 01KP29VKNYBP0K580MDC6H5XM2 | docs/bugfix_bug003_01KP29VKNYBP0K580MDC6H5XM2_2026-04-13.md |
 | 2026-04-13 17:19 | doc | 新增 BUG-001 修复计划骨架 | 按 assistant 修复阶段纠正要求，仅准备本人修复文档骨架与验证占位 | .golutra/agents 修复记录 | 01KP28XYRDA1JYBVJEVX8858ZN | .golutra/agents/bug001_fix_plan_01KP28XYRDA1JYBVJEVX8858ZN_2026-04-13.md |
 | 2026-04-13 19:02 | code+doc | 修复 BUG-001：brain_planner 故障回退改为显式降级动作 | 按任务 14 修复 P0 问题，拆分模型故障与业务性 complete_talk，并补正式修复文档/索引 | src/chat/brain_chat、docs、agent 记录 | 01KP29EKTS9DTWDQPYSZ096CN7 | docs/bugfix-BUG-001.md；docs/bug_fix_index.md |
+| 2026-04-13 19:05 | code+doc | 修复 BUG-003：未加载插件的推断 schema 明确标记不可保存 | 按任务 14 修复 P0 问题，补齐推断 schema 的保存阻断说明与修复文档 | src/webui/routers/plugin.py；docs/bug_fix_list.md；docs/route14_bug003_member_01KP29VKNY7A4T26S8D3GWPWA6.md | 01KP29VKNY7A4T26S8D3GWPWA6 | route14 bug003 |
 |  |  |  |  |  |  |  |

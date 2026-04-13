@@ -22,6 +22,7 @@
 - **修复方向**: 显式定义 `ReconstructedMessage` 类型，打上 `reconstructed=true` 标记，禁止当完整消息使用
 
 ### BUG-003: 插件 config schema 把推断值冒充运行态
+- **状态**: fixed
 - **文件**: `src/webui/routers/plugin.py:1650-1825`
 - **问题**: 插件未加载时，config-schema 接口从 config.toml 推断出伪 schema 并补充伪造的 `required/hidden/disabled/choices`，返回结构跟运行态完全一样
 - **后果**: 前端生成错误表单，通过保存接口写回错误配置
