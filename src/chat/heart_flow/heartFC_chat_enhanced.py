@@ -73,6 +73,8 @@ class ModelGovernorVerdict:
     upgrade_reason_codes: List[str] = field(default_factory=list)
     rate_limited: bool = False
     fallback_to_small: bool = False
+    dynamic_cooldown_sec: float = 0.0
+    dynamic_hourly_cap: int = 0
 
 
 _WATCH_LEVEL_BY_RANK = {
@@ -1260,8 +1262,87 @@ class EnhancedHeartFChatting(HeartFChatting):
             f"tier={verdict.tier} "
             f"rate_limited={'yes' if verdict.rate_limited else 'no'} "
             f"fallback={'yes' if verdict.fallback_to_small else 'no'} "
+            f"cooldown={float(getattr(verdict, 'dynamic_cooldown_sec', 0.0) or 0.0):.0f}s "
+            f"hour_cap={int(getattr(verdict, 'dynamic_hourly_cap', 0) or 0)} "
             f"reason={summary}"
         )
+
+    def _compute_dynamic_large_model_constraints(
+        self,
+        *,
+        now: float,
+        is_proactive: bool,
+        targeted: bool,
+        high_risk: bool,
+        behavior_verdict: Optional[BehaviorGovernorVerdict],
+        source: str,
+    ) -> Tuple[float, int]:
+        """按上下文动态计算大模型冷却和小时预算，避免硬编码固定秒数/固定次数。"""
+        unanswered = int(getattr(self, "_unanswered_bot_turns", 0) or 0)
+        chatter = float(getattr(self, "_chatterbox_penalty", 0.0) or 0.0)
+        consecutive = float(getattr(self, "_consecutive_speaks", 0.0) or 0.0)
+        proactive_hourly = int(self._current_hourly_proactive_reply_count(now))
+        recent_human = bool(self._has_recent_human_activity(900.0))
+        last_user_ts = float(getattr(self, "_last_user_msg_time", 0.0) or 0.0)
+        silence_sec = max(0.0, now - last_user_ts) if last_user_ts > 0.0 else 3600.0
+        interrupt_level = str(getattr(behavior_verdict, "interrupt_level", "") or "").strip().lower()
+        reply_mode = str(getattr(behavior_verdict, "reply_mode", "") or "").strip().lower()
+        source_label = str(source or "").strip().lower()
+        source_proactive = bool(is_proactive or "proactive" in source_label)
+
+        cooldown = 25.0
+        cooldown += float(min(6, unanswered)) * 16.0
+        cooldown += max(0.0, chatter - 0.6) * 30.0
+        cooldown += max(0.0, consecutive - 2.0) * 7.5
+        if source_proactive:
+            cooldown += float(max(0, proactive_hourly - 1)) * 12.0
+        if silence_sec < 180.0:
+            cooldown += 30.0
+        elif silence_sec < 600.0:
+            cooldown += 12.0
+        if not recent_human:
+            cooldown += 18.0
+        if targeted:
+            cooldown -= 28.0
+        if high_risk:
+            cooldown -= 20.0
+        if interrupt_level == "engage":
+            cooldown -= 10.0
+        elif interrupt_level == "ignore":
+            cooldown += 8.0
+        if reply_mode in {"rest", "defer", "observe"}:
+            cooldown += 14.0
+        if reply_mode == "reply":
+            cooldown -= 6.0
+        if source_proactive and reply_mode != "proactive":
+            cooldown += 10.0
+        cooldown = max(15.0, min(420.0, cooldown))
+
+        hourly_cap = 2
+        if source_proactive:
+            hourly_cap += 1
+        if recent_human:
+            hourly_cap += 1
+        if targeted:
+            hourly_cap += 1
+        if high_risk:
+            hourly_cap += 1
+        if interrupt_level == "engage":
+            hourly_cap += 1
+        if silence_sec < 300.0:
+            hourly_cap += 1
+        if unanswered >= 3:
+            hourly_cap -= 1
+        if chatter >= 2.0:
+            hourly_cap -= 1
+        if consecutive >= 5.0:
+            hourly_cap -= 1
+        if reply_mode in {"rest", "defer", "observe"}:
+            hourly_cap -= 1
+        if not recent_human and source_proactive:
+            hourly_cap -= 1
+        hourly_cap = int(max(1, min(8, hourly_cap)))
+        return cooldown, hourly_cap
 
     def _evaluate_rest_governor(
         self,
@@ -1645,6 +1726,16 @@ class EnhancedHeartFChatting(HeartFChatting):
             reason_codes.append("small_default")
 
         _source = str(source or ("proactive" if is_proactive else "reactive")).strip().lower()
+        dynamic_cooldown_sec, dynamic_hourly_cap = self._compute_dynamic_large_model_constraints(
+            now=now,
+            is_proactive=is_proactive,
+            targeted=targeted,
+            high_risk=high_risk,
+            behavior_verdict=behavior_verdict,
+            source=_source,
+        )
+        verdict.dynamic_cooldown_sec = float(dynamic_cooldown_sec)
+        verdict.dynamic_hourly_cap = int(dynamic_hourly_cap)
         candidate_large = desired_level >= 2 and verdict.tier != "skip"
         high_value = bool(
             targeted
@@ -1664,14 +1755,19 @@ class EnhancedHeartFChatting(HeartFChatting):
                     ) >= 3600.0:
                         self._model_large_hour_window_start = now
                         self._model_large_proactive_hour_calls = 0
-                    if self._model_large_last_ts > 0.0 and (now - self._model_large_last_ts) < 120.0:
+                    _elapsed = max(0.0, now - float(self._model_large_last_ts or 0.0))
+                    if self._model_large_last_ts > 0.0 and _elapsed < dynamic_cooldown_sec:
                         verdict.rate_limited = True
                         verdict.fallback_to_small = True
-                        reason_codes.append("large_rate_limit_120s")
-                    elif self._model_large_proactive_hour_calls >= 3:
+                        reason_codes.append(
+                            f"large_dynamic_cooldown(elapsed={_elapsed:.0f}s<need={dynamic_cooldown_sec:.0f}s)"
+                        )
+                    elif self._model_large_proactive_hour_calls >= dynamic_hourly_cap:
                         verdict.rate_limited = True
                         verdict.fallback_to_small = True
-                        reason_codes.append("large_rate_limit_hourly")
+                        reason_codes.append(
+                            f"large_dynamic_hour_cap(used={self._model_large_proactive_hour_calls}/cap={dynamic_hourly_cap})"
+                        )
                 if not verdict.rate_limited:
                     verdict.tier = "large"
                     reason_codes.append("large_high_value")

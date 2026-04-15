@@ -1244,10 +1244,14 @@ class HeartFlowRegressionTests(unittest.TestCase):
         self.assertEqual(route["quote_policy"], "none")
         self.assertFalse(route["quote_message"])
 
-    def test_model_governor_rate_limits_proactive_large_within_120s(self):
+    def test_model_governor_rate_limits_proactive_large_under_dynamic_pressure(self):
         chat = make_minimal_chat()
         now = time.time()
         chat._model_large_last_ts = now - 30.0
+        chat._last_user_msg_time = now - 40.0
+        chat._unanswered_bot_turns = 5
+        chat._chatterbox_penalty = 2.4
+        chat._consecutive_speaks = 6.0
         behavior = BehaviorGovernorVerdict(
             reply_mode="proactive",
             interrupt_level="engage",
@@ -1267,6 +1271,7 @@ class HeartFlowRegressionTests(unittest.TestCase):
         self.assertEqual(verdict.tier, "small")
         self.assertTrue(verdict.rate_limited)
         self.assertTrue(verdict.fallback_to_small)
+        self.assertGreater(verdict.dynamic_cooldown_sec, 30.0)
 
     def test_model_governor_demotes_noncritical_large_to_small(self):
         chat = make_minimal_chat()

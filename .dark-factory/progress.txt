@@ -110,3 +110,19 @@
 ### Notes:
 - .dark-factory/task.json 的 tasks 仍为空，本轮按约定仅更新 progress.txt，未修改 passes/completedAt。
 - 本轮未引入平台级发送后撤回 API，继续采用“发送前改写/取消发送”路径实现防冒犯。
+## [2026-04-15T21:16:44+08:00] - Task: 模型Governor去硬编码（120秒/固定3次）改为动态条件驱动
+
+### What was done:
+- 将 heartFC 模型路由中的固定限流阈值（120s、每小时3次）替换为动态约束函数 `_compute_dynamic_large_model_constraints()`。
+- 动态冷却与动态小时预算改为由上下文信号共同计算：无人回应计数、话痨惩罚、连续发言、近期真人活跃、静默时长、是否被点名、是否高风险、行为层 interrupt/reply_mode、主动链当前频次。
+- 在 `ModelGovernorVerdict` 增加 `dynamic_cooldown_sec` 和 `dynamic_hourly_cap`，并接入摘要输出，日志可直接看到本轮“为什么限流/放行”。
+- 将原测试 `test_model_governor_rate_limits_proactive_large_within_120s` 改为动态场景测试，验证在高压连发条件下触发限流，不再依赖硬编码秒数。
+
+### Testing:
+- `uv run python -m py_compile src/chat/heart_flow/heartFC_chat_enhanced.py test_heart_flow_regressions.py` （通过）
+- `uv run python -m ruff check src/chat/heart_flow/heartFC_chat_enhanced.py test_heart_flow_regressions.py --target-version py312 --select F821,F823` （通过）
+- `uv run python -m unittest test_heart_flow_regressions.py` （137/137 通过）
+
+### Notes:
+- 本次修复不改外部接口，仅收口内部决策策略。
+- `.dark-factory/task.json` 仍为空 tasks，本轮仅更新 progress 记录。
