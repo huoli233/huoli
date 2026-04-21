@@ -1,7 +1,5 @@
 import asyncio
 import time
-import math
-import random
 import json
 import threading
 from dataclasses import dataclass, field, asdict
@@ -73,6 +71,7 @@ class UserEmotionState:
     baseline_affection: float = 0.0
     interaction_count: int = 0
     last_interaction: float = 0.0
+    last_state_tick: float = 0.0
     is_blocked: bool = False
     block_until: float = 0.0
     block_reason: str = ""
@@ -299,6 +298,9 @@ class EmotionTracker:
             baseline_affection=data.get("baseline_affection", 0.0),
             interaction_count=data.get("interaction_count", 0),
             last_interaction=data.get("last_interaction", 0.0),
+            last_state_tick=data.get(
+                "last_state_tick", data.get("last_interaction", 0.0)
+            ),
             is_blocked=data.get("is_blocked", False),
             block_until=data.get("block_until", 0.0),
             block_reason=data.get("block_reason", ""),
@@ -341,6 +343,7 @@ class EmotionTracker:
             authority_level=data.get("authority_level", 0.0),
             intimacy_level=data.get("intimacy_level", 0.0),
             excess_level=data.get("excess_level", 0.0),
+            last_update_time=data.get("last_update_time", time.time()),
             is_protected=data.get("is_protected", False),
             protect_until=data.get("protect_until", 0.0),
             protect_reason=data.get("protect_reason", ""),
@@ -484,28 +487,102 @@ class EmotionTracker:
         state.distrust_accumulation = max(0, min(100, state.distrust_accumulation))
         state.trauma_accumulation = max(0, min(10, state.trauma_accumulation))
 
+    @staticmethod
+    def _state_time_anchor(state: UserEmotionState) -> float:
+        return float(
+            state.last_state_tick
+            or state.last_interaction
+            or state.last_update_time
+            or state.created_at
+            or 0.0
+        )
+
+    def _release_expired_state_guards(
+        self, state: UserEmotionState, now: float
+    ) -> None:
+        if state.is_blocked and state.block_until > 0 and now >= state.block_until:
+            state.is_blocked = False
+            state.block_until = 0.0
+            state.block_reason = ""
+        if state.is_protected and state.protect_until > 0 and now >= state.protect_until:
+            state.is_protected = False
+            state.protect_until = 0.0
+            state.protect_reason = ""
+
+    def _prepare_state_for_event(
+        self,
+        user_id: str,
+        state: UserEmotionState,
+        *,
+        now: Optional[float] = None,
+        mark_interaction: bool = True,
+    ) -> float:
+        event_now = float(now or time.time())
+        anchor = self._state_time_anchor(state)
+        if anchor > 0 and event_now > anchor:
+            elapsed_hours = (event_now - anchor) / 3600.0
+            if elapsed_hours > 0:
+                self._apply_time_decay(state, elapsed_hours)
+        self._release_expired_state_guards(state, event_now)
+        state.last_state_tick = event_now
+        state.last_update_time = event_now
+        if mark_interaction:
+            state.last_interaction = event_now
+        self._update_relationship(state)
+        return event_now
+
     def get_user_state(
         self, user_id: str, create_if_missing: bool = True
     ) -> Optional[UserEmotionState]:
         if user_id in self._user_states:
-            state = self._user_states[user_id]
-            now = time.time()
-            hours = (
-                (now - state.last_interaction) / 3600
-                if state.last_interaction > 0
-                else 0
-            )
-            if hours > 0:
-                self._apply_time_decay(state, hours)
-                if hours >= 0.5:
-                    state.last_interaction = now
-                    self._save_user_state(user_id)
-            return state
+            return self._user_states[user_id]
         if create_if_missing:
             state = UserEmotionState(user_id=user_id, stream_id=self.stream_id)
             self._user_states[user_id] = state
             return state
         return None
+
+    def tick_relationship_state(
+        self,
+        user_id: str,
+        *,
+        now: Optional[float] = None,
+        persist: bool = True,
+    ) -> Optional[UserEmotionState]:
+        state = self.get_user_state(user_id, create_if_missing=False)
+        if not state:
+            return None
+        tick_now = float(now or time.time())
+        anchor = self._state_time_anchor(state)
+        if anchor <= 0:
+            state.last_state_tick = tick_now
+            state.last_update_time = tick_now
+            self._release_expired_state_guards(state, tick_now)
+            if persist:
+                self._save_user_state(user_id)
+            return state
+        elapsed_hours = max(0.0, (tick_now - anchor) / 3600.0)
+        if elapsed_hours <= 0:
+            self._release_expired_state_guards(state, tick_now)
+            return state
+        self._apply_time_decay(state, elapsed_hours)
+        self._release_expired_state_guards(state, tick_now)
+        state.last_state_tick = tick_now
+        state.last_update_time = tick_now
+        self._update_relationship(state)
+        if persist:
+            self._save_user_state(user_id)
+        return state
+
+    def tick_all_relationship_states(
+        self, *, now: Optional[float] = None, persist: bool = True
+    ) -> int:
+        tick_now = float(now or time.time())
+        touched = 0
+        for user_id in list(self._user_states.keys()):
+            if self.tick_relationship_state(user_id, now=tick_now, persist=persist):
+                touched += 1
+        return touched
 
     def _apply_time_decay(self, state: UserEmotionState, hours: float):
         if hours <= 0:
@@ -579,13 +656,16 @@ class EmotionTracker:
         self, user_id: str, delta: float, reason: str = ""
     ) -> float:
         state = self.get_user_state(user_id, create_if_missing=True)
+        now = self._prepare_state_for_event(user_id, state)
         old_val = state.affection
         state.affection = self.clamp_affection(
             state.affection + delta * state.volatility
         )
         if state.affection > state.highest_affection:
             state.highest_affection = state.affection
-        state.last_interaction = time.time()
+        state.last_interaction = now
+        state.last_state_tick = now
+        state.last_update_time = now
         state.interaction_count += 1
         if delta > 0:
             state.positive_interactions += 1
@@ -608,10 +688,42 @@ class EmotionTracker:
             )
         return state.affection
 
+    def update_trust(
+        self, user_id: str, delta: float, reason: str = ""
+    ) -> float:
+        state = self.get_user_state(user_id, create_if_missing=True)
+        now = self._prepare_state_for_event(user_id, state)
+        old_val = state.trust_value
+        state.trust_value = self.clamp_trust(state.trust_value + delta)
+        state.last_interaction = now
+        state.last_state_tick = now
+        state.last_update_time = now
+        if delta > 0:
+            state.trust_accumulation = min(
+                100.0, state.trust_accumulation + abs(delta) * 0.8
+            )
+            state.distrust_accumulation = max(
+                0.0, state.distrust_accumulation - abs(delta) * 0.3
+            )
+        elif delta < 0:
+            state.distrust_accumulation = min(
+                100.0, state.distrust_accumulation + abs(delta) * 0.9
+            )
+        self._update_relationship(state)
+        self.clamp_all_values(state)
+        self._save_user_state(user_id)
+        if abs(delta) > 2:
+            mask_uid = self.mask_id(user_id)
+            logger.info(
+                f"信任变化 {mask_uid} | {old_val:.1f} -> {state.trust_value:.1f} ({delta:+.1f}) | {reason}"
+            )
+        return state.trust_value
+
     def update_annoyance(
         self, user_id: str, delta: float, reason: str = ""
     ) -> float:
         state = self.get_user_state(user_id, create_if_missing=True)
+        now = self._prepare_state_for_event(user_id, state)
         # 新用户保护：交互少于5次时正增量削减60%，避免误判快速累积
         effective_delta = delta
         if delta > 0 and state.interaction_count < 5:
@@ -635,7 +747,10 @@ class EmotionTracker:
                     state.annoyance:.0f} | 持续{
                     block_duration:.0f}秒"
             )
-        state.last_interaction = time.time()
+        state.last_interaction = now
+        state.last_state_tick = now
+        state.last_update_time = now
+        self._update_relationship(state)
         self.clamp_all_values(state)
         self._save_user_state(user_id)
         return state.annoyance
@@ -644,20 +759,24 @@ class EmotionTracker:
         self, user_id: str, delta: float, trigger: str = ""
     ) -> float:
         state = self.get_user_state(user_id, create_if_missing=True)
+        now = self._prepare_state_for_event(user_id, state)
         old_trauma = state.trauma_score
         state.trauma_score = self.clamp_trauma(state.trauma_score + delta)
         if delta > 0 and trigger:
             state.trauma_history.append(
-                {"trigger": trigger, "score": delta, "time": time.time()}
+                {"trigger": trigger, "score": delta, "time": now}
             )
             if len(state.trauma_history) > 50:
                 state.trauma_history = state.trauma_history[-30:]
-            state.trauma_last_recall = time.time()
+            state.trauma_last_recall = now
             state.trauma_recall_count += 1
+            state.trauma_accumulation = min(
+                10.0, state.trauma_accumulation + delta * 0.8
+            )
         if state.trauma_score >= 3.0 and not state.has_trauma_mark:
             state.has_trauma_mark = True
             state.trauma_mark_level = 1
-            state.trauma_mark_time = time.time()
+            state.trauma_mark_time = now
         if delta > 0 and state.trauma_score >= 6.0 and old_trauma < 6.0:
             self.activate_global_shield(
                 1800,
@@ -670,6 +789,10 @@ class EmotionTracker:
                     self.mask_id(user_id)} 创伤{
                     state.trauma_score:.1f}"
             )
+        state.last_interaction = now
+        state.last_state_tick = now
+        state.last_update_time = now
+        self._update_relationship(state)
         self.clamp_all_values(state)
         self._save_user_state(user_id)
         return state.trauma_score
@@ -679,11 +802,14 @@ class EmotionTracker:
     ) -> float:
         """更新用户心理压力值（0~100），>80 触发告警"""
         state = self.get_user_state(user_id, create_if_missing=True)
+        now = self._prepare_state_for_event(user_id, state)
         old_val = state.psychological_pressure
         state.psychological_pressure = max(
             0.0, min(100.0, state.psychological_pressure + delta)
         )
-        state.last_interaction = time.time()
+        state.last_interaction = now
+        state.last_state_tick = now
+        state.last_update_time = now
         if state.psychological_pressure >= 80 and old_val < 80:
             mask_uid = self.mask_id(user_id)
             logger.warning(
@@ -696,6 +822,7 @@ class EmotionTracker:
                 f"心理压力变化 {mask_uid} | {old_val:.1f} -> {state.psychological_pressure:.1f}"
                 f" ({delta:+.1f}) | {reason}"
             )
+        self._update_relationship(state)
         EmotionTracker.clamp_all_values(state)
         self._save_user_state(user_id)
         return state.psychological_pressure
@@ -704,6 +831,7 @@ class EmotionTracker:
         self, user_id: str, dimension: EmotionDimension, delta: float
     ) -> float:
         state = self.get_user_state(user_id, create_if_missing=True)
+        now = self._prepare_state_for_event(user_id, state)
         attr_name = dimension.value
         current = getattr(state, attr_name, 0.0)
         new_val = max(-100.0, min(100.0, current + delta))
@@ -711,6 +839,9 @@ class EmotionTracker:
         _negative_dims = {"anger", "sadness", "disgust", "fear", "shame", "guilt"}
         if attr_name in _negative_dims:
             state.negative_emotion_aggregate = state.compute_negative_aggregate()
+        state.last_interaction = now
+        state.last_state_tick = now
+        state.last_update_time = now
         EmotionTracker.clamp_all_values(state)
         self._save_user_state(user_id)
         return new_val
@@ -719,6 +850,7 @@ class EmotionTracker:
         self, user_id: str, emotion_deltas: Dict[str, float]
     ) -> Dict[str, float]:
         state = self.get_user_state(user_id, create_if_missing=True)
+        now = self._prepare_state_for_event(user_id, state)
         results = {}
         _negative_dims = {"anger", "sadness", "disgust", "fear", "shame", "guilt"}
         need_recompute_negative = False
@@ -732,6 +864,9 @@ class EmotionTracker:
                     need_recompute_negative = True
         if need_recompute_negative:
             state.negative_emotion_aggregate = state.compute_negative_aggregate()
+        state.last_interaction = now
+        state.last_state_tick = now
+        state.last_update_time = now
         EmotionTracker.clamp_all_values(state)
         self._save_user_state(user_id)
         return results
@@ -745,6 +880,7 @@ class EmotionTracker:
         """批量更新负向情绪维度并重算聚合值，返回新聚合值"""
         _allowed = {"anger", "sadness", "disgust", "fear", "shame", "guilt"}
         state = self.get_user_state(user_id, create_if_missing=True)
+        now = self._prepare_state_for_event(user_id, state)
         for dim_name, delta in dimension_deltas.items():
             if dim_name not in _allowed:
                 continue
@@ -752,7 +888,9 @@ class EmotionTracker:
             setattr(state, dim_name, max(-100.0, min(100.0, current + delta)))
         old_agg = state.negative_emotion_aggregate
         state.negative_emotion_aggregate = state.compute_negative_aggregate()
-        state.last_interaction = time.time()
+        state.last_interaction = now
+        state.last_state_tick = now
+        state.last_update_time = now
         # 聚合值变化 >5 时记录日志
         diff = state.negative_emotion_aggregate - old_agg
         if abs(diff) > 5:
@@ -765,15 +903,315 @@ class EmotionTracker:
         self._save_user_state(user_id)
         return state.negative_emotion_aggregate
 
-    def _update_relationship(self, state: UserEmotionState):
-        aff = state.affection
-        old_rel = state.relationship
+    @staticmethod
+    def _derive_relationship_score(state: UserEmotionState) -> float:
+        if state.relationship == "管理员":
+            return 100.0
+        score = (
+            state.affection * 0.58
+            + state.trust_value * 0.32
+            - state.annoyance * 0.28
+            - state.psychological_pressure * 0.12
+            - state.trauma_score * 6.0
+        )
+        if state.is_blocked:
+            score -= 12.0
+        return max(-100.0, min(100.0, score))
+
+    def _derive_relationship_label(self, state: UserEmotionState) -> str:
+        if state.relationship == "管理员":
+            return "管理员"
+        score = self._derive_relationship_score(state)
         for threshold, label in _RELATION_THRESHOLDS:
-            if aff >= threshold:
-                if state.relationship != label:
-                    state.last_relationship = state.relationship
-                    state.relationship = label
-                break
+            if score >= threshold:
+                return label
+        return _RELATION_THRESHOLDS[-1][1]
+
+    def _update_relationship(self, state: UserEmotionState):
+        if state.relationship == "管理员":
+            return
+        old_rel = state.relationship
+        new_rel = self._derive_relationship_label(state)
+        if new_rel != old_rel:
+            now = time.time()
+            if state.relationship_protected_until > now:
+                return
+            state.last_relationship = old_rel
+            state.relationship = new_rel
+
+    def _apply_relationship_event(
+        self,
+        user_id: str,
+        *,
+        event_name: str,
+        affection_delta: float = 0.0,
+        trust_delta: float = 0.0,
+        annoyance_delta: float = 0.0,
+        trauma_delta: float = 0.0,
+        pressure_delta: float = 0.0,
+        emotion_deltas: Optional[Dict[str, float]] = None,
+        reason: str = "",
+        behavior_type: str = "neutral",
+        impression: str = "",
+        now: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        state = self.get_user_state(user_id, create_if_missing=True)
+        event_now = self._prepare_state_for_event(
+            user_id, state, now=now, mark_interaction=True
+        )
+        old_affection = state.affection
+        old_trust = state.trust_value
+        old_annoyance = state.annoyance
+        old_trauma = state.trauma_score
+        old_pressure = state.psychological_pressure
+
+        if affection_delta:
+            state.affection = self.clamp_affection(
+                state.affection + affection_delta * state.volatility
+            )
+            if state.affection > state.highest_affection:
+                state.highest_affection = state.affection
+        if trust_delta:
+            state.trust_value = self.clamp_trust(state.trust_value + trust_delta)
+        if annoyance_delta:
+            effective_annoyance = annoyance_delta
+            if annoyance_delta > 0 and state.interaction_count < 5:
+                effective_annoyance *= 0.4
+            state.annoyance = self.clamp_annoyance(
+                state.annoyance + effective_annoyance
+            )
+        if trauma_delta:
+            state.trauma_score = self.clamp_trauma(
+                state.trauma_score + trauma_delta
+            )
+            if trauma_delta > 0:
+                state.trauma_history.append(
+                    {
+                        "trigger": reason or event_name,
+                        "score": round(trauma_delta, 3),
+                        "time": event_now,
+                    }
+                )
+                if len(state.trauma_history) > 50:
+                    state.trauma_history = state.trauma_history[-30:]
+                state.trauma_last_recall = event_now
+                state.trauma_recall_count += 1
+                state.trauma_accumulation = min(
+                    10.0, state.trauma_accumulation + trauma_delta * 0.8
+                )
+        if pressure_delta:
+            state.psychological_pressure = max(
+                0.0, min(100.0, state.psychological_pressure + pressure_delta)
+            )
+        if emotion_deltas:
+            negative_dims = {"anger", "sadness", "disgust", "fear", "shame", "guilt"}
+            for emotion, delta in emotion_deltas.items():
+                if hasattr(state, emotion):
+                    current = getattr(state, emotion, 0.0)
+                    setattr(
+                        state,
+                        emotion,
+                        max(-100.0, min(100.0, current + delta)),
+                    )
+            if any(dim in negative_dims for dim in emotion_deltas):
+                state.negative_emotion_aggregate = state.compute_negative_aggregate()
+
+        if trust_delta > 0:
+            state.trust_accumulation = min(
+                100.0, state.trust_accumulation + trust_delta * 0.8
+            )
+            state.distrust_accumulation = max(
+                0.0, state.distrust_accumulation - trust_delta * 0.35
+            )
+        elif trust_delta < 0:
+            state.distrust_accumulation = min(
+                100.0, state.distrust_accumulation + abs(trust_delta) * 0.9
+            )
+
+        if impression:
+            state.impression = impression
+
+        state.last_interaction = event_now
+        state.last_state_tick = event_now
+        state.last_update_time = event_now
+        state.interaction_count += 1
+        if behavior_type == "positive":
+            state.positive_interactions += 1
+            state.positive_behavior_streak += 1
+            state.negative_behavior_streak = 0
+            state.last_behavior_type = "positive"
+        elif behavior_type == "negative":
+            state.negative_interactions += 1
+            state.negative_behavior_streak += 1
+            state.positive_behavior_streak = 0
+            state.last_behavior_type = "negative"
+        else:
+            state.positive_behavior_streak = 0
+            state.negative_behavior_streak = 0
+            state.last_behavior_type = "neutral"
+
+        if (
+            state.annoyance >= EmotionConfig.BLOCK_THRESHOLD
+            and not state.is_blocked
+        ):
+            block_duration = min(
+                EmotionConfig.BLOCK_DURATION_BASE
+                * (state.annoyance / EmotionConfig.BLOCK_THRESHOLD),
+                EmotionConfig.BLOCK_DURATION_MAX,
+            )
+            state.is_blocked = True
+            state.block_until = event_now + block_duration
+            state.block_reason = reason or event_name
+            logger.warning(
+                f"用户屏蔽 {self.mask_id(user_id)} | 烦躁度{state.annoyance:.0f} | 持续{block_duration:.0f}秒"
+            )
+
+        if state.trauma_score >= 3.0 and not state.has_trauma_mark:
+            state.has_trauma_mark = True
+            state.trauma_mark_level = 1
+            state.trauma_mark_time = event_now
+        if trauma_delta > 0 and state.trauma_score >= 6.0 and old_trauma < 6.0:
+            self.activate_global_shield(
+                1800,
+                f"用户{self.mask_id(user_id)}创伤分数达到{state.trauma_score:.1f}",
+            )
+            logger.warning(
+                f"创伤保护激活: 用户{self.mask_id(user_id)} 创伤{state.trauma_score:.1f}"
+            )
+
+        self._update_relationship(state)
+        state.negative_emotion_aggregate = state.compute_negative_aggregate()
+        self.clamp_all_values(state)
+        self._save_user_state(user_id)
+        return {
+            "event": event_name,
+            "affection": state.affection,
+            "trust": state.trust_value,
+            "trust_value": state.trust_value,
+            "annoyance": state.annoyance,
+            "trauma_score": state.trauma_score,
+            "psychological_pressure": state.psychological_pressure,
+            "relationship": state.relationship,
+            "affection_delta": round(state.affection - old_affection, 3),
+            "trust_delta": round(state.trust_value - old_trust, 3),
+            "annoyance_delta": round(state.annoyance - old_annoyance, 3),
+            "trauma_delta": round(state.trauma_score - old_trauma, 3),
+            "pressure_delta": round(
+                state.psychological_pressure - old_pressure, 3
+            ),
+            "reason": reason,
+        }
+
+    def apply_positive_interaction(
+        self, user_id: str, intensity: float = 1.0, reason: str = ""
+    ) -> Dict[str, Any]:
+        return self._apply_relationship_event(
+            user_id,
+            event_name="positive_interaction",
+            affection_delta=intensity * 0.5,
+            trust_delta=intensity * 0.35,
+            annoyance_delta=-intensity * 2.0,
+            pressure_delta=-intensity * 1.5,
+            emotion_deltas={"joy": intensity * 0.3, "gratitude": intensity * 0.2},
+            reason=reason or "正向交互",
+            behavior_type="positive",
+        )
+
+    def apply_negative_interaction(
+        self,
+        user_id: str,
+        intensity: float = 1.0,
+        reason: str = "",
+        content: str = "",
+    ) -> Dict[str, Any]:
+        return self._apply_relationship_event(
+            user_id,
+            event_name="negative_interaction",
+            affection_delta=-intensity * 0.3,
+            trust_delta=-intensity * 0.4,
+            annoyance_delta=intensity * 3.0,
+            trauma_delta=intensity * 0.3,
+            pressure_delta=intensity * 3.0,
+            emotion_deltas={"anger": intensity * 0.4, "sadness": intensity * 0.3},
+            reason=reason or content[:50] or "负向交互",
+            behavior_type="negative",
+        )
+
+    def apply_harassment(
+        self,
+        user_id: str,
+        intensity: float = 1.0,
+        reason: str = "",
+        content: str = "",
+    ) -> Dict[str, Any]:
+        return self._apply_relationship_event(
+            user_id,
+            event_name="harassment",
+            affection_delta=-(4.5 + intensity * 6.0),
+            trust_delta=-(5.0 + intensity * 7.0),
+            annoyance_delta=3.5 + intensity * 5.5,
+            trauma_delta=0.8 + intensity * 1.4,
+            pressure_delta=4.0 + intensity * 5.0,
+            emotion_deltas={
+                "anger": intensity * 0.6,
+                "fear": intensity * 0.5,
+                "disgust": intensity * 0.5,
+            },
+            reason=reason or content[:50] or "骚扰行为",
+            behavior_type="negative",
+        )
+
+    def apply_betrayal(
+        self, user_id: str, intensity: float = 1.0, reason: str = ""
+    ) -> Dict[str, Any]:
+        return self._apply_relationship_event(
+            user_id,
+            event_name="betrayal",
+            affection_delta=-(3.0 + intensity * 4.0),
+            trust_delta=-(8.0 + intensity * 8.0),
+            annoyance_delta=2.0 + intensity * 2.5,
+            trauma_delta=0.6 + intensity * 1.0,
+            pressure_delta=2.5 + intensity * 3.0,
+            emotion_deltas={
+                "sadness": intensity * 0.5,
+                "anger": intensity * 0.45,
+                "fear": intensity * 0.25,
+            },
+            reason=reason or "背叛事件",
+            behavior_type="negative",
+        )
+
+    def apply_comfort(
+        self, user_id: str, intensity: float = 1.0, reason: str = ""
+    ) -> Dict[str, Any]:
+        return self._apply_relationship_event(
+            user_id,
+            event_name="comfort",
+            affection_delta=2.4 + intensity * 3.5,
+            trust_delta=1.8 + intensity * 2.8,
+            annoyance_delta=-(1.2 + intensity * 1.8),
+            trauma_delta=-(0.05 + intensity * 0.08),
+            pressure_delta=-(2.0 + intensity * 2.0),
+            emotion_deltas={"joy": intensity * 0.25, "gratitude": intensity * 0.35},
+            reason=reason or "安慰开导",
+            behavior_type="positive",
+        )
+
+    def apply_apology_repair(
+        self, user_id: str, intensity: float = 1.0, reason: str = ""
+    ) -> Dict[str, Any]:
+        return self._apply_relationship_event(
+            user_id,
+            event_name="apology_repair",
+            affection_delta=0.6 + intensity * 1.2,
+            trust_delta=0.8 + intensity * 1.5,
+            annoyance_delta=-(0.9 + intensity * 1.2),
+            trauma_delta=-(0.03 + intensity * 0.05),
+            pressure_delta=-(0.8 + intensity * 0.9),
+            emotion_deltas={"gratitude": intensity * 0.15},
+            reason=reason or "道歉修复",
+            behavior_type="positive",
+        )
 
     def get_user_emotion(self, user_id: str) -> Dict[str, Any]:
         state = self.get_user_state(user_id, create_if_missing=False)
@@ -1091,48 +1529,25 @@ class EmotionTracker:
         content: str = "",
         magnitude: float = 1.0,
     ) -> Dict[str, Any]:
-        state = self.get_user_state(user_id, create_if_missing=True)
         result = {"type": interaction_type, "changes": {}}
         if interaction_type == "positive":
-            affection_delta = magnitude * 0.5 * state.volatility
-            result["changes"]["affection"] = self.update_affection(
-                user_id, affection_delta, "正向交互"
-            )
-            result["changes"]["annoyance"] = self.update_annoyance(
-                user_id, -magnitude * 2.0
-            )
-            result["changes"]["pressure"] = self.update_psychological_pressure(
-                user_id, -magnitude * 1.5, "正向交互缓解"
-            )
-            self.update_emotion_dimension(
-                user_id, EmotionDimension.JOY, magnitude * 0.3
-            )
-            self.update_emotion_dimension(
-                user_id, EmotionDimension.TRUST, magnitude * 0.2
+            result["changes"] = self.apply_positive_interaction(
+                user_id, intensity=magnitude, reason="正向交互"
             )
         elif interaction_type == "negative":
-            affection_delta = -magnitude * 0.3 * state.volatility
-            result["changes"]["affection"] = self.update_affection(
-                user_id, affection_delta, "负向交互"
-            )
-            result["changes"]["annoyance"] = self.update_annoyance(
-                user_id, magnitude * 3.0
-            )
-            result["changes"]["trauma"] = self.update_trauma(
-                user_id, magnitude * 0.3, content[:50]
-            )
-            result["changes"]["pressure"] = self.update_psychological_pressure(
-                user_id, magnitude * 3.0, f"负向交互: {content[:30]}"
-            )
-            self.update_emotion_dimension(
-                user_id, EmotionDimension.ANGER, magnitude * 0.4
-            )
-            self.update_emotion_dimension(
-                user_id, EmotionDimension.SADNESS, magnitude * 0.3
+            result["changes"] = self.apply_negative_interaction(
+                user_id,
+                intensity=magnitude,
+                reason=f"负向交互: {content[:30]}",
+                content=content,
             )
         elif interaction_type == "neutral":
-            result["changes"]["affection"] = self.update_affection(
-                user_id, 0.02, "中性交互"
+            result["changes"] = self._apply_relationship_event(
+                user_id,
+                event_name="neutral_interaction",
+                affection_delta=0.02,
+                reason="中性交互",
+                behavior_type="neutral",
             )
         result["state"] = self.get_user_emotion(user_id)
         result["response_mode"] = self.get_layered_response_mode(user_id)
@@ -1198,7 +1613,6 @@ class EmotionTracker:
             logger.debug("[认知分析] LLM bridge 未初始化，使用规则分析")
             return self._analyze_sentiment_rules(content, current_state)
         experience_level = min(100, current_state.interaction_count)
-        innocence_factor = max(0, 100 - experience_level) / 100.0
         char_age = 15
         try:
             from src.config.config import global_config
@@ -1414,6 +1828,7 @@ trauma_level 分级：
         """
         now = time.time()
         state = self.get_user_state(user_id, create_if_missing=True)
+        self._prepare_state_for_event(user_id, state, now=now, mark_interaction=False)
         old_affection = state.affection
         old_trust = state.trust_score
         if is_admin:
@@ -1422,6 +1837,9 @@ trauma_level 分级：
             state.trust = state.trust_score
             state.affection = min(100.0, state.affection + 2.0)
             state.relationship = "管理员"
+            state.last_interaction = now
+            state.last_state_tick = now
+            state.last_update_time = now
             self._save_user_state(user_id)
             return {
                 "annoyance": state.annoyance,
@@ -1458,32 +1876,83 @@ trauma_level 分级：
         affection_loss = 0.0
         trust_gain = 0.0
         trust_loss = 0.0
+        pressure_delta = 0.0
+        event_name = "neutral_interaction"
+        behavior_type = "neutral"
+        emotion_deltas: Dict[str, float] = {}
         if sentiment == "positive":
             if is_comforting:
                 affection_gain = 3.0 + intensity * 5.0
                 trust_gain = 2.0 + intensity * 3.0
+                pressure_delta = -(2.0 + intensity * 2.0)
+                emotion_deltas = {
+                    "joy": intensity * 0.25,
+                    "gratitude": intensity * 0.35,
+                }
+                event_name = "comfort"
+                behavior_type = "positive"
                 experience_record += " | 被安慰"
             else:
                 affection_gain = 1.0 + intensity * 3.0
                 trust_gain = 0.5 + intensity * 2.0
+                pressure_delta = -(0.4 + intensity * 0.8)
+                emotion_deltas = {"joy": intensity * 0.2}
+                event_name = "positive_interaction"
+                behavior_type = "positive"
                 experience_record += " | 正面交互"
         elif sentiment == "negative":
             if is_harassment:
                 affection_loss = 8.0 + intensity * 10.0
                 trust_loss = 6.0 + intensity * 8.0
                 trauma_level = max(trauma_level, 2)
+                pressure_delta = 4.0 + intensity * 5.0
+                emotion_deltas = {
+                    "anger": intensity * 0.6,
+                    "fear": intensity * 0.5,
+                    "disgust": intensity * 0.5,
+                }
+                event_name = "harassment"
+                behavior_type = "negative"
                 experience_record += " | 骚扰行为"
             elif is_insult:
                 affection_loss = 5.0 + intensity * 7.0
                 trust_loss = 4.0 + intensity * 5.0
                 trauma_level = max(trauma_level, 1)
+                pressure_delta = 2.2 + intensity * 2.8
+                emotion_deltas = {
+                    "anger": intensity * 0.45,
+                    "sadness": intensity * 0.3,
+                }
+                event_name = "negative_interaction"
+                behavior_type = "negative"
                 experience_record += " | 侮辱行为"
+            elif impact.get("is_betrayal", False):
+                affection_loss = 6.0 + intensity * 6.0
+                trust_loss = 8.0 + intensity * 9.0
+                trauma_level = max(trauma_level, 2)
+                pressure_delta = 3.0 + intensity * 3.5
+                emotion_deltas = {
+                    "sadness": intensity * 0.5,
+                    "anger": intensity * 0.45,
+                    "fear": intensity * 0.25,
+                }
+                event_name = "betrayal"
+                behavior_type = "negative"
+                experience_record += " | 背叛事件"
             else:
                 affection_loss = 2.0 + intensity * 4.0
                 trust_loss = 1.5 + intensity * 3.0
+                pressure_delta = 1.2 + intensity * 1.8
+                emotion_deltas = {
+                    "anger": intensity * 0.25,
+                    "sadness": intensity * 0.2,
+                }
+                event_name = "negative_interaction"
+                behavior_type = "negative"
                 experience_record += " | 负面交互"
         else:
             affection_gain = 0.1
+            pressure_delta = -0.1
             experience_record += " | 中性交互"
         if state.interaction_count < 10:
             affection_loss *= 0.5
@@ -1495,41 +1964,24 @@ trauma_level 分级：
         trust_gain = self._apply_damping(trust_gain, state.trust_score, "gain", state.trauma_score, user_id)
         affection_loss = min(affection_loss, 12.0)
         trust_loss = min(trust_loss, 10.0)
-        state.affection = self.clamp_affection(state.affection - affection_loss + affection_gain)
-        state.trust_score = self.clamp_trust(state.trust_score - trust_loss + trust_gain)
-        state.annoyance = self.clamp_annoyance(state.annoyance + affection_loss * 0.1 - affection_gain * 0.2)
-        state.trauma_score = self.clamp_trauma(state.trauma_score + trauma_level * 0.3)
-        self._update_relationship(state)
-        if new_impression and new_impression != state.impression:
-            state.impression = new_impression
-        if impact.get("relationship_change") and intensity > 0.6:
-            if now >= state.relationship_protected_until:
-                _allowed_relations = {"陌生人", "熟人", "朋友", "好朋友", "挚友", "不太喜欢", "讨厌", "厌恶"}
-                proposed = impact["relationship_change"]
-                if proposed in _allowed_relations:
-                    state.relationship = proposed
-        state.interaction_count += 1
-        state.last_interaction = now
-        if sentiment == "positive":
-            state.positive_interactions += 1
-            state.positive_behavior_streak += 1
-            state.negative_behavior_streak = 0
-            state.last_behavior_type = "positive"
-        elif sentiment == "negative":
-            state.negative_interactions += 1
-            state.negative_behavior_streak += 1
-            state.positive_behavior_streak = 0
-            state.last_behavior_type = "negative"
-        else:
-            state.positive_behavior_streak = 0
-            state.negative_behavior_streak = 0
-            state.last_behavior_type = "neutral"
-        affection_delta = state.affection - old_affection
-        trust_delta = state.trust_score - old_trust
+        event_result = self._apply_relationship_event(
+            user_id,
+            event_name=event_name,
+            affection_delta=-affection_loss + affection_gain,
+            trust_delta=-trust_loss + trust_gain,
+            annoyance_delta=affection_loss * 0.1 - affection_gain * 0.2,
+            trauma_delta=trauma_level * 0.3,
+            pressure_delta=pressure_delta,
+            emotion_deltas=emotion_deltas,
+            reason=experience_record,
+            behavior_type=behavior_type,
+            impression=new_impression if new_impression and new_impression != state.impression else "",
+            now=now,
+        )
+        state = self.get_user_state(user_id, create_if_missing=False)
+        affection_delta = event_result.get("affection_delta", 0.0)
+        trust_delta = event_result.get("trust_delta", 0.0)
         stamina = max(0.0, 100.0 - state.psychological_pressure)
-        mask_uid = self.mask_id(user_id)
-        self.clamp_all_values(state)
-        self._save_user_state(user_id)
         return {
             "annoyance": state.annoyance,
             "affection": state.affection,
