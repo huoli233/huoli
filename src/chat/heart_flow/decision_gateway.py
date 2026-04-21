@@ -2,16 +2,13 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 from src.common.logger import get_logger
-from src.chat.heart_flow.vote_types import (
-    VoteCollection,
-    MaskBehaviorMode,
-    AtmosphereTier,
-    AIPositioning,
-    EnergyStage,
-    TraumaGrade,
-    FondnessLevel,
-    TrustLevel,
-    UserEngagementState,
+from src.chat.heart_flow.signal_domains import (
+    DecisionSignalBundle,
+    SurfaceMaskMode,
+    GroupContextTier,
+    ResourceLedgerStage,
+    TraumaLoadBand,
+    CounterpartyEngagementState,
 )
 
 logger = get_logger("decision_gateway")
@@ -160,7 +157,7 @@ class DecisionGateway:
 
     def decide(
         self,
-        votes: VoteCollection,
+        votes: DecisionSignalBundle,
         ctx: GatewayContext,
     ) -> GatewayVerdict:
         """
@@ -224,17 +221,17 @@ class DecisionGateway:
     # ---- 第1层：强制触发 ----
 
     @staticmethod
-    def _has_hard_suppression(votes: VoteCollection) -> bool:
+    def _has_hard_suppression(votes: DecisionSignalBundle) -> bool:
         return bool(
-            votes.dislike.is_blocked
-            or votes.emotion.should_refuse
-            or votes.energy.force_refuse
-            or votes.frequency.in_cooldown
-            or votes.trauma.force_refuse
+            votes.boundary_block.is_blocked
+            or votes.emotion_baseline.should_refuse
+            or votes.resource_ledger.force_refuse
+            or votes.tempo_control.in_cooldown
+            or votes.trauma_load.force_refuse
         )
 
     def _check_force_triggers(
-        self, votes: VoteCollection, ctx: GatewayContext
+        self, votes: DecisionSignalBundle, ctx: GatewayContext
     ) -> Optional[GatewayVerdict]:
         # 管理员强制
         if ctx.admin_force:
@@ -249,7 +246,7 @@ class DecisionGateway:
         # @提及
         if ctx.is_direct_ping:
             # 即使被@，如果存在极端负面因素也需要降级
-            if votes.dislike.is_blocked:
+            if votes.boundary_block.is_blocked:
                 return GatewayVerdict(
                     gate="block",
                     should_skip=True,
@@ -308,27 +305,27 @@ class DecisionGateway:
     # ---- 第2层：强制抑制 ----
 
     def _check_force_suppressions(
-        self, votes: VoteCollection, ctx: GatewayContext
+        self, votes: DecisionSignalBundle, ctx: GatewayContext
     ) -> Optional[GatewayVerdict]:
         reasons = []
         # D2b 讨厌度屏蔽
-        if votes.dislike.is_blocked:
-            reasons.append(f"讨厌度屏蔽(severity={votes.dislike.total_severity:.1f})")
+        if votes.boundary_block.is_blocked:
+            reasons.append(f"边界封锁(severity={votes.boundary_block.total_severity:.1f})")
         # D1 情绪拒绝
-        if votes.emotion.should_refuse:
+        if votes.emotion_baseline.should_refuse:
             reasons.append(
-                f"情绪拒绝(patience={votes.emotion.patience_snapshot:.0f},"
-                f"annoyance={votes.emotion.annoyance_snapshot:.0f})"
+                f"情绪拒绝(patience={votes.emotion_baseline.patience_snapshot:.0f},"
+                f"annoyance={votes.emotion_baseline.annoyance_snapshot:.0f})"
             )
         # D6 能量透支
-        if votes.energy.force_refuse:
-            reasons.append(f"能量透支(stage={votes.energy.energy_stage.value})")
+        if votes.resource_ledger.force_refuse:
+            reasons.append(f"资源透支(stage={votes.resource_ledger.energy_stage.value})")
         # D3 冷却期
-        if votes.frequency.in_cooldown:
-            reasons.append("频率冷却中")
+        if votes.tempo_control.in_cooldown:
+            reasons.append("节奏冷却中")
         # D10 极端创伤
-        if votes.trauma.force_refuse:
-            reasons.append(f"极端创伤(chaos={votes.trauma.inner_chaos:.0f})")
+        if votes.trauma_load.force_refuse:
+            reasons.append(f"极端创伤(chaos={votes.trauma_load.inner_chaos:.0f})")
         if not reasons:
             return None
         return GatewayVerdict(
@@ -342,7 +339,7 @@ class DecisionGateway:
     # ---- 第3层：LLM意愿验证 ----
 
     def _check_voice_intent(
-        self, votes: VoteCollection, ctx: GatewayContext
+        self, votes: DecisionSignalBundle, ctx: GatewayContext
     ) -> Optional[GatewayVerdict]:
         desire = ctx.desire_level
         should = ctx.voice_should_reply
@@ -369,7 +366,7 @@ class DecisionGateway:
     # ---- 第4层：概率组合（乘法模型） ----
 
     def _compute_probability(
-        self, votes: VoteCollection, ctx: GatewayContext
+        self, votes: DecisionSignalBundle, ctx: GatewayContext
     ) -> float:
         cfg = self._config
         # 基础概率随desire浮动: base + (desire - 5) * scale
@@ -379,27 +376,27 @@ class DecisionGateway:
         combined = votes.combined_probability_factor()
         prob = base * combined
         # 群氛围加成（加法）
-        prob += votes.atmosphere.engagement_boost
+        prob += votes.group_context.engagement_boost
         # 讨厌度扣减（加法）
-        prob -= votes.dislike.dislike_penalty
+        prob -= votes.boundary_block.dislike_penalty
         # 好感系统的主动意愿加成（三源融合）
-        _ft_will = votes.fondness_trust.proactive_willingness
-        _em_will = votes.emotion.emotion_proactive_willingness
-        _hb_will = votes.heart.heartbeat_proactive_willingness
+        _ft_will = votes.rapport_trust.proactive_willingness
+        _em_will = votes.emotion_baseline.emotion_proactive_willingness
+        _hb_will = votes.pending_engagement.heartbeat_proactive_willingness
         _fused_will = max(_ft_will, _em_will * 0.6, _hb_will * 0.4)
         # 讨厌度主动行为抑制
-        if votes.dislike.proactive_suppression > 0.0:
-            _fused_will = max(0.0, _fused_will - votes.dislike.proactive_suppression)
+        if votes.boundary_block.proactive_suppression > 0.0:
+            _fused_will = max(0.0, _fused_will - votes.boundary_block.proactive_suppression)
         # 社交值主动行为加成
-        if votes.social.proactive_boost > 0.0:
-            _fused_will += votes.social.proactive_boost * 0.3
+        if votes.social_balance.proactive_boost > 0.0:
+            _fused_will += votes.social_balance.proactive_boost * 0.3
         _fused_will = min(1.0, max(0.0, _fused_will))
         if _fused_will > 0.3:
             prob += (_fused_will - 0.3) * 0.25
         # 用户状态加成：对方明确想聊天时提高概率
-        if votes.user_state.want_to_chat_confidence > 0.7:
+        if votes.counterparty_readiness.want_to_chat_confidence > 0.7:
             prob += 0.1
-        elif votes.user_state.want_to_chat_confidence < 0.3:
+        elif votes.counterparty_readiness.want_to_chat_confidence < 0.3:
             prob -= 0.1
         # 提问检测
         text = ctx.message_text
@@ -425,7 +422,7 @@ class DecisionGateway:
     def _post_process(
         self,
         verdict: GatewayVerdict,
-        votes: VoteCollection,
+        votes: DecisionSignalBundle,
         ctx: GatewayContext,
     ):
         """面具校正、态度/风格收集、LLM状态片段生成"""
@@ -436,30 +433,30 @@ class DecisionGateway:
         # token上限（取所有维度中最严格的）
         verdict.max_tokens = votes.min_max_tokens_cap()
         # 面具系统校正
-        mask = votes.mask
+        mask = votes.surface_mask
         verdict.quality_cap = mask.reply_quality_cap
         verdict.inner_conflict = mask.inner_conflict_hint
-        if mask.behavior_mode == MaskBehaviorMode.BROKEN:
+        if mask.behavior_mode == SurfaceMaskMode.BROKEN:
             verdict.style_hints.append("情绪失控、真实想法涌出")
             if mask.mask_strength < 20:
                 verdict.attitude_tags.append("mask_collapsed")
-        elif mask.behavior_mode == MaskBehaviorMode.CRACKING:
+        elif mask.behavior_mode == SurfaceMaskMode.CRACKING:
             verdict.style_hints.append("偶尔流露不一致")
         # 创伤潜意识干扰
-        verdict.perception_labels = list(votes.trauma.perception_labels)
+        verdict.perception_labels = list(votes.trauma_load.perception_labels)
         # 生成LLM状态片段
         verdict.llm_state_prompt = self._build_llm_state_prompt(votes, ctx)
 
     def _build_llm_state_prompt(
-        self, votes: VoteCollection, ctx: GatewayContext
+        self, votes: DecisionSignalBundle, ctx: GatewayContext
     ) -> str:
         """将所有维度的状态汇总为LLM可读的提示词片段"""
         parts = []
         # D1 情绪
-        if votes.emotion.mood_modifier:
-            parts.append(f"情绪: {votes.emotion.mood_modifier}")
+        if votes.emotion_baseline.mood_modifier:
+            parts.append(f"情绪: {votes.emotion_baseline.mood_modifier}")
         # D2 好感/信任
-        ft = votes.fondness_trust
+        ft = votes.rapport_trust
         if ft.fondness_level.value != "neutral" or ft.trust_level.value != "ordinary":
             parts.append(
                 f"好感: {ft.fondness_level.value}(值={ft.fondness_value}) "
@@ -467,8 +464,8 @@ class DecisionGateway:
                 f"关系: {ft.cross_hint}"
             )
         # D5 群氛围
-        atm = votes.atmosphere
-        if atm.atmosphere_tier != AtmosphereTier.NORMAL:
+        atm = votes.group_context
+        if atm.atmosphere_tier != GroupContextTier.NORMAL:
             parts.append(
                 f"群氛围: {atm.atmosphere_tier.value} "
                 f"定位: {atm.ai_position.value}"
@@ -476,30 +473,30 @@ class DecisionGateway:
         if atm.style_constraint:
             parts.append(f"氛围风格: {atm.style_constraint}")
         # D6 能量
-        if votes.energy.energy_stage != EnergyStage.FULL:
-            parts.append(f"精力: {votes.energy.energy_stage.value}")
+        if votes.resource_ledger.energy_stage != ResourceLedgerStage.FULL:
+            parts.append(f"精力: {votes.resource_ledger.energy_stage.value}")
         # D7 社交
-        if votes.social.social_tag and votes.social.social_tag != "social_neutral":
-            parts.append(f"社交印象: {votes.social.social_tag}")
+        if votes.social_balance.social_tag and votes.social_balance.social_tag != "social_neutral":
+            parts.append(f"社交印象: {votes.social_balance.social_tag}")
         # D4 用户状态
-        if votes.user_state.engagement != UserEngagementState.NEUTRAL:
-            parts.append(f"对方状态: {votes.user_state.engagement.value}")
+        if votes.counterparty_readiness.engagement != CounterpartyEngagementState.NEUTRAL:
+            parts.append(f"对方状态: {votes.counterparty_readiness.engagement.value}")
         # D10 创伤
-        if votes.trauma.trauma_grade != TraumaGrade.NONE:
+        if votes.trauma_load.trauma_grade != TraumaLoadBand.NONE:
             parts.append(
-                f"创伤: {votes.trauma.trauma_grade.value} "
-                f"混乱度={votes.trauma.inner_chaos:.0f}"
+                f"创伤: {votes.trauma_load.trauma_grade.value} "
+                f"混乱度={votes.trauma_load.inner_chaos:.0f}"
             )
-            if votes.trauma.perception_labels:
-                parts.append(f"潜意识: {'; '.join(votes.trauma.perception_labels[:3])}")
+            if votes.trauma_load.perception_labels:
+                parts.append(f"潜意识: {'; '.join(votes.trauma_load.perception_labels[:3])}")
         # D11 面具
-        if votes.mask.behavior_mode != MaskBehaviorMode.NATURAL:
+        if votes.surface_mask.behavior_mode != SurfaceMaskMode.NATURAL:
             parts.append(
-                f"伪装: {votes.mask.behavior_mode.value} "
-                f"强度={votes.mask.mask_strength:.0f}"
+                f"伪装: {votes.surface_mask.behavior_mode.value} "
+                f"强度={votes.surface_mask.mask_strength:.0f}"
             )
-            if votes.mask.inner_conflict_hint:
-                parts.append(f"内心: {votes.mask.inner_conflict_hint}")
+            if votes.surface_mask.inner_conflict_hint:
+                parts.append(f"内心: {votes.surface_mask.inner_conflict_hint}")
         if not parts:
             return ""
         return "你当前的状态:\n" + "\n".join(f"- {p}" for p in parts)

@@ -1,8 +1,7 @@
 import time
-import math
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from src.common.logger import get_logger
 
 logger = get_logger("状态面板")
@@ -195,9 +194,9 @@ class GroupEngagement(Enum):
 
 
 class TriggerTier(Enum):
-    L1_FAST_FILTER = "l1_fast_filter"
-    L2_CONTEXTUAL = "l2_contextual"
-    L3_DEEP_DECISION = "l3_deep_decision"
+    HARD_BLOCK_GATE = "hard_block_gate"
+    CONTEXT_GATE = "context_gate"
+    EMERGENCE_DECISION = "emergence_decision"
 
 
 class ActionUrgency(Enum):
@@ -414,6 +413,7 @@ class ActionVerdict:
     recommended_tone: str = ""
     suggested_action: str = ""
     trigger_path: str = ""
+    legacy_trigger_path: str = ""
     confidence: float = 0.5
     evaluated_at: float = field(default_factory=time.time)
 
@@ -427,6 +427,7 @@ class ActionVerdict:
             "tone": self.recommended_tone,
             "action": self.suggested_action[:80],
             "path": self.trigger_path,
+            "legacy_path": self.legacy_trigger_path,
             "confidence": round(self.confidence, 2),
         }
 
@@ -983,7 +984,8 @@ class StateDashboardEngine:
                 should_process_message=False,
                 should_reply=False,
                 primary_reason=l1,
-                trigger_path="L1_HARD_BLOCK",
+                trigger_path="HardBlockGate",
+                legacy_trigger_path="L1_HARD_BLOCK",
                 confidence=0.95,
             )
             return
@@ -994,7 +996,8 @@ class StateDashboardEngine:
                 should_process_message=True,
                 should_reply=False,
                 primary_reason="L2综合评估不通过",
-                trigger_path="L2_CONTEXTUAL_REJECT",
+                trigger_path="ContextGateReject",
+                legacy_trigger_path="L2_CONTEXTUAL_REJECT",
                 confidence=0.75,
             )
             return
@@ -1005,7 +1008,8 @@ class StateDashboardEngine:
                 should_reply=False,
                 primary_reason="L2评估：可跳过此消息",
                 secondary_reasons=["进入观察但不回复"],
-                trigger_path="L2_CONTEXTUAL_SKIP",
+                trigger_path="ContextGateSkip",
+                legacy_trigger_path="L2_CONTEXTUAL_SKIP",
                 confidence=0.55,
             )
             return
@@ -1026,7 +1030,8 @@ class StateDashboardEngine:
                 snap.attention.mode.label()}",
             recommended_tone=tone,
             suggested_action=action,
-            trigger_path="L3_FULL_EVALUATION",
+            trigger_path="EmergenceDecision",
+            legacy_trigger_path="L3_FULL_EVALUATION",
             confidence=0.85 if l2 == ActionUrgency.MUST_REPLY_NOW else 0.70,
         )
 

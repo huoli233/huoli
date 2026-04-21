@@ -8,40 +8,28 @@ from src.chat.heart_flow.dimension_protocol import (
     DimensionKeyBuilder,
     DimensionScope,
     EventContext,
-    TickResult,
 )
-from src.chat.heart_flow.vote_types import (
-    VoteCollection,
-    EmotionAxisVote,
-    FondnessTrustVote,
-    DislikeVote,
-    FrequencyVote,
-    UserStateVote,
-    GroupAtmosphereVote,
-    EnergyChainVote,
-    SocialValueVote,
-    HeartStateVote,
-    TraumaVote,
-    SurfaceMaskVote,
-    CalibrationReport,
-    CalibrationGrade,
+from src.chat.heart_flow.signal_domains import (
+    DecisionSignalBundle,
+    RuntimeCalibrationProfile,
+    RuntimeCalibrationBand,
 )
 
 logger = logging.getLogger("dimension_dispatcher")
 
 # 维度名称 → VoteCollection 字段名的映射
 _VOTE_FIELD_MAP: dict[str, str] = {
-    "emotion_axis": "emotion",
-    "fondness_trust": "fondness_trust",
-    "dislike_registry": "dislike",
-    "frequency_control": "frequency",
-    "user_state": "user_state",
-    "group_atmosphere": "atmosphere",
-    "energy_chain": "energy",
-    "social_value": "social",
-    "heart_state": "heart",
-    "trauma": "trauma",
-    "surface_mask": "mask",
+    "emotion_axis": "emotion_baseline",
+    "fondness_trust": "rapport_trust",
+    "dislike_registry": "boundary_block",
+    "frequency_control": "tempo_control",
+    "user_state": "counterparty_readiness",
+    "group_atmosphere": "group_context",
+    "energy_chain": "resource_ledger",
+    "social_value": "social_balance",
+    "heart_state": "pending_engagement",
+    "trauma": "trauma_load",
+    "surface_mask": "surface_mask",
 }
 
 
@@ -239,13 +227,13 @@ class DimensionDispatcher:
     # ============================================================
     # 投票收集（核心方法：决策网关调用此方法）
     # ============================================================
-    def collect_votes(self, ctx: EventContext) -> VoteCollection:
+    def collect_votes(self, ctx: EventContext) -> DecisionSignalBundle:
         """
-        收集所有维度的独立投票，打包为 VoteCollection。
+        收集所有维度的独立投票，打包为 DecisionSignalBundle。
         决策网关通过此方法获取 11 个维度的投票，
         然后按乘法组合概率、合并态度标签、检查强制触发/拒绝。
         """
-        collection = VoteCollection()
+        collection = DecisionSignalBundle()
         for dim in self._registry.all_dimensions():
             try:
                 vote = dim.vote(ctx)
@@ -369,7 +357,7 @@ class DimensionDispatcher:
         根据离线时长计算校准等级，然后协调各维度执行校准。
         """
         report = self._compute_calibration_report(offline_seconds)
-        if report.grade == CalibrationGrade.SKIP:
+        if report.grade == RuntimeCalibrationBand.SKIP:
             logger.info("离线时间 %.0f 秒，跳过校准", offline_seconds)
             return
         logger.info(
@@ -388,17 +376,17 @@ class DimensionDispatcher:
                 )
 
     @staticmethod
-    def _compute_calibration_report(offline_seconds: float) -> CalibrationReport:
+    def _compute_calibration_report(offline_seconds: float) -> RuntimeCalibrationProfile:
         """根据离线时长计算校准参数"""
-        report = CalibrationReport(offline_seconds=offline_seconds)
+        report = RuntimeCalibrationProfile(offline_seconds=offline_seconds)
         hours = offline_seconds / 3600
         # 不足5分钟不校准
         if offline_seconds < 300:
-            report.grade = CalibrationGrade.SKIP
+            report.grade = RuntimeCalibrationBand.SKIP
             return report
         # 5分钟~2小时：轻度校准
         if hours < 2:
-            report.grade = CalibrationGrade.LIGHT
+            report.grade = RuntimeCalibrationBand.LIGHT
             ratio = offline_seconds / 7200
             report.emotion_decay_factor = 0.1 * ratio
             report.fondness_decay_factor = 0.02 * ratio
@@ -408,7 +396,7 @@ class DimensionDispatcher:
             return report
         # 2~12小时：中度校准
         if hours < 12:
-            report.grade = CalibrationGrade.MODERATE
+            report.grade = RuntimeCalibrationBand.MODERATE
             ratio = min(hours / 12, 1.0)
             report.emotion_decay_factor = 0.3 + 0.4 * ratio
             report.fondness_decay_factor = 0.05 + 0.1 * ratio
@@ -419,7 +407,7 @@ class DimensionDispatcher:
             return report
         # 12~48小时：深度校准
         if hours < 48:
-            report.grade = CalibrationGrade.DEEP
+            report.grade = RuntimeCalibrationBand.DEEP
             ratio = min((hours - 12) / 36, 1.0)
             report.emotion_decay_factor = 0.7 + 0.2 * ratio
             report.fondness_decay_factor = 0.15 + 0.15 * ratio
@@ -429,7 +417,7 @@ class DimensionDispatcher:
             report.frequency_should_reset = True
             return report
         # 超过48小时：完全重置
-        report.grade = CalibrationGrade.FULL_RESET
+        report.grade = RuntimeCalibrationBand.FULL_RESET
         report.emotion_decay_factor = 1.0
         report.fondness_decay_factor = 0.3
         report.energy_recovery_factor = 1.0
