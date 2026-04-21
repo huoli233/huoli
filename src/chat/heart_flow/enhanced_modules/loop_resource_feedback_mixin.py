@@ -1012,7 +1012,7 @@ class LoopResourceFeedbackMixin:
                         _extra_parts.append(f"印象标签={','.join(self._cached_user_impression_tags[:5])}")
                     if _extra_parts:
                         logger.info(f"{self.log_prefix} 扩展面板 " + " ".join(_extra_parts))
-                    # 统一状态仪表盘行（7Bar + ActionVerdict）
+                    # 统一状态仪表盘行（常驻状态条 + ReplyDecisionFrame）
                     try:
                         _dash_line = self._get_dashboard_status_line()
                         if _dash_line:
@@ -1185,23 +1185,23 @@ class LoopResourceFeedbackMixin:
             return None
 
     def _get_dashboard_verdict(self) -> Dict[str, Any]:
-        """获取当前仪表盘ActionVerdict的字典表示（优先使用缓存，避免重复空数据构建）"""
+        """获取当前仪表盘ReplyDecisionFrame的字典表示（优先使用缓存，避免重复空数据构建）"""
         try:
             from src.core.state_dashboard import get_state_dashboard
 
             _engine = get_state_dashboard(self.stream_id)
             if _engine._snapshot_cache is not None:
-                return _engine._snapshot_cache.verdict.to_dict()
-            _v = _engine.get_verdict()
+                return _engine._snapshot_cache.reply_decision.to_dict()
+            _v = _engine.get_reply_decision()
             return _v.to_dict()
         except Exception:
             return {
-                "urgency": "可稍后回",
-                "process": True,
+                "reply_urgency": "可稍后回",
+                "should_process": True,
                 "reply": False,
-                "reason": "仪表盘初始化中",
-                "tone": "正常回应",
-                "path": "FALLBACK",
+                "decision_reason": "仪表盘初始化中",
+                "suggested_tone": "正常回应",
+                "decision_stage": "fallback",
                 "confidence": 0.3,
             }
 

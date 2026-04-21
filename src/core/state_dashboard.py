@@ -14,7 +14,7 @@ _dashboard_singleton = None
 # ═══════════════════════════════════════════════════
 
 
-class VitalityLevel(Enum):
+class EnergyReserveState(Enum):
     """精力层级——状态栏主指标"""
 
     FULL = "full"
@@ -55,7 +55,7 @@ class VitalityLevel(Enum):
         }.get(self.value, "?")
 
 
-class SocialPosture(Enum):
+class SocialAttitudeState(Enum):
     """社交姿态——当前对群的态度"""
 
     WARM_ENGAGED = "warm_engaged"
@@ -86,7 +86,7 @@ class SocialPosture(Enum):
         }.get(self.value, "?")
 
 
-class MentalState(Enum):
+class InnerMoodState(Enum):
     """心理状态——内心感受"""
 
     CHEERFUL = "cheerful"
@@ -129,7 +129,7 @@ class MentalState(Enum):
         }.get(self.value, "?")
 
 
-class AttentionMode(Enum):
+class AttentionState(Enum):
     """注意力模式"""
 
     FOCUS_LOCKED = "focus_locked"
@@ -160,7 +160,7 @@ class AttentionMode(Enum):
         }.get(self.value, "?")
 
 
-class GroupEngagement(Enum):
+class PresenceRoleState(Enum):
     """群组参与度"""
 
     ACTIVE_CORE = "active_core"
@@ -193,13 +193,13 @@ class GroupEngagement(Enum):
 # ═══════════════════════════════════════════════════
 
 
-class TriggerTier(Enum):
+class DecisionGateStage(Enum):
     HARD_BLOCK_GATE = "hard_block_gate"
     CONTEXT_GATE = "context_gate"
     EMERGENCE_DECISION = "emergence_decision"
 
 
-class ActionUrgency(Enum):
+class ReplyUrgencyState(Enum):
     MUST_REPLY_NOW = "must_reply_now"
     SHOULD_REPLY_SOON = "should_reply_soon"
     MAY_REPLY_LATER = "may_reply_later"
@@ -222,10 +222,10 @@ class ActionUrgency(Enum):
 
 
 @dataclass
-class VitalityBar:
+class EnergyReserveBar:
     """精力条——状态栏最显眼的指标"""
 
-    level: VitalityLevel = VitalityLevel.NORMAL
+    level: EnergyReserveState = EnergyReserveState.NORMAL
     energy_ratio: float = 1.0
     fatigue_accumulated: float = 0.0
     recovery_rate: float = 1.0
@@ -250,12 +250,12 @@ class VitalityBar:
 
 
 @dataclass
-class SocialBar:
+class SocialAttitudeBar:
     """社交条"""
 
-    posture: SocialPosture = SocialPosture.NEUTRAL_OBSERVING
+    posture: SocialAttitudeState = SocialAttitudeState.NEUTRAL_OBSERVING
     social_willingness: float = 0.5
-    group_engagement: GroupEngagement = GroupEngagement.SPECTATOR
+    presence_role: PresenceRoleState = PresenceRoleState.SPECTATOR
     openness: float = 0.5
     interrupt_tolerance: float = 0.5
     avoidance_tendency: float = 0.0
@@ -273,7 +273,7 @@ class SocialBar:
             "posture": self.posture.label(),
             "icon": self.posture.icon(),
             "willingness": round(self.social_willingness, 2),
-            "engagement": self.group_engagement.label(),
+            "presence_role": self.presence_role.label(),
             "openness": round(self.openness, 2),
             "tolerance": round(self.interrupt_tolerance, 2),
             "loneliness": round(self.loneliness, 2),
@@ -287,10 +287,10 @@ class SocialBar:
 
 
 @dataclass
-class MoodBar:
+class InnerMoodBar:
     """心情条"""
 
-    mental: MentalState = MentalState.CONTENT
+    mood_state: InnerMoodState = InnerMoodState.CONTENT
     mood_value: float = 0.5
     curiosity: float = 0.3
     boredom: float = 0.0
@@ -300,8 +300,8 @@ class MoodBar:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "mental": self.mental.label(),
-            "icon": self.mental.icon(),
+            "mood_state": self.mood_state.label(),
+            "icon": self.mood_state.icon(),
             "mood": round(self.mood_value, 2),
             "curiosity": round(self.curiosity, 2),
             "boredom": round(self.boredom, 2),
@@ -312,10 +312,10 @@ class MoodBar:
 
 
 @dataclass
-class AttentionBar:
+class AttentionStateBar:
     """注意力条"""
 
-    mode: AttentionMode = AttentionMode.SCANNING
+    attention_state: AttentionState = AttentionState.SCANNING
     visibility_threshold: float = 0.30
     process_ratio: float = 0.50
     peek_desire: float = 0.3
@@ -325,8 +325,8 @@ class AttentionBar:
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "mode": self.mode.label(),
-            "icon": self.mode.icon(),
+            "attention_state": self.attention_state.label(),
+            "icon": self.attention_state.icon(),
             "threshold": round(self.visibility_threshold, 2),
             "process_ratio": f"{int(self.process_ratio * 100)}%",
             "peek_desire": round(self.peek_desire, 2),
@@ -337,7 +337,7 @@ class AttentionBar:
 
 
 @dataclass
-class NightBar:
+class CircadianPhaseBar:
     """昼夜条"""
 
     phase_name: str = ""
@@ -360,7 +360,7 @@ class NightBar:
 
 
 @dataclass
-class SafetyBar:
+class SafetyShieldBar:
     """安全条"""
 
     level_label: str = "安全"
@@ -382,7 +382,7 @@ class SafetyBar:
 
 
 @dataclass
-class MemoryBar:
+class MemoryTraceBar:
     """记忆条"""
 
     total_entries: int = 0
@@ -402,50 +402,48 @@ class MemoryBar:
 
 
 @dataclass
-class ActionVerdict:
+class ReplyDecisionFrame:
     """最终行动裁定——这是仪表盘最重要的输出"""
 
-    urgency: ActionUrgency = ActionUrgency.MAY_REPLY_LATER
-    should_process_message: bool = True
+    reply_urgency: ReplyUrgencyState = ReplyUrgencyState.MAY_REPLY_LATER
+    should_process: bool = True
     should_reply: bool = False
-    primary_reason: str = ""
-    secondary_reasons: List[str] = field(default_factory=list)
-    recommended_tone: str = ""
+    decision_reason: str = ""
+    detail_notes: List[str] = field(default_factory=list)
+    suggested_tone: str = ""
     suggested_action: str = ""
-    trigger_path: str = ""
-    legacy_trigger_path: str = ""
+    decision_stage: str = ""
     confidence: float = 0.5
     evaluated_at: float = field(default_factory=time.time)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
-            "urgency": self.urgency.label(),
-            "process": self.should_process_message,
+            "reply_urgency": self.reply_urgency.label(),
+            "should_process": self.should_process,
             "reply": self.should_reply,
-            "reason": self.primary_reason[:60],
-            "details": self.secondary_reasons[:3],
-            "tone": self.recommended_tone,
-            "action": self.suggested_action[:80],
-            "path": self.trigger_path,
-            "legacy_path": self.legacy_trigger_path,
+            "decision_reason": self.decision_reason[:60],
+            "detail_notes": self.detail_notes[:3],
+            "suggested_tone": self.suggested_tone,
+            "suggested_action": self.suggested_action[:80],
+            "decision_stage": self.decision_stage,
             "confidence": round(self.confidence, 2),
         }
 
 
 @dataclass
-class FullDashboardSnapshot:
+class UnifiedStateDashboard:
     """完整仪表盘快照——一次性聚合所有状态"""
 
     channel_id: str = ""
     timestamp: float = field(default_factory=time.time)
-    vitality: VitalityBar = field(default_factory=VitalityBar)
-    social: SocialBar = field(default_factory=SocialBar)
-    mood: MoodBar = field(default_factory=MoodBar)
-    attention: AttentionBar = field(default_factory=AttentionBar)
-    night: NightBar = field(default_factory=NightBar)
-    safety: SafetyBar = field(default_factory=SafetyBar)
-    memory: MemoryBar = field(default_factory=MemoryBar)
-    verdict: ActionVerdict = field(default_factory=ActionVerdict)
+    energy_reserve: EnergyReserveBar = field(default_factory=EnergyReserveBar)
+    social_attitude: SocialAttitudeBar = field(default_factory=SocialAttitudeBar)
+    inner_mood: InnerMoodBar = field(default_factory=InnerMoodBar)
+    attention: AttentionStateBar = field(default_factory=AttentionStateBar)
+    circadian_phase: CircadianPhaseBar = field(default_factory=CircadianPhaseBar)
+    safety_shield: SafetyShieldBar = field(default_factory=SafetyShieldBar)
+    memory_trace: MemoryTraceBar = field(default_factory=MemoryTraceBar)
+    reply_decision: ReplyDecisionFrame = field(default_factory=ReplyDecisionFrame)
     raw_engine_outputs: Dict[str, Any] = field(default_factory=dict)
     change_events: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -453,28 +451,28 @@ class FullDashboardSnapshot:
         return {
             "channel": self.channel_id[:16],
             "time": time.strftime("%H:%M:%S", time.localtime(self.timestamp)),
-            "vitality": self.vitality.to_dict(),
-            "social": self.social.to_dict(),
-            "mood": self.mood.to_dict(),
+            "energy_reserve": self.energy_reserve.to_dict(),
+            "social_attitude": self.social_attitude.to_dict(),
+            "inner_mood": self.inner_mood.to_dict(),
             "attention": self.attention.to_dict(),
-            "night": self.night.to_dict(),
-            "safety": self.safety.to_dict(),
-            "memory": self.memory.to_dict(),
-            "verdict": self.verdict.to_dict(),
+            "circadian_phase": self.circadian_phase.to_dict(),
+            "safety_shield": self.safety_shield.to_dict(),
+            "memory_trace": self.memory_trace.to_dict(),
+            "reply_decision": self.reply_decision.to_dict(),
         }
 
     def to_status_line(self) -> str:
-        v = self.vitality
-        m = self.mood.mental
-        a = self.attention.mode
-        s = self.social.posture
-        g = self.social.group_engagement
-        n = self.night.phase_icon
-        saf = self.safety.level_label
+        v = self.energy_reserve
+        m = self.inner_mood.mood_state
+        a = self.attention.attention_state
+        s = self.social_attitude.posture
+        g = self.social_attitude.presence_role
+        n = self.circadian_phase.phase_icon
+        saf = self.safety_shield.level_label
         # 社交值摘要：有真实数据时显示数值，否则仅显示姿态
         _sv_str = ""
-        if abs(self.social.core_social_value) > 0.1:
-            _sv_val = int(self.social.core_social_value)
+        if abs(self.social_attitude.core_social_value) > 0.1:
+            _sv_val = int(self.social_attitude.core_social_value)
             _sv_prefix = "+" if _sv_val > 0 else ""
             _sv_str = f"(社交{_sv_prefix}{_sv_val})"
         return f"{
@@ -503,7 +501,7 @@ class StateDashboardEngine:
     1. 状态散乱 —— 40+个_cached变量 → 7个标准化Bar
     2. 触发混乱 —— 没有清晰层级 → 三层过滤架构
     3. 展示缺失 —— 不知道该显示什么 → 标准化to_dict/to_status_line
-    4. 行为不明 —— 状态→动作映射不清晰 → ActionVerdict统一输出
+    4. 行为不明 —— 状态→动作映射不清晰 → ReplyDecisionFrame统一输出
 
     三层触发架构：
       L1 快速过滤（<1ms）：硬阻断条件（崩溃/深睡/安全封锁/完全退出）
@@ -520,15 +518,15 @@ class StateDashboardEngine:
 
     def __init__(self, channel_id: str):
         self._channel_id = channel_id
-        self._snapshot_cache: Optional[FullDashboardSnapshot] = None
+        self._snapshot_cache: Optional[UnifiedStateDashboard] = None
         self._cache_ttl_sec = 3.0
         self._last_build_ts = 0.0
         self._change_history: List[Dict[str, Any]] = []
         self._max_history = 20
-        self._prev_verdict_urgency: Optional[ActionUrgency] = None
-        # L1快速阻断缓存
-        self._l1_block_reason: str = ""
-        self._l1_blocked_until: float = 0.0
+        self._prev_verdict_urgency: Optional[ReplyUrgencyState] = None
+        # 硬阻断闸门缓存
+        self._hard_block_reason: str = ""
+        self._hard_blocked_until: float = 0.0
 
     @staticmethod
     def _metric_or_default(value: Any, default: float) -> float:
@@ -571,7 +569,7 @@ class StateDashboardEngine:
         *,
         force: bool = False,
         raw_sources: Optional[Dict[str, Any]] = None,
-    ) -> FullDashboardSnapshot:
+    ) -> UnifiedStateDashboard:
         now = time.time()
         if (
             not force
@@ -580,113 +578,113 @@ class StateDashboardEngine:
         ):
             return self._snapshot_cache
         self._last_build_ts = now
-        snap = FullDashboardSnapshot(
+        snap = UnifiedStateDashboard(
             channel_id=self._channel_id, timestamp=now
         )
         sources = raw_sources or {}
-        self._build_vitality_bar(snap, sources)
-        self._build_social_bar(snap, sources)
-        self._build_mood_bar(snap, sources)
+        self._build_energy_reserve_bar(snap, sources)
+        self._build_social_attitude_bar(snap, sources)
+        self._build_inner_mood_bar(snap, sources)
         self._build_attention_bar(snap, sources)
-        self._build_night_bar(snap, sources)
-        self._build_safety_bar(snap, sources)
-        self._build_memory_bar(snap, sources)
-        self._compute_verdict(snap)
+        self._build_circadian_phase_bar(snap, sources)
+        self._build_safety_shield_bar(snap, sources)
+        self._build_memory_trace_bar(snap, sources)
+        self._compute_reply_decision(snap)
         snap.raw_engine_outputs = dict(sources)
         self._detect_changes(snap)
         self._snapshot_cache = snap
         return snap
 
-    # ═════════════════ L1：快速过滤（<1ms）═════════════════
+    # ═════════════════ 硬阻断闸门（<1ms）═════════════════
 
-    def l1_fast_check(self, now: float) -> Optional[str]:
-        """第一层：硬阻断条件检查
+    def hard_block_gate_check(self, now: float) -> Optional[str]:
+        """硬阻断条件检查。
         返回None表示通过，返回字符串表示阻断原因"""
-        if now < self._l1_blocked_until:
-            return f"L1-时间冷却中(剩{self._l1_blocked_until - now:.0f}s)"
+        if now < self._hard_blocked_until:
+            return f"硬阻断冷却中(剩{self._hard_blocked_until - now:.0f}s)"
         vitality = self._get_quick_vitality(now)
         if vitality <= 0.05:
-            self._l1_blocked_until = now + 120.0
-            return "L1-精力耗尽(≤5%)，强制休息120s"
+            self._hard_blocked_until = now + 120.0
+            return "精力耗尽(≤5%)，强制休息120s"
         night_phase = str(self._get_quick_night_phase())
         if night_phase in ("deep_sleep", "deep_valley"):
-            self._l1_blocked_until = now + 300.0
-            return "L1-深度睡眠中，不处理消息"
+            self._hard_blocked_until = now + 300.0
+            return "深度睡眠中，不处理消息"
         safety = self._get_quick_safety()
         if safety >= 0.85:
-            return "L1-安全等级过高(≥0.85)，阻断回复"
+            return "安全等级过高(≥0.85)，阻断回复"
         attention_mode = self._get_quick_attention_mode()
         if attention_mode == "sleeping":
-            self._l1_blocked_until = now + 60.0
-            return "L1-注意力处于休眠态"
+            self._hard_blocked_until = now + 60.0
+            return "注意力处于休眠态"
         if attention_mode == "absent":
             peek = self._get_quick_peek_desire()
             if peek < 0.08 and now - self._get_quick_last_look() > 600:
-                return "L1-已长时间离线且无窥屏欲望"
+                return "已长时间离线且无窥屏欲望"
         return None
 
-    # ═════════════════ L2：中度评估（查表）═════════════════
+    # ═════════════════ 上下文闸门评估（查表）═════════════════
 
-    def l2_contextual_eval(
+    def context_gate_eval(
         self,
-        dashboard: FullDashboardSnapshot,
+        dashboard: UnifiedStateDashboard,
         *,
         is_at_bot: bool = False,
         is_quote: bool = False,
-    ) -> ActionUrgency:
-        """第二层：基于标准化Bar的状态组合查表"""
-        v = dashboard.vitality
-        m = dashboard.mood
+    ) -> ReplyUrgencyState:
+        """基于标准化Bar的状态组合查表。"""
+        v = dashboard.energy_reserve
+        m = dashboard.inner_mood
         a = dashboard.attention
-        s = dashboard.social
-        saf = dashboard.safety
+        s = dashboard.social_attitude
+        saf = dashboard.safety_shield
         score = 0.0
         if is_at_bot:
             score += 0.35
         if is_quote:
             score += 0.25
-        if v.level in (VitalityLevel.FULL, VitalityLevel.GOOD):
+        if v.level in (EnergyReserveState.FULL, EnergyReserveState.GOOD):
             score += 0.15
-        elif v.level == VitalityLevel.NORMAL:
+        elif v.level == EnergyReserveState.NORMAL:
             score += 0.08
-        elif v.level == VitalityLevel.TIRED:
+        elif v.level == EnergyReserveState.TIRED:
             score -= 0.05
-        elif v.level in (VitalityLevel.EXHAUSTED, VitalityLevel.CRASHED):
+        elif v.level in (EnergyReserveState.EXHAUSTED, EnergyReserveState.CRASHED):
             score -= 0.25
-        if m.mental in (
-            MentalState.CHEERFUL,
-            MentalState.CALM,
-            MentalState.CONTENT,
+        if m.mood_state in (
+            InnerMoodState.CHEERFUL,
+            InnerMoodState.CALM,
+            InnerMoodState.CONTENT,
         ):
             score += 0.10
-        elif m.mental == MentalState.BORED:
+        elif m.mood_state == InnerMoodState.BORED:
             score += 0.05
-        elif m.mental in (
-            MentalState.ANNOYED,
-            MentalState.IRRITATED,
-            MentalState.OVERWHELMED,
+        elif m.mood_state in (
+            InnerMoodState.ANNOYED,
+            InnerMoodState.IRRITATED,
+            InnerMoodState.OVERWHELMED,
         ):
             score -= 0.15
-        if a.mode == AttentionMode.FOCUS_LOCKED:
+        if a.attention_state == AttentionState.FOCUS_LOCKED:
             score += 0.20
-        elif a.mode == AttentionMode.SCANNING:
+        elif a.attention_state == AttentionState.SCANNING:
             score += 0.10
-        elif a.mode == AttentionMode.GLANCING:
+        elif a.attention_state == AttentionState.GLANCING:
             score += 0.02
-        elif a.mode == AttentionMode.PEEKING:
+        elif a.attention_state == AttentionState.PEEKING:
             score -= 0.05
-        elif a.mode == AttentionMode.ABSENT:
+        elif a.attention_state == AttentionState.ABSENT:
             score -= 0.20
         if s.posture in (
-            SocialPosture.WARM_ENGAGED,
-            SocialPosture.CASUAL_OPEN,
+            SocialAttitudeState.WARM_ENGAGED,
+            SocialAttitudeState.CASUAL_OPEN,
         ):
             score += 0.12
-        elif s.posture == SocialPosture.NEUTRAL_OBSERVING:
+        elif s.posture == SocialAttitudeState.NEUTRAL_OBSERVING:
             score += 0.04
-        elif s.posture == SocialPosture.WITHDRAWN:
+        elif s.posture == SocialAttitudeState.WITHDRAWN:
             score -= 0.18
-        elif s.posture == SocialPosture.AVOIDANT:
+        elif s.posture == SocialAttitudeState.AVOIDANT:
             score -= 0.28
         if saf.score < 0.15:
             score -= 0.02
@@ -694,24 +692,24 @@ class StateDashboardEngine:
             score -= 0.08
         else:
             score -= 0.15
-        if n := dashboard.night:
+        if n := dashboard.circadian_phase:
             if n.is_night:
                 if not n.is_burnthrough:
                     score -= 0.12
                 else:
                     score += 0.05
         if score >= 0.55:
-            return ActionUrgency.SHOULD_REPLY_SOON
+            return ReplyUrgencyState.SHOULD_REPLY_SOON
         if score >= 0.30:
-            return ActionUrgency.MAY_REPLY_LATER
+            return ReplyUrgencyState.MAY_REPLY_LATER
         if score >= 0.10:
-            return ActionUrgency.CAN_SKIP
-        return ActionUrgency.MUST_NOT_REPLY
+            return ReplyUrgencyState.CAN_SKIP
+        return ReplyUrgencyState.MUST_NOT_REPLY
 
     # ═════════════════ 各Bar构建方法 ═════════════════
 
-    def _build_vitality_bar(
-        self, snap: FullDashboardSnapshot, src: Dict[str, Any]
+    def _build_energy_reserve_bar(
+        self, snap: UnifiedStateDashboard, src: Dict[str, Any]
     ) -> None:
         e = float(src.get("energy_ratio", 1.0))
         fat = self._metric_or_default(src.get("fatigue"), 0.0)
@@ -720,17 +718,17 @@ class StateDashboardEngine:
         eff_rec = rec / max(0.3, debt)
         e_clamped = max(0.02, min(1.0, e))
         if e_clamped > 0.85:
-            level = VitalityLevel.FULL
+            level = EnergyReserveState.FULL
         elif e_clamped > 0.65:
-            level = VitalityLevel.GOOD
+            level = EnergyReserveState.GOOD
         elif e_clamped > 0.35:
-            level = VitalityLevel.NORMAL
+            level = EnergyReserveState.NORMAL
         elif e_clamped > 0.18:
-            level = VitalityLevel.TIRED
+            level = EnergyReserveState.TIRED
         elif e_clamped > 0.05:
-            level = VitalityLevel.EXHAUSTED
+            level = EnergyReserveState.EXHAUSTED
         else:
-            level = VitalityLevel.CRASHED
+            level = EnergyReserveState.CRASHED
         trend = (
             "declining"
             if fat > 0.6
@@ -738,7 +736,7 @@ class StateDashboardEngine:
         )
         deficit = max(0, 1.0 - e_clamped)
         time_full = deficit / max(0.01, eff_rec) * 3600.0
-        snap.vitality = VitalityBar(
+        snap.energy_reserve = EnergyReserveBar(
             level=level,
             energy_ratio=e_clamped,
             fatigue_accumulated=fat,
@@ -749,8 +747,8 @@ class StateDashboardEngine:
             time_to_full=time_full,
         )
 
-    def _build_social_bar(
-        self, snap: FullDashboardSnapshot, src: Dict[str, Any]
+    def _build_social_attitude_bar(
+        self, snap: UnifiedStateDashboard, src: Dict[str, Any]
     ) -> None:
         sw = self._metric_or_default(src.get("social_willingness"), 0.5)
         open_val = self._metric_or_default(src.get("openness"), 0.5)
@@ -766,31 +764,31 @@ class StateDashboardEngine:
         core_annoyance = float(src.get("core_annoyance", 0.0) or 0.0)
         core_interactions = int(src.get("core_interaction_count", 0) or 0)
         if eng_raw > 0.75:
-            eng = GroupEngagement.ACTIVE_CORE
+            eng = PresenceRoleState.ACTIVE_CORE
         elif eng_raw > 0.45:
-            eng = GroupEngagement.PARTICIPANT
+            eng = PresenceRoleState.PARTICIPANT
         elif eng_raw > 0.2:
-            eng = GroupEngagement.SPECTATOR
+            eng = PresenceRoleState.SPECTATOR
         elif eng_raw > 0.05:
-            eng = GroupEngagement.LURKER
+            eng = PresenceRoleState.LURKER
         else:
-            eng = GroupEngagement.GHOST
-        post = SocialPosture.NEUTRAL_OBSERVING
+            eng = PresenceRoleState.GHOST
+        post = SocialAttitudeState.NEUTRAL_OBSERVING
         # 姿态判定：融合存在感引擎 + 真实社交值双重信号
         if sw > 0.7 and avoid < 0.2 and core_sv > 10:
-            post = SocialPosture.WARM_ENGAGED
+            post = SocialAttitudeState.WARM_ENGAGED
         elif sw > 0.5 and avoid < 0.3 and core_sv > 0:
-            post = SocialPosture.CASUAL_OPEN
+            post = SocialAttitudeState.CASUAL_OPEN
         elif (sw < 0.25 or avoid > 0.5) and core_sv < -10:
-            post = SocialPosture.WITHDRAWN
+            post = SocialAttitudeState.WITHDRAWN
         if avoid > 0.65 or core_annoyance > 30:
-            post = SocialPosture.AVOIDANT
+            post = SocialAttitudeState.AVOIDANT
         if core_sv > 40 and core_affection > 20:
-            post = SocialPosture.WARM_ENGAGED
-        snap.social = SocialBar(
+            post = SocialAttitudeState.WARM_ENGAGED
+        snap.social_attitude = SocialAttitudeBar(
             posture=post,
             social_willingness=sw,
-            group_engagement=eng,
+            presence_role=eng,
             openness=open_val,
             interrupt_tolerance=tol,
             avoidance_tendency=avoid,
@@ -803,8 +801,8 @@ class StateDashboardEngine:
             interaction_count=core_interactions,
         )
 
-    def _build_mood_bar(
-        self, snap: FullDashboardSnapshot, src: Dict[str, Any]
+    def _build_inner_mood_bar(
+        self, snap: UnifiedStateDashboard, src: Dict[str, Any]
     ) -> None:
         mood_v = self._metric_or_default(src.get("mood"), 0.5)
         curio = self._metric_or_default(src.get("curiosity"), 0.3)
@@ -812,29 +810,29 @@ class StateDashboardEngine:
         loaf = self._metric_or_default(src.get("loafing"), 0.0)
         annoy = self._metric_or_default(src.get("annoyance_value", src.get("annoyance")), 0.0)
         drive = self._metric_or_default(src.get("proactive_drive"), 0.3)
-        mental = MentalState.CONTENT
+        mental = InnerMoodState.CONTENT
         if mood_v > 0.72:
-            mental = MentalState.CHEERFUL
+            mental = InnerMoodState.CHEERFUL
         elif mood_v > 0.58:
-            mental = MentalState.CALM
+            mental = InnerMoodState.CALM
         elif mood_v > 0.42:
-            mental = MentalState.CONTENT
+            mental = InnerMoodState.CONTENT
         elif mood_v > 0.28:
-            mental = MentalState.THOUGHTFUL
+            mental = InnerMoodState.THOUGHTFUL
         elif bored > 0.45:
-            mental = MentalState.BORED
+            mental = InnerMoodState.BORED
         elif loaf > 0.4:
-            mental = MentalState.RESTLESS
+            mental = InnerMoodState.RESTLESS
         elif annoy > 0.35:
-            mental = MentalState.ANNOYED
+            mental = InnerMoodState.ANNOYED
         elif mood_v < 0.22:
-            mental = MentalState.DROWSY
+            mental = InnerMoodState.DROWSY
         elif annoy > 0.55:
-            mental = MentalState.IRRITATED
+            mental = InnerMoodState.IRRITATED
         elif mood_v < 0.12 or (annoy > 0.6 and bored > 0.5):
-            mental = MentalState.OVERWHELMED
-        snap.mood = MoodBar(
-            mental=mental,
+            mental = InnerMoodState.OVERWHELMED
+        snap.inner_mood = InnerMoodBar(
+            mood_state=mental,
             mood_value=mood_v,
             curiosity=curio,
             boredom=bored,
@@ -844,20 +842,20 @@ class StateDashboardEngine:
         )
 
     def _build_attention_bar(
-        self, snap: FullDashboardSnapshot, src: Dict[str, Any]
+        self, snap: UnifiedStateDashboard, src: Dict[str, Any]
     ) -> None:
         mode_str = self._normalize_attention_mode(
             src.get("attention_mode", src.get("state", ""))
         )
         mode_map = {
-            "focus_locked": AttentionMode.FOCUS_LOCKED,
-            "scanning": AttentionMode.SCANNING,
-            "glancing": AttentionMode.GLANCING,
-            "peeking": AttentionMode.PEEKING,
-            "absent": AttentionMode.ABSENT,
-            "sleeping": AttentionMode.SLEEPING,
+            "focus_locked": AttentionState.FOCUS_LOCKED,
+            "scanning": AttentionState.SCANNING,
+            "glancing": AttentionState.GLANCING,
+            "peeking": AttentionState.PEEKING,
+            "absent": AttentionState.ABSENT,
+            "sleeping": AttentionState.SLEEPING,
         }
-        mode = mode_map.get(mode_str, AttentionMode.SCANNING)
+        mode = mode_map.get(mode_str, AttentionState.SCANNING)
         thresh = self._metric_or_default(src.get("visibility_threshold"), 0.30)
         ratio = self._metric_or_default(src.get("process_ratio"), 0.50)
         peek = self._metric_or_default(src.get("peek_desire"), 0.3)
@@ -867,8 +865,8 @@ class StateDashboardEngine:
             src.get("last_look_ago", src.get("since_last_look_sec")),
             999.0,
         )
-        snap.attention = AttentionBar(
-            mode=mode,
+        snap.attention = AttentionStateBar(
+            attention_state=mode,
             visibility_threshold=thresh,
             process_ratio=ratio,
             peek_desire=peek,
@@ -877,8 +875,8 @@ class StateDashboardEngine:
             last_look_ago_sec=last_look,
         )
 
-    def _build_night_bar(
-        self, snap: FullDashboardSnapshot, src: Dict[str, Any]
+    def _build_circadian_phase_bar(
+        self, snap: UnifiedStateDashboard, src: Dict[str, Any]
     ) -> None:
         phase = str(src.get("night_phase", "") or "").lower()
         phase = {
@@ -923,7 +921,7 @@ class StateDashboardEngine:
             "social_night": "社交夜",
             "quiet_contemplate": "安静沉思",
         }
-        snap.night = NightBar(
+        snap.circadian_phase = CircadianPhaseBar(
             phase_name=label_map.get(phase, phase),
             phase_icon=icon_map.get(phase, "☀️"),
             is_night=is_night,
@@ -934,8 +932,8 @@ class StateDashboardEngine:
             ),
         )
 
-    def _build_safety_bar(
-        self, snap: FullDashboardSnapshot, src: Dict[str, Any]
+    def _build_safety_shield_bar(
+        self, snap: UnifiedStateDashboard, src: Dict[str, Any]
     ) -> None:
         level = str(src.get("safety_level", "安全") or "安全")
         score = float(src.get("safety_score", 0.0) or 0.0)
@@ -949,7 +947,7 @@ class StateDashboardEngine:
             "高风险": "🛑",
             "严重威胁": "🚨",
         }
-        snap.safety = SafetyBar(
+        snap.safety_shield = SafetyShieldBar(
             level_label=level,
             level_icon=icon_map.get(level, "🛡️"),
             score=score,
@@ -958,15 +956,15 @@ class StateDashboardEngine:
             bar_penalty=penalty,
         )
 
-    def _build_memory_bar(
-        self, snap: FullDashboardSnapshot, src: Dict[str, Any]
+    def _build_memory_trace_bar(
+        self, snap: UnifiedStateDashboard, src: Dict[str, Any]
     ) -> None:
         total = int(src.get("total", 0) or 0)
         util = float(src.get("utilization", 0.0) or 0.0)
         fresh = int(src.get("fresh", 0) or 0)
         stale = int(src.get("stale", 0) or 0)
         window = int(src.get("window", 0) or 0)
-        snap.memory = MemoryBar(
+        snap.memory_trace = MemoryTraceBar(
             total_entries=total,
             utilization=util,
             fresh_count=fresh,
@@ -976,112 +974,105 @@ class StateDashboardEngine:
 
     # ═════════════════ 裁定计算 ═════════════════
 
-    def _compute_verdict(self, snap: FullDashboardSnapshot) -> None:
-        l1 = self.l1_fast_check(snap.timestamp)
-        if l1:
-            snap.verdict = ActionVerdict(
-                urgency=ActionUrgency.MUST_NOT_REPLY,
-                should_process_message=False,
+    def _compute_reply_decision(self, snap: UnifiedStateDashboard) -> None:
+        hard_block_reason = self.hard_block_gate_check(snap.timestamp)
+        if hard_block_reason:
+            snap.reply_decision = ReplyDecisionFrame(
+                reply_urgency=ReplyUrgencyState.MUST_NOT_REPLY,
+                should_process=False,
                 should_reply=False,
-                primary_reason=l1,
-                trigger_path="HardBlockGate",
-                legacy_trigger_path="L1_HARD_BLOCK",
+                decision_reason=hard_block_reason,
+                decision_stage=DecisionGateStage.HARD_BLOCK_GATE.value,
                 confidence=0.95,
             )
             return
-        l2 = self.l2_contextual_eval(snap)
-        if l2 == ActionUrgency.MUST_NOT_REPLY:
-            snap.verdict = ActionVerdict(
-                urgency=l2,
-                should_process_message=True,
+        context_urgency = self.context_gate_eval(snap)
+        if context_urgency == ReplyUrgencyState.MUST_NOT_REPLY:
+            snap.reply_decision = ReplyDecisionFrame(
+                reply_urgency=context_urgency,
+                should_process=True,
                 should_reply=False,
-                primary_reason="L2综合评估不通过",
-                trigger_path="ContextGateReject",
-                legacy_trigger_path="L2_CONTEXTUAL_REJECT",
+                decision_reason="上下文闸门判定不通过",
+                decision_stage=f"{DecisionGateStage.CONTEXT_GATE.value}_reject",
                 confidence=0.75,
             )
             return
-        if l2 == ActionUrgency.CAN_SKIP:
-            snap.verdict = ActionVerdict(
-                urgency=l2,
-                should_process_message=True,
+        if context_urgency == ReplyUrgencyState.CAN_SKIP:
+            snap.reply_decision = ReplyDecisionFrame(
+                reply_urgency=context_urgency,
+                should_process=True,
                 should_reply=False,
-                primary_reason="L2评估：可跳过此消息",
-                secondary_reasons=["进入观察但不回复"],
-                trigger_path="ContextGateSkip",
-                legacy_trigger_path="L2_CONTEXTUAL_SKIP",
+                decision_reason="上下文闸门允许跳过本轮消息",
+                detail_notes=["进入观察态但不执行回复"],
+                decision_stage=f"{DecisionGateStage.CONTEXT_GATE.value}_skip",
                 confidence=0.55,
             )
             return
         tone = self._derive_tone(snap)
-        action = self._derive_action(snap, l2)
+        action = self._derive_action(snap, context_urgency)
         urgency_final = (
-            ActionUrgency.SHOULD_REPLY_SOON
-            if l2 == ActionUrgency.MAY_REPLY_LATER
-            else l2
+            ReplyUrgencyState.SHOULD_REPLY_SOON
+            if context_urgency == ReplyUrgencyState.MAY_REPLY_LATER
+            else context_urgency
         )
-        snap.verdict = ActionVerdict(
-            urgency=urgency_final,
-            should_process_message=True,
+        snap.reply_decision = ReplyDecisionFrame(
+            reply_urgency=urgency_final,
+            should_process=True,
             should_reply=True,
-            primary_reason=f"L{
-                '2' if l2 == ActionUrgency.MAY_REPLY_LATER else '3'}通过，{
-                snap.mood.mental.label()}+{
-                snap.attention.mode.label()}",
-            recommended_tone=tone,
+            decision_reason=f"闸门通过，当前状态={snap.inner_mood.mood_state.label()} + {snap.attention.attention_state.label()}",
+            suggested_tone=tone,
             suggested_action=action,
-            trigger_path="EmergenceDecision",
-            legacy_trigger_path="L3_FULL_EVALUATION",
-            confidence=0.85 if l2 == ActionUrgency.MUST_REPLY_NOW else 0.70,
+            decision_stage=DecisionGateStage.EMERGENCE_DECISION.value,
+            confidence=0.85 if context_urgency == ReplyUrgencyState.MUST_REPLY_NOW else 0.70,
         )
 
     @staticmethod
-    def _derive_tone(snap: FullDashboardSnapshot) -> str:
-        if snap.safety.score > 0.5:
+    def _derive_tone(snap: UnifiedStateDashboard) -> str:
+        if snap.safety_shield.score > 0.5:
             return "谨慎克制"
-        if snap.night.is_night and not snap.night.is_burnthrough:
+        if snap.circadian_phase.is_night and not snap.circadian_phase.is_burnthrough:
             return "安静温和"
-        if snap.mood.mental in (MentalState.CHEERFUL, MentalState.CALM):
+        if snap.inner_mood.mood_state in (InnerMoodState.CHEERFUL, InnerMoodState.CALM):
             return "轻松自然"
-        if snap.mood.mental == MentalState.BORED:
+        if snap.inner_mood.mood_state == InnerMoodState.BORED:
             return "好奇试探"
-        if snap.social.posture == SocialPosture.WARM_ENGAGED:
+        if snap.social_attitude.posture == SocialAttitudeState.WARM_ENGAGED:
             return "热情亲切"
-        if snap.mood.mental in (MentalState.ANNOYED, MentalState.IRRITATED):
+        if snap.inner_mood.mood_state in (InnerMoodState.ANNOYED, InnerMoodState.IRRITATED):
             return "冷淡简短"
         return "正常回应"
 
     @staticmethod
-    def _derive_action(snap: FullDashboardSnapshot, l2: ActionUrgency) -> str:
+    def _derive_action(snap: UnifiedStateDashboard, l2: ReplyUrgencyState) -> str:
         parts = []
-        if l2 == ActionUrgency.MUST_REPLY_NOW:
+        if l2 == ReplyUrgencyState.MUST_REPLY_NOW:
             parts.append("立即处理并生成回复")
-        elif l2 == ActionUrgency.SHOULD_REPLY_SOON:
+        elif l2 == ReplyUrgencyState.SHOULD_REPLY_SOON:
             parts.append("准备回复，可在下一tick执行")
         else:
             parts.append("标记待回复，观察后续消息")
-        if snap.vitality.level in (
-            VitalityLevel.EXHAUSTED,
-            VitalityLevel.CRASHED,
+        if snap.energy_reserve.level in (
+            EnergyReserveState.EXHAUSTED,
+            EnergyReserveState.CRASHED,
         ):
             parts.append("（注意：精力不足，建议短回复）")
-        if snap.night.is_burnthrough:
+        if snap.circadian_phase.is_burnthrough:
             parts.append("（夜猫子模式激活，可能话多）")
         return "；".join(parts)
 
     # ═════════════════ 变更检测 ═════════════════
 
-    def _detect_changes(self, snap: FullDashboardSnapshot) -> None:
+    def _detect_changes(self, snap: UnifiedStateDashboard) -> None:
         events = []
         if (
             self._prev_verdict_urgency is not None
-            and self._prev_verdict_urgency != snap.verdict.urgency
+            and self._prev_verdict_urgency != snap.reply_decision.reply_urgency
         ):
             events.append(
                 {
                     "type": "urgency_change",
                     "from": self._prev_verdict_urgency.label(),
-                    "to": snap.verdict.urgency.label(),
+                    "to": snap.reply_decision.reply_urgency.label(),
                     "at": snap.timestamp,
                 }
             )
@@ -1091,7 +1082,7 @@ class StateDashboardEngine:
                 self._change_history = self._change_history[
                     -self._max_history:
                 ]
-        self._prev_verdict_urgency = snap.verdict.urgency
+        self._prev_verdict_urgency = snap.reply_decision.reply_urgency
 
     # ────────────────── 快速查询辅助 ──────────────────
 
@@ -1147,9 +1138,9 @@ class StateDashboardEngine:
         snap = self.build_dashboard()
         return snap.to_display_dict()
 
-    def get_verdict(self) -> ActionVerdict:
+    def get_reply_decision(self) -> ReplyDecisionFrame:
         snap = self.build_dashboard()
-        return snap.verdict
+        return snap.reply_decision
 
     def get_change_events(self, limit: int = 5) -> List[Dict[str, Any]]:
         return list(reversed(self._change_history[-limit:]))

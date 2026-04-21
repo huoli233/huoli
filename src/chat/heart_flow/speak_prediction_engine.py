@@ -29,11 +29,11 @@ class SpeakPredictionEngine:
         dashboard_snapshot: Dict[str, Any],
     ) -> Dict[str, Any]:
         resident = dashboard_snapshot.get("snapshot", {}) if dashboard_snapshot.get("available") else {}
-        verdict = resident.get("verdict", {}) if isinstance(resident, dict) else {}
-        social = resident.get("social", {}) if isinstance(resident, dict) else {}
+        verdict = resident.get("reply_decision", {}) if isinstance(resident, dict) else {}
+        social = resident.get("social_attitude", {}) if isinstance(resident, dict) else {}
         attention = resident.get("attention", {}) if isinstance(resident, dict) else {}
-        vitality = resident.get("vitality", {}) if isinstance(resident, dict) else {}
-        safety = resident.get("safety", {}) if isinstance(resident, dict) else {}
+        vitality = resident.get("energy_reserve", {}) if isinstance(resident, dict) else {}
+        safety = resident.get("safety_shield", {}) if isinstance(resident, dict) else {}
 
         emergence = domains.get("emergence_core", {}) if isinstance(domains, dict) else {}
         resource = domains.get("resource_ledger", {}) if isinstance(domains, dict) else {}
@@ -48,7 +48,7 @@ class SpeakPredictionEngine:
             "可稍后回": 0.55,
             "跳过": 0.18,
             "不回复": 0.05,
-        }.get(str(verdict.get("urgency", "") or ""), 0.35)
+        }.get(str(verdict.get("reply_urgency", "") or ""), 0.35)
 
         initiative_drive = _safe_float(emergence.get("initiative_drive", 0.0))
         boredom_load = _safe_float(emergence.get("boredom_load", 0.0))
@@ -137,7 +137,7 @@ class SpeakPredictionEngine:
         else:
             reply_length = "中等"
 
-        tone = str(verdict.get("tone", "") or "正常回应")
+        tone = str(verdict.get("suggested_tone", "") or "正常回应")
         if probability < 0.3 and tone == "正常回应":
             tone = "克制观察"
 

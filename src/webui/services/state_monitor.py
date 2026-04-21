@@ -479,11 +479,11 @@ def _build_presentation(
     prediction: Dict[str, Any],
 ) -> Dict[str, Any]:
     dashboard = dashboard_snapshot.get("snapshot", {}) if dashboard_snapshot.get("available") else {}
-    vitality = dashboard.get("vitality", {}) if isinstance(dashboard, dict) else {}
-    mood = dashboard.get("mood", {}) if isinstance(dashboard, dict) else {}
+    vitality = dashboard.get("energy_reserve", {}) if isinstance(dashboard, dict) else {}
+    mood = dashboard.get("inner_mood", {}) if isinstance(dashboard, dict) else {}
     attention = dashboard.get("attention", {}) if isinstance(dashboard, dict) else {}
-    social = dashboard.get("social", {}) if isinstance(dashboard, dict) else {}
-    safety = dashboard.get("safety", {}) if isinstance(dashboard, dict) else {}
+    social = dashboard.get("social_attitude", {}) if isinstance(dashboard, dict) else {}
+    safety = dashboard.get("safety_shield", {}) if isinstance(dashboard, dict) else {}
 
     flow_runtime = domains.get("flow_runtime", {})
     group_climate = domains.get("group_climate", {})
@@ -503,17 +503,17 @@ def _build_presentation(
         "inner_mood": {
             "label": "内在心情",
             "icon": str(mood.get("icon", "😊") or "😊"),
-            "state": str(mood.get("mental", "平静") or "平静"),
+            "state": str(mood.get("mood_state", "平静") or "平静"),
             "value": _safe_float(mood.get("mood", 0.5)),
-            "display_value": str(mood.get("mental", "平静") or "平静"),
+            "display_value": str(mood.get("mood_state", "平静") or "平静"),
             "color": "#e9c46a",
         },
         "attention_state": {
             "label": "注意状态",
             "icon": str(attention.get("icon", "📡") or "📡"),
-            "state": str(attention.get("mode", "扫描模式") or "扫描模式"),
+            "state": str(attention.get("attention_state", "扫描模式") or "扫描模式"),
             "value": _safe_float(domains.get("resource_ledger", {}).get("activity_index", 50.0)) / 100.0,
-            "display_value": str(attention.get("mode", "扫描模式") or "扫描模式"),
+            "display_value": str(attention.get("attention_state", "扫描模式") or "扫描模式"),
             "color": "#457b9d",
         },
         "social_attitude": {

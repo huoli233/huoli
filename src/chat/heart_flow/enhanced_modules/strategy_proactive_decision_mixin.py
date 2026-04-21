@@ -658,29 +658,29 @@ class StrategyProactiveDecisionMixin:
                     _inp.mm_engagement = float(_mm_cached.get("avg_engagement", 0.0) or 0.0)
             except Exception as _e:
                 logger.debug(f"{self.log_prefix} unknown异常: {_e}")
-            # 仪表盘ActionVerdict预检：L2/L3裁定结果注入决策器
+            # 仪表盘ReplyDecisionFrame预检：把状态看板裁定注入决策器
             try:
                 _dv = self._get_dashboard_verdict()
-                _dv_urgency = str(_dv.get("urgency", "") or "")
+                _dv_urgency = str(_dv.get("reply_urgency", "") or "")
                 _dv_reply = _dv.get("reply", False)
-                _dv_process = _dv.get("process", True)
+                _dv_process = _dv.get("should_process", True)
                 _dv_confidence = float(_dv.get("confidence", 0.5) or 0.5)
-                _dv_path = str(_dv.get("path", "") or "")
+                _dv_stage = str(_dv.get("decision_stage", "") or "")
                 if not _dv_process:
                     verdict.should_proceed = False
                     verdict.activation_bar = min(0.95, verdict.activation_bar + 0.25)
-                    verdict.rationale = f"{verdict.rationale or ''} | 仪表盘L1阻断({_dv.get('reason', '')[:40]})"
+                    verdict.rationale = f"{verdict.rationale or ''} | 仪表盘硬阻断({_dv.get('decision_reason', '')[:40]})"
                 elif not _dv_reply and _dv_urgency in ("不回复", "跳过"):
                     _skip_penalty = 0.08 * _dv_confidence
                     verdict.activation_bar = min(0.90, verdict.activation_bar + _skip_penalty)
                     verdict.fused_score = max(0.0, verdict.fused_score - _skip_penalty * 0.4)
-                    verdict.breakdown["dashboard_l2_skip"] = -_skip_penalty
-                    logger.debug(f"{self.log_prefix} 仪表盘L2跳过: urgency={_dv_urgency} path={_dv_path}")
+                    verdict.breakdown["dashboard_context_skip"] = -_skip_penalty
+                    logger.debug(f"{self.log_prefix} 仪表盘上下文闸门跳过: urgency={_dv_urgency} stage={_dv_stage}")
                 elif _dv_reply and _dv_urgency in ("立即回复", "尽快回复"):
                     _reply_boost = 0.05 * _dv_confidence
                     verdict.activation_bar = max(0.05, verdict.activation_bar - _reply_boost)
-                    verdict.breakdown["dashboard_l2_boost"] = _reply_boost
-                _dv_tone = str(_dv.get("tone", "") or "")
+                    verdict.breakdown["dashboard_reply_boost"] = _reply_boost
+                _dv_tone = str(_dv.get("suggested_tone", "") or "")
                 if _dv_tone:
                     verdict.rationale = f"{verdict.rationale or ''} | 语气建议={_dv_tone}"
             except Exception as _e:
@@ -741,4 +741,3 @@ class StrategyProactiveDecisionMixin:
             logger.debug(f"异常: {_e}")
 
         return verdict
-

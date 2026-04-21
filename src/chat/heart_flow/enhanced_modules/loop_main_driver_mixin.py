@@ -641,15 +641,15 @@ class LoopMainDriverMixin:
         self._run_adaptive_pipeline_periodic(_now_cycle)
         self.run_emotion_feedback_cycle(_now_cycle)
 
-        # ── 统一状态仪表盘：三层触发架构入口 ──
+        # ── 统一状态仪表盘：状态闸门入口 ──
         _dashboard_snap = self._build_state_dashboard(force=True)
         if _dashboard_snap:
-            _dash_verdict = _dashboard_snap.get("verdict", {})
-            _dash_urgency = str(_dash_verdict.get("urgency", "") or "")
-            # L1硬阻断检查：精力耗尽/深睡/安全封锁 → 直接跳过
-            if _dash_verdict.get("process") is False:
+            _dash_verdict = _dashboard_snap.get("reply_decision", {})
+            _dash_urgency = str(_dash_verdict.get("reply_urgency", "") or "")
+            # 硬阻断检查：精力耗尽/深睡/安全封锁 → 直接跳过
+            if _dash_verdict.get("should_process") is False:
                 logger.info(
-                    f"{self.log_prefix} 🛑 仪表盘L1阻断: {_dash_verdict.get('reason', '未知')} urgency={_dash_urgency}"
+                    f"{self.log_prefix} 🛑 仪表盘硬阻断: {_dash_verdict.get('decision_reason', '未知')} urgency={_dash_urgency}"
                 )
                 await asyncio.sleep(_TICK_FLOOR_SEC * 2)
                 return True
@@ -1972,4 +1972,3 @@ class LoopMainDriverMixin:
             return True
 
         return True
-
