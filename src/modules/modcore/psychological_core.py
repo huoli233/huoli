@@ -121,7 +121,6 @@ class PsychologicalCore:
         if user_id not in self._trauma_systems:
             try:
                 from src.modules.trauma.complex_psychology import (
-                    ComplexTraumaPsychology,
                     get_complex_psychology,
                 )
 
@@ -163,26 +162,22 @@ class PsychologicalCore:
         harassment_type = harassment_details.get("harassment_type", "unknown")
         tracker = self._get_emotion_tracker(stream_id)
         if tracker:
-            state = (
-                tracker.get_user_state(user_id, create_if_missing=False) if hasattr(tracker, "get_user_state") else None
-            )
-            if state:
-                old_annoyance = getattr(state, "annoyance", 0)
-                old_trauma = getattr(state, "trauma_score", 0)
-                trauma_increase = min(2.0, harassment_intensity * 0.15)
-                if hasattr(state, "trauma_score"):
-                    state.trauma_score = self._clamp_value(state.trauma_score + trauma_increase, 0, 10)
-                annoyance_increase = self._annoyance_per_harass + harassment_intensity * 2.5
-                if hasattr(state, "annoyance"):
-                    state.annoyance = self._clamp_value(state.annoyance + annoyance_increase, 0, 100)
+            if hasattr(tracker, "apply_harassment"):
+                state = tracker.get_user_state(user_id, create_if_missing=False)
+                old_annoyance = getattr(state, "annoyance", 0) if state else 0
+                old_trauma = getattr(state, "trauma_score", 0) if state else 0
+                result = tracker.apply_harassment(
+                    user_id,
+                    intensity=max(0.5, min(2.5, harassment_intensity / 5.0)),
+                    reason=f"{harassment_type}: {content[:40]}",
+                    content=content,
+                )
                 response.emotion_changes = {
-                    "annoyance_delta": getattr(state, "annoyance", 0) - old_annoyance,
-                    "trauma_delta": getattr(state, "trauma_score", 0) - old_trauma,
-                    "annoyance": getattr(state, "annoyance", 0),
-                    "trauma_score": getattr(state, "trauma_score", 0),
+                    "annoyance_delta": result.get("annoyance_delta", 0.0),
+                    "trauma_delta": result.get("trauma_delta", 0.0),
+                    "annoyance": result.get("annoyance", old_annoyance),
+                    "trauma_score": result.get("trauma_score", old_trauma),
                 }
-                if hasattr(tracker, "_save_states"):
-                    tracker._save_states()
         if harassment_intensity >= 10:
             block_duration = self._harassment_block_high
             block_reason = f"严重性骚扰/攻击: {harassment_type}"
@@ -266,8 +261,12 @@ class PsychologicalCore:
                         }
                     )
                     return response
-            if hasattr(tracker, "process_interaction"):
-                emotion_result = await tracker.process_interaction(user_id, event.content, use_llm=False)
+            if hasattr(tracker, "process_interaction_with_llm"):
+                emotion_result = await tracker.process_interaction_with_llm(
+                    user_id,
+                    event.content,
+                    use_llm=False,
+                )
                 response.emotion_changes = {
                     "affection": emotion_result.get("affection", 0),
                     "annoyance": emotion_result.get("annoyance", 0),
@@ -286,23 +285,18 @@ class PsychologicalCore:
         intensity = event.intensity
         tracker = self._get_emotion_tracker(stream_id)
         if tracker:
-            state = (
-                tracker.get_user_state(user_id, create_if_missing=False) if hasattr(tracker, "get_user_state") else None
-            )
-            if state:
-                old_affection = getattr(state, "affection", 0)
-                affection_gain = intensity * 2.0
-                if hasattr(state, "affection"):
-                    state.affection = min(100, state.affection + affection_gain)
-                if hasattr(state, "annoyance") and state.annoyance > 0:
-                    annoyance_decay = intensity * 1.0
-                    state.annoyance = max(0, state.annoyance - annoyance_decay)
+            if hasattr(tracker, "apply_positive_interaction"):
+                state = tracker.get_user_state(user_id, create_if_missing=False)
+                old_affection = getattr(state, "affection", 0) if state else 0
+                result = tracker.apply_positive_interaction(
+                    user_id,
+                    intensity=max(0.5, intensity * 4.0),
+                    reason=event.content[:40] or "心理核心正向交互",
+                )
                 response.emotion_changes = {
-                    "affection_delta": getattr(state, "affection", 0) - old_affection,
-                    "affection": getattr(state, "affection", 0),
+                    "affection_delta": result.get("affection_delta", 0.0),
+                    "affection": result.get("affection", old_affection),
                 }
-                if hasattr(tracker, "_save_states"):
-                    tracker._save_states()
                 response.actions.append(
                     {
                         "type": "positive_emotion_update",
@@ -319,23 +313,19 @@ class PsychologicalCore:
         intensity = event.intensity
         tracker = self._get_emotion_tracker(stream_id)
         if tracker:
-            state = (
-                tracker.get_user_state(user_id, create_if_missing=False) if hasattr(tracker, "get_user_state") else None
-            )
-            if state:
-                old_annoyance = getattr(state, "annoyance", 0)
-                annoyance_gain = intensity * 3.0
-                if hasattr(state, "annoyance"):
-                    state.annoyance = min(100, state.annoyance + annoyance_gain)
-                if hasattr(state, "affection") and state.affection > 0:
-                    affection_decay = intensity * 0.5
-                    state.affection = max(-100, state.affection - affection_decay)
+            if hasattr(tracker, "apply_negative_interaction"):
+                state = tracker.get_user_state(user_id, create_if_missing=False)
+                old_annoyance = getattr(state, "annoyance", 0) if state else 0
+                result = tracker.apply_negative_interaction(
+                    user_id,
+                    intensity=max(0.5, intensity),
+                    reason=event.content[:40] or "心理核心负向交互",
+                    content=event.content,
+                )
                 response.emotion_changes = {
-                    "annoyance_delta": getattr(state, "annoyance", 0) - old_annoyance,
-                    "annoyance": getattr(state, "annoyance", 0),
+                    "annoyance_delta": result.get("annoyance_delta", 0.0),
+                    "annoyance": result.get("annoyance", old_annoyance),
                 }
-                if hasattr(tracker, "_save_states"):
-                    tracker._save_states()
                 response.actions.append(
                     {
                         "type": "negative_emotion_update",
@@ -375,20 +365,18 @@ class PsychologicalCore:
         user_id = event.user_id
         tracker = self._get_emotion_tracker(stream_id)
         if tracker:
-            state = (
-                tracker.get_user_state(user_id, create_if_missing=False) if hasattr(tracker, "get_user_state") else None
-            )
-            if state:
-                if hasattr(state, "trauma_score") and state.trauma_score > 0:
-                    state.trauma_score = max(0, state.trauma_score - 0.5)
-                if hasattr(state, "annoyance") and state.annoyance > 0:
-                    state.annoyance = max(0, state.annoyance - 1.0)
+            state = tracker.get_user_state(user_id, create_if_missing=False) if hasattr(tracker, "get_user_state") else None
+            if state and hasattr(tracker, "apply_apology_repair"):
+                tracker.apply_apology_repair(
+                    user_id,
+                    intensity=1.0,
+                    reason=event.content[:40] or "心理核心恢复事件",
+                )
+                updated = tracker.get_user_state(user_id, create_if_missing=False)
                 response.emotion_changes = {
-                    "trauma_score": getattr(state, "trauma_score", 0),
-                    "annoyance": getattr(state, "annoyance", 0),
+                    "trauma_score": getattr(updated, "trauma_score", 0),
+                    "annoyance": getattr(updated, "annoyance", 0),
                 }
-                if hasattr(tracker, "_save_states"):
-                    tracker._save_states()
                 response.actions.append(
                     {
                         "type": "recovery_applied",

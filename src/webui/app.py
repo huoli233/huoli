@@ -62,6 +62,7 @@ def create_app(
     _setup_robots_txt(app)
 
     if enable_static:
+        _setup_dashboard_static_files(app)
         _setup_static_files(app)
 
     return app
@@ -218,6 +219,56 @@ def _setup_static_files(app: FastAPI):
         return response
 
     logger.info(f"✅ WebUI 静态文件服务已配置: {static_path}")
+
+
+def _setup_dashboard_static_files(app: FastAPI):
+    mimetypes.init()
+    mimetypes.add_type("application/javascript", ".js")
+    mimetypes.add_type("application/javascript", ".mjs")
+    mimetypes.add_type("text/css", ".css")
+    mimetypes.add_type("application/json", ".json")
+
+    base_dir = Path(__file__).parent.parent.parent
+    dashboard_path = base_dir / "web" / "dashboard" / "dist"
+
+    if not dashboard_path.exists():
+        logger.warning(f"❌ 状态页静态文件目录不存在: {dashboard_path}")
+        logger.warning("💡 独立状态页请先构建到 web/dashboard/dist/ 目录")
+        return
+
+    if not (dashboard_path / "index.html").exists():
+        logger.warning(f"❌ 未找到状态页 index.html: {dashboard_path / 'index.html'}")
+        logger.warning("💡 独立状态页请先构建到 web/dashboard/dist/ 目录")
+        return
+
+    @app.get("/dashboard", include_in_schema=False)
+    @app.get("/dashboard/{full_path:path}", include_in_schema=False)
+    async def serve_dashboard_spa(full_path: str = ""):
+        requested = full_path or "index.html"
+        file_path = dashboard_path / requested
+        try:
+            resolved_file = file_path.resolve()
+            if not resolved_file.is_relative_to(dashboard_path.resolve()):
+                response = FileResponse(dashboard_path / "index.html", media_type="text/html")
+                response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+                return response
+        except (ValueError, OSError):
+            response = FileResponse(dashboard_path / "index.html", media_type="text/html")
+            response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+            return response
+
+        if resolved_file.is_file():
+            media_type = mimetypes.guess_type(str(resolved_file))[0]
+            response = FileResponse(resolved_file, media_type=media_type)
+            if str(resolved_file).endswith(".html"):
+                response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+            return response
+
+        response = FileResponse(dashboard_path / "index.html", media_type="text/html")
+        response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+        return response
+
+    logger.info(f"✅ 独立状态页静态服务已配置: {dashboard_path}")
 
 
 def show_access_token():

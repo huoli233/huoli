@@ -338,10 +338,13 @@ class StrategyActionStateMixin:
             base_cost = 3.0
             brain_cost = max(1.0, min(15.0, base_cost))
             if _ch:
-                _ch.thinking_value = max(0, _ch.thinking_value - brain_cost)
-                _ch.last_update = time.time()
+                _d6.apply_thinking_cost(
+                    self.stream_id,
+                    think_cost=brain_cost,
+                    source="plan_drain",
+                )
                 self._sync_runtime_resource_cache_from_d6()
-                logger.info(f"{self.log_prefix} 消耗思考值 {brain_cost:.1f}，剩余思考值 {_ch.thinking_value:.1f}")
+                _state = _d6._ensure_channel(self.stream_id)
+                logger.info(f"{self.log_prefix} 消耗思考值 {brain_cost:.1f}，剩余思考值 {_state.thinking_value:.1f}")
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 规划消耗失败: {exc}")
-

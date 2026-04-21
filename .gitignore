@@ -66,6 +66,8 @@ node_modules/
 .eslintcache
 coverage/
 *.tsbuildinfo
+!web/dashboard/dist/
+!web/dashboard/dist/**
 
 # Temporary files
 tmp/

@@ -257,6 +257,53 @@ class EnergyChainDimension(DimensionBase):
         state.last_annoyance_relief_source = source
         return state
 
+    def restore_channel_snapshot(
+        self,
+        channel_id: str,
+        *,
+        snapshot: Dict[str, Any],
+        source: str = "snapshot_restore",
+    ) -> ChannelEnergyState:
+        """显式恢复频道资源快照，避免外部直接写状态对象。"""
+        state = self._ensure_channel(channel_id)
+        state.chat_pool = float(snapshot.get("chat_pool", state.chat_pool) or state.chat_pool)
+        state.thinking_value = float(
+            snapshot.get("thinking_value", state.thinking_value) or state.thinking_value
+        )
+        state.activity_level = float(snapshot.get("activity_level", state.activity_level) or state.activity_level)
+        state.social_value = float(snapshot.get("social_value", state.social_value) or state.social_value)
+        state.chain_count = int(snapshot.get("chain_count", state.chain_count) or state.chain_count)
+        state.total_consumed_today = float(
+            snapshot.get("total_consumed_today", state.total_consumed_today) or state.total_consumed_today
+        )
+        state.last_update = float(snapshot.get("last_update", time.time()) or time.time())
+        self._clamp_state(state, self._get_night_mode(channel_id))
+        return state
+
+    def apply_runtime_drain(
+        self,
+        channel_id: str,
+        *,
+        chat_cost: float = 0.0,
+        think_cost: float = 0.0,
+        activity_cost: float = 0.0,
+        social_delta: float = 0.0,
+        increment_chain: bool = False,
+        source: str = "runtime_drain",
+    ) -> ChannelEnergyState:
+        """统一运行时显式扣减入口，保留外部算法，只禁止外部直写资源池。"""
+        state = self._ensure_channel(channel_id)
+        state.chat_pool -= max(0.0, float(chat_cost or 0.0))
+        state.thinking_value -= max(0.0, float(think_cost or 0.0))
+        state.activity_level -= max(0.0, float(activity_cost or 0.0))
+        state.social_value += float(social_delta or 0.0)
+        if increment_chain:
+            state.chain_count += 1
+        state.total_consumed_today += max(0.0, float(chat_cost or 0.0)) + max(0.0, float(think_cost or 0.0))
+        state.last_update = time.time()
+        self._clamp_state(state, self._get_night_mode(channel_id))
+        return state
+
     def apply_reply_cost(
         self,
         channel_id: str,

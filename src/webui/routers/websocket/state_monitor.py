@@ -28,7 +28,9 @@ async def websocket_state_monitor_endpoint(
     interval: float = Query(default=1.0, ge=0.5, le=10.0),
 ):
     token_manager = get_token_manager()
-    if not token or not token_manager.verify_token(token):
+    cookie_token = websocket.cookies.get("huoli_session")
+    active_token = cookie_token or token
+    if not active_token or not token_manager.verify_token(active_token):
         await websocket.close(code=4002, reason="无效的认证令牌")
         return
 

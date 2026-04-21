@@ -61,6 +61,7 @@ SAFE_HTTP_OVERRIDES = {
     ("GET", "/statistics/models"): {},
     ("GET", "/api/heartflow/chats"): {},
     ("GET", "/api/heartflow/monitor"): {},
+    ("GET", "/dashboard"): {"headers": {}},
 }
 HTTP_SKIP_PATTERNS = [
     ("POST", re.compile(r"^/system/restart$")),
@@ -85,7 +86,7 @@ def app_context() -> Any:
     original_mode = global_config.webui.anti_crawler_mode
     global_config.webui.anti_crawler_mode = "false"
     try:
-        app = create_app(enable_static=False)
+        app = create_app(enable_static=True)
         yield app
     finally:
         global_config.webui.anti_crawler_mode = original_mode
@@ -126,8 +127,18 @@ def run_http_smoke(client: TestClient, token: str) -> dict[str, Any]:
                 payload = response.json()
                 if isinstance(payload, dict):
                     detail = payload.get("detail") or payload.get("message")
+                    if method == "GET" and route.path == "/api/heartflow/monitor":
+                        monitor = payload.get("monitor", {})
+                        if not isinstance(monitor, dict) or "updated_at" not in monitor or "channels" not in monitor:
+                            status = "failed"
+                            detail = "monitor overview shape mismatch"
             except Exception:
                 detail = None
+            if method == "GET" and route.path == "/dashboard":
+                body_text = response.text
+                if response.status_code < 500 and "<div id=\"root\"></div>" not in body_text:
+                    status = "failed"
+                    detail = "dashboard html shape mismatch"
             results.append(
                 {
                     "method": method,
@@ -173,6 +184,14 @@ def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
         first = websocket.receive_json()
         if first.get("type") not in {"state_overview", "state_snapshot"}:
             raise AssertionError(f"Unexpected state-monitor init message: {first}")
+        payload = first.get("data", {})
+        if first.get("type") == "state_overview":
+            if "updated_at" not in payload or "channels" not in payload:
+                raise AssertionError(f"Unexpected state-overview shape: {payload}")
+        else:
+            for required_key in ("domains", "presentation", "prediction"):
+                if required_key not in payload:
+                    raise AssertionError(f"Unexpected state-snapshot shape: missing {required_key}")
         websocket.send_json({"type": "ping", "data": {}})
         pong = _expect_message(websocket, "pong")
         results.append({"path": "/ws/state-monitor", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})

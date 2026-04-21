@@ -29,7 +29,7 @@ async def get_heartflow_chats(_auth: bool = Depends(require_auth)):
 
 @router.get("/state/{channel_id}")
 async def get_heartflow_state(channel_id: str, _auth: bool = Depends(require_auth)):
-    """Export a read-only state snapshot for an active Heartflow channel."""
+    """Return canonical state domains for an active Heartflow channel."""
 
     state = await export_heartfc_state(channel_id)
     if state is None:
@@ -46,7 +46,7 @@ async def get_heartflow_monitor_overview(_auth: bool = Depends(require_auth)):
 
 @router.get("/monitor/{channel_id}")
 async def get_heartflow_monitor_state(channel_id: str, _auth: bool = Depends(require_auth)):
-    """Return monitor packet for a single Heartflow channel."""
+    """Return canonical monitor packet for a single Heartflow channel."""
 
     monitor = await build_channel_monitor_state(channel_id)
     if monitor is None:

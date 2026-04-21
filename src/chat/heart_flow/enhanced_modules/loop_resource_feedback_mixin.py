@@ -258,18 +258,11 @@ class LoopResourceFeedbackMixin:
             return
         try:
             _d6 = EnergyChainDimension.get_instance()
-            _ch = _d6._ensure_channel(self.stream_id)
-            if _ch is None:
-                return
-            _ch.chat_pool = float(snapshot.get("chat_pool", _ch.chat_pool) or _ch.chat_pool)
-            _ch.thinking_value = float(snapshot.get("thinking_value", _ch.thinking_value) or _ch.thinking_value)
-            _ch.activity_level = float(snapshot.get("activity_level", _ch.activity_level) or _ch.activity_level)
-            _ch.social_value = float(snapshot.get("social_value", _ch.social_value) or _ch.social_value)
-            _ch.chain_count = int(snapshot.get("chain_count", _ch.chain_count) or _ch.chain_count)
-            _ch.total_consumed_today = float(
-                snapshot.get("total_consumed_today", _ch.total_consumed_today) or _ch.total_consumed_today
+            _d6.restore_channel_snapshot(
+                self.stream_id,
+                snapshot=snapshot,
+                source="pre_reply_restore",
             )
-            _ch.last_update = float(snapshot.get("last_update", time.time()) or time.time())
             self._sync_runtime_resource_cache_from_d6()
             logger.info(f"{self.log_prefix} ♻️ 预扣资源已回滚: {(reason or '未形成有效回复')[:80]}")
         except Exception as exc:
@@ -313,10 +306,13 @@ class LoopResourceFeedbackMixin:
             total_brain_cost = base_brain_cost * frequency_factor * interest_discount
             total_chat_cost = max(0.8, min(8.0, total_chat_cost))
             total_brain_cost = max(0.5, min(5.0, total_brain_cost))
-            _d6_state.chat_pool = max(0.0, _d6_state.chat_pool - total_chat_cost)
-            _d6_state.thinking_value = max(0.0, _d6_state.thinking_value - total_brain_cost)
-            _d6_state.chain_count += 1
-            _d6_state.total_consumed_today += total_chat_cost + total_brain_cost
+            _d6.apply_runtime_drain(
+                self.stream_id,
+                chat_cost=total_chat_cost,
+                think_cost=total_brain_cost,
+                increment_chain=True,
+                source="dynamic_reply_drain",
+            )
             self._consecutive_speaks = getattr(self, "_consecutive_speaks", 0) + 1
             self._last_speak_time = time.time()
             if self._consecutive_speaks >= 4:
@@ -343,9 +339,6 @@ class LoopResourceFeedbackMixin:
             _d6s = _d6._ensure_channel(self.stream_id)
             chat_deduct = max(0.5, min(3.0, 1.2 + (1.0 - _d6s.chat_ratio()) * 2.0))
             activity_deduct = max(0.1, min(1.0, 0.8 * (1.0 - _d6s.activity_level / 100.0)))
-            _d6s.chat_pool = max(0.0, _d6s.chat_pool - chat_deduct)
-            _d6s.activity_level = max(5.0, _d6s.activity_level - activity_deduct)
-            _d6s.chain_count += 1
             content = ""
             if messages:
                 for msg in reversed(messages):
@@ -354,13 +347,19 @@ class LoopResourceFeedbackMixin:
                         break
             polarity = self._estimate_text_polarity(content) if content else 0.0
             if polarity > 0.1:
-                _d6s.social_value = min(100.0, _d6s.social_value + 0.05)
                 social_delta = 0.05
             elif polarity < -0.1:
-                _d6s.social_value = max(-50.0, _d6s.social_value - 0.08)
                 social_delta = -0.08
             else:
                 social_delta = 0.0
+            _d6.apply_runtime_drain(
+                self.stream_id,
+                chat_cost=chat_deduct,
+                activity_cost=activity_deduct,
+                social_delta=social_delta,
+                increment_chain=True,
+                source="shared_resource_drain",
+            )
             self._sync_runtime_resource_cache_from_d6()
             logger.info(
                 f"{self.log_prefix} ⚡ "
@@ -1567,4 +1566,3 @@ class LoopResourceFeedbackMixin:
             logger.info(f"{self.log_prefix} 动作裁定 " + " ".join(verdict_parts))
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 动作裁定输出异常: {exc}")
-

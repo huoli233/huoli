@@ -196,8 +196,12 @@ class ProactiveIdleReplyMixin:
             )
             _ch = _d6._ensure_channel(self.stream_id)
             if _ch:
-                _ch.chat_pool = max(0, _ch.chat_pool - 0.3)
-                _ch.activity_level = max(0, _ch.activity_level - 0.2)
+                _d6.apply_runtime_drain(
+                    self.stream_id,
+                    chat_cost=0.3,
+                    activity_cost=0.2,
+                    source="peek_observe_loop",
+                )
         except Exception as _e:
             logger.debug(f"异常: {_e}")
         try:
@@ -860,4 +864,3 @@ class ProactiveIdleReplyMixin:
         except Exception as exc:
             logger.error(f"{self.log_prefix} 主动回复生成失败: {exc}")
             return False
-
