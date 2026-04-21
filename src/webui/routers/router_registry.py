@@ -58,6 +58,10 @@ def iter_router_factories():
             lambda: __import__("src.webui.routers.websocket.auth", fromlist=["router"]).router,
         ),
         (
+            "ws_state_monitor",
+            lambda: __import__("src.webui.routers.websocket.state_monitor", fromlist=["router"]).router,
+        ),
+        (
             "annual_report",
             lambda: __import__("src.webui.routers.annual_report", fromlist=["router"]).router,
         ),

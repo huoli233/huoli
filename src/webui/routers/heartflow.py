@@ -8,6 +8,7 @@ from src.chat.heart_flow.heartfc_state_exporter import (
 )
 from src.chat.heart_flow.heartfc_thresholds import get_heartfc_thresholds
 from src.webui.core.auth import verify_auth_token_from_cookie_or_header
+from src.webui.services.state_monitor import build_channel_monitor_state, build_monitor_overview
 
 router = APIRouter(prefix="/api/heartflow", tags=["heartflow"])
 
@@ -36,9 +37,25 @@ async def get_heartflow_state(channel_id: str, _auth: bool = Depends(require_aut
     return {"success": True, "state": state}
 
 
+@router.get("/monitor")
+async def get_heartflow_monitor_overview(_auth: bool = Depends(require_auth)):
+    """Return monitor overview for all active Heartflow channels."""
+
+    return {"success": True, "monitor": await build_monitor_overview()}
+
+
+@router.get("/monitor/{channel_id}")
+async def get_heartflow_monitor_state(channel_id: str, _auth: bool = Depends(require_auth)):
+    """Return monitor packet for a single Heartflow channel."""
+
+    monitor = await build_channel_monitor_state(channel_id)
+    if monitor is None:
+        raise HTTPException(status_code=404, detail="Heartflow chat is not active")
+    return {"success": True, "monitor": monitor}
+
+
 @router.get("/thresholds")
 async def get_heartflow_thresholds(_auth: bool = Depends(require_auth)):
     """Return effective HeartFC threshold configuration."""
 
     return {"success": True, "thresholds": get_heartfc_thresholds().to_dict()}
-

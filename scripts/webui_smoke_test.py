@@ -49,6 +49,7 @@ SAFE_HTTP_OVERRIDES = {
     ("GET", "/plugins/git-status"): {},
     ("GET", "/plugins/mirrors"): {},
     ("GET", "/plugins/installed"): {},
+    ("GET", "/ws/state-monitor/status"): {},
     ("GET", "/config/schema/bot"): {},
     ("GET", "/config/schema/model"): {},
     ("GET", "/config/bot"): {},
@@ -59,6 +60,7 @@ SAFE_HTTP_OVERRIDES = {
     ("GET", "/statistics/summary"): {},
     ("GET", "/statistics/models"): {},
     ("GET", "/api/heartflow/chats"): {},
+    ("GET", "/api/heartflow/monitor"): {},
 }
 HTTP_SKIP_PATTERNS = [
     ("POST", re.compile(r"^/system/restart$")),
@@ -166,6 +168,14 @@ def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
         websocket.send_json({"type": "ping", "data": {}})
         pong = _expect_message(websocket, "pong")
         results.append({"path": "/ws/plugin-progress", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
+
+    with client.websocket_connect(f"/ws/state-monitor?token={token}") as websocket:
+        first = websocket.receive_json()
+        if first.get("type") not in {"state_overview", "state_snapshot"}:
+            raise AssertionError(f"Unexpected state-monitor init message: {first}")
+        websocket.send_json({"type": "ping", "data": {}})
+        pong = _expect_message(websocket, "pong")
+        results.append({"path": "/ws/state-monitor", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
 
     with client.websocket_connect(f"/api/chat/ws?token={token}") as websocket:
         seen_types = []
