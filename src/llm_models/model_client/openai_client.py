@@ -77,6 +77,11 @@ except ImportError as e:
 
 logger = get_logger("LLM模型")
 
+_LOCAL_QWEN_NO_REASONING_MODELS = {
+    "qwen/qwen3.5-9b",
+    "qwen_qwen3.5-4b",
+}
+
 
 def _convert_messages(
     messages: list[Message],
@@ -371,6 +376,19 @@ def _build_stream_api_resp(
         raise EmptyResponseException()
 
     return resp
+
+
+def _disable_reasoning_for_local_qwen(model_info: ModelInfo, response: APIResponse) -> None:
+    model_keys = {
+        str(getattr(model_info, "name", "") or "").strip().lower(),
+        str(getattr(model_info, "model_identifier", "") or "").strip().lower(),
+    }
+    if not model_keys & _LOCAL_QWEN_NO_REASONING_MODELS:
+        return
+    content = str(response.content or "").strip()
+    if content.startswith("Thinking Process:") or content.startswith("We need answer"):
+        response.content = ""
+    response.reasoning_content = ""
 
 
 async def _default_stream_response_handler(
@@ -732,7 +750,9 @@ class OpenaiClient(BaseClient):
                 response_format=response_format if response_format is not None else NOT_GIVEN,
                 extra_body=extra_params,
             )
-            return await stream_response_handler(stream_resp, interrupt_flag)
+            parsed_response, usage_record = await stream_response_handler(stream_resp, interrupt_flag)
+            _disable_reasoning_for_local_qwen(model_info, parsed_response)
+            return parsed_response, usage_record
 
         async def _do_normal_request():
             """执行非流式请求并解析响应"""
@@ -746,7 +766,9 @@ class OpenaiClient(BaseClient):
                 response_format=response_format if response_format is not None else NOT_GIVEN,
                 extra_body=extra_params,
             )
-            return async_response_parser(normal_resp)
+            parsed_response, usage_record = async_response_parser(normal_resp)
+            _disable_reasoning_for_local_qwen(model_info, parsed_response)
+            return parsed_response, usage_record
 
         async def _do_request_with_interrupt():
             """包装请求以支持中断信号检查"""
@@ -772,7 +794,9 @@ class OpenaiClient(BaseClient):
                         response_format=response_format if response_format is not None else NOT_GIVEN,
                         extra_body=extra_params,
                     )
-                    return await stream_response_handler(stream_resp, interrupt_flag)
+                    parsed_response, usage_record = await stream_response_handler(stream_resp, interrupt_flag)
+                    _disable_reasoning_for_local_qwen(model_info, parsed_response)
+                    return parsed_response, usage_record
 
         try:
             # 使用 asyncio.wait_for 包装整个请求，确保超时后能正确取消

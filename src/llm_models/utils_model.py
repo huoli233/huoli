@@ -42,8 +42,6 @@ _model_health_ledger: Dict[str, Dict[str, Any]] = {}
 _health_ledger_lock = _threading.Lock()
 _tool_call_unsupported_models: Set[str] = set()
 _STATIC_TOOL_CALL_UNSUPPORTED_MODELS: Set[str] = {
-    # LMStudio 本地 Qwen3.5 模型当前会对 OpenAI tools/tool_options 返回 400，
-    # memory.react 等工具任务必须避开工具模式，直接走无工具兜底。
     "qwen/qwen3.5-9b",
     "qwen_qwen3.5-4b",
 }
