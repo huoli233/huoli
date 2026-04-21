@@ -503,7 +503,7 @@ async def build_world_snapshot(
             timeout=10.0,
         )
     except asyncio.TimeoutError:
-        logger.debug(f"世界快照采集超时(10s)，部分数据可能缺失")
+        logger.debug("世界快照采集超时(10s)，部分数据可能缺失")
     # 同步采集（非异步）
     _collect_session_memoir(snap, channel_id, user_id or user_name)
     _collect_ambient(snap, ambient)
@@ -725,7 +725,9 @@ async def _collect_emotion_state(snap: WorldSnapshot, channel_id: str, user_id: 
         u = snap.target_user
         u.affection = float(getattr(state, "affection", 0.0) or 0.0)
         u.trust_score = float(getattr(state, "trust_score", 0.0) or 0.0)
-        if not _metric_has_signal(u.trust_value) and _metric_has_signal(u.trust_score):
+        if _metric_has_signal(u.trust_score) and (
+            not _metric_has_signal(u.trust_value) or abs(u.trust_score) > abs(u.trust_value)
+        ):
             u.trust_value = u.trust_score
         u.trauma_score = float(getattr(state, "trauma_score", 0.0) or 0.0)
         u.psychological_pressure = float(getattr(state, "psychological_pressure", 0.0) or 0.0)
@@ -790,7 +792,9 @@ def _collect_emotion_state_sync(snap: WorldSnapshot, channel_id: str, user_id: s
         u = snap.target_user
         u.affection = float(getattr(state, "affection", 0.0) or 0.0)
         u.trust_score = float(getattr(state, "trust_score", 0.0) or 0.0)
-        if not _metric_has_signal(u.trust_value) and _metric_has_signal(u.trust_score):
+        if _metric_has_signal(u.trust_score) and (
+            not _metric_has_signal(u.trust_value) or abs(u.trust_score) > abs(u.trust_value)
+        ):
             u.trust_value = u.trust_score
         u.trauma_score = float(getattr(state, "trauma_score", 0.0) or 0.0)
         u.psychological_pressure = float(getattr(state, "psychological_pressure", 0.0) or 0.0)

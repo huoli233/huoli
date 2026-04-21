@@ -1,6 +1,5 @@
 import time
-import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, Optional
 from src.common.logger import get_logger
 from src.chat.heart_flow.dimension_protocol import (
@@ -252,12 +251,20 @@ class FondnessTrustDimension(DimensionBase):
                 _u_state = _et_sync.get_user_state(ctx.user_id, create_if_missing=False)
                 if _u_state:
                     _cur_aff = float(getattr(_u_state, "affection", 0.0) or 0.0)
+                    _cur_trust = float(getattr(_u_state, "trust_value", getattr(_u_state, "trust_score", 0.0)) or 0.0)
+                    _is_admin = str(getattr(_u_state, "relationship", "") or "") == "管理员"
                     _d2_fond = state.fondness_value
-                    # D2好感高于tracker时，补差值20%（避免突变）
-                    if abs(_d2_fond - _cur_aff) > 2.0:
+                    if _is_admin:
+                        state.fondness_value = max(state.fondness_value, _cur_aff)
+                        state.trust_value = max(state.trust_value, _cur_trust)
+                    elif _d2_fond > _cur_aff + 2.0:
                         _delta = (_d2_fond - _cur_aff) * 0.2
-                        if abs(_delta) > 0.3:
+                        if _delta > 0.3:
                             _et_sync.update_affection(ctx.user_id, _delta, "D2好感同步")
+                    elif _cur_aff > _d2_fond + 2.0:
+                        state.fondness_value = min(100.0, state.fondness_value + (_cur_aff - _d2_fond) * 0.2)
+                    if _cur_trust > state.trust_value + 2.0:
+                        state.trust_value = min(100.0, state.trust_value + (_cur_trust - state.trust_value) * 0.2)
             except Exception:
                 pass
 
