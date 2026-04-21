@@ -179,12 +179,17 @@ class DormancySupervisor:
 
                 rest_min = duration_actual / 60.0
                 _d6 = EnergyChainDimension.get_instance()
-                _ch = _d6._ensure_channel(channel_id)
-                if _ch:
-                    recover_amount = rest_min * 2.0
-                    _ch.chat_pool = min(_ch.chat_ceiling, _ch.chat_pool + recover_amount)
-                    _ch.thinking_value = min(_ch.thinking_ceiling, _ch.thinking_value + recover_amount * 0.5)
-                    _ch.last_update = time.time()
+                _d6.recover_from_rest(
+                    channel_id,
+                    rest_minutes=rest_min,
+                    rest_quality=max(0.6, float(setup.rest_intensity or 0.5)),
+                    source="dormancy_conclude",
+                )
+                _d6.relieve_annoyance(
+                    channel_id,
+                    amount=max(0.5, rest_min * 0.8),
+                    source="dormancy_conclude",
+                )
             except Exception as exc:
                 logger.debug(f"频道 {channel_id[:8]} 休息回血失败: {exc}")
         summary = {

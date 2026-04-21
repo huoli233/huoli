@@ -1,18 +1,15 @@
-import math
 import time
 import datetime
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple, Set
+from typing import Any, Dict, Optional, Set
 
 from src.chat.heart_flow.dimension_protocol import (
     DimensionBase,
     DimensionScope,
-    EventContext,
     TickResult,
 )
 from src.chat.heart_flow.vote_types import EnergyChainVote, EnergyStage
 from src.common.logger import get_logger
-from src.config.core_config_engine import get_core_config
 from src.common.data_models.heartflow_models import EnergySnapshot
 
 logger = get_logger("vitality_pool")
@@ -62,6 +59,10 @@ class ChannelEnergyState:
     last_stimulus_strength: float = 0.0
     consecutive_sleep_decisions: int = 0
     consecutive_wake_decisions: int = 0
+    last_recovery_time: float = 0.0
+    last_recovery_source: str = ""
+    last_annoyance_relief_time: float = 0.0
+    last_annoyance_relief_source: str = ""
 
     def chat_ratio(self) -> float:
         return max(0.0, min(1.0, self.chat_pool / max(self.chat_ceiling, 1.0)))
@@ -182,31 +183,154 @@ class EnergyChainDimension(DimensionBase):
             self._channels[channel_id] = state
         return self._channels[channel_id]
 
+    @staticmethod
+    def _effective_chat_ceiling(state: ChannelEnergyState, night_mode: NightMode) -> float:
+        return max(5.0, state.chat_ceiling * (1.0 - night_mode.ceiling_penalty))
+
+    @staticmethod
+    def _clamp_state(state: ChannelEnergyState, night_mode: Optional[NightMode] = None) -> None:
+        effective_ceiling = (
+            EnergyChainDimension._effective_chat_ceiling(state, night_mode)
+            if night_mode is not None
+            else state.chat_ceiling
+        )
+        state.chat_pool = max(0.0, min(effective_ceiling, state.chat_pool))
+        state.thinking_value = max(0.0, min(state.thinking_ceiling, state.thinking_value))
+        state.annoyance_level = max(0.0, min(100.0, state.annoyance_level))
+        state.activity_level = max(0.0, min(100.0, state.activity_level))
+        state.social_value = max(-50.0, min(100.0, state.social_value))
+
+    def recover_from_rest(
+        self,
+        channel_id: str,
+        *,
+        rest_minutes: float,
+        rest_quality: float = 1.0,
+        source: str = "rest",
+    ) -> ChannelEnergyState:
+        """显式休息恢复入口：只有休息事件才能回补聊天/思考值。"""
+        state = self._ensure_channel(channel_id)
+        minutes = max(0.0, float(rest_minutes or 0.0))
+        quality = max(0.1, min(1.5, float(rest_quality or 1.0)))
+        night_mode = self._get_night_mode(channel_id)
+        recovery_scale = 0.7 if night_mode.phase != "DAYTIME" else 1.0
+        chat_recovery = minutes * 2.0 * quality * recovery_scale
+        think_recovery = minutes * 1.2 * quality * recovery_scale
+        state.chat_pool += chat_recovery
+        state.thinking_value += think_recovery
+        state.last_recovery_time = time.time()
+        state.last_recovery_source = source
+        self._clamp_state(state, night_mode)
+        return state
+
+    def recover_from_positive_interaction(
+        self,
+        channel_id: str,
+        *,
+        intensity: float = 1.0,
+        source: str = "positive_interaction",
+    ) -> ChannelEnergyState:
+        """显式正向互动恢复入口：仅小幅回补，并可缓和烦躁。"""
+        state = self._ensure_channel(channel_id)
+        strength = max(0.0, min(2.0, float(intensity or 0.0)))
+        night_mode = self._get_night_mode(channel_id)
+        state.chat_pool += 0.8 + strength * 0.8
+        state.thinking_value += 0.3 + strength * 0.4
+        state.social_value += 0.4 * strength
+        self.relieve_annoyance(channel_id, amount=0.6 + strength * 0.9, source=source)
+        state.last_recovery_time = time.time()
+        state.last_recovery_source = source
+        self._clamp_state(state, night_mode)
+        return state
+
+    def relieve_annoyance(
+        self,
+        channel_id: str,
+        *,
+        amount: float,
+        source: str = "relief",
+    ) -> ChannelEnergyState:
+        """显式烦躁缓和入口：不允许 tick 被动衰减，只允许事件驱动下降。"""
+        state = self._ensure_channel(channel_id)
+        state.annoyance_level = max(0.0, state.annoyance_level - max(0.0, float(amount or 0.0)))
+        state.last_annoyance_relief_time = time.time()
+        state.last_annoyance_relief_source = source
+        return state
+
+    def apply_reply_cost(
+        self,
+        channel_id: str,
+        *,
+        reply_tokens: int = 80,
+        complexity: float = 0.5,
+        is_admin: bool = False,
+        source: str = "reply",
+    ) -> ChannelEnergyState:
+        """显式回复消耗入口。"""
+        state = self._ensure_channel(channel_id)
+        difficulty = max(0.05, min(1.5, float(complexity or 0.0)))
+        chat_cost_base = 1.2 + difficulty * 3.5
+        think_cost_base = 0.8 + difficulty * 2.0
+        ratio = state.combined_ratio()
+        cost_mult = 0.4 if ratio < 0.2 else (0.7 if ratio < 0.5 else 1.0)
+        if is_admin:
+            cost_mult *= 0.5
+        if state.thinking_value < 10:
+            think_cost_base *= 0.4
+        elif state.thinking_value < 25:
+            think_cost_base *= 0.6
+        elif state.thinking_value < 50:
+            think_cost_base *= 0.8
+        if state.chat_pool < 10:
+            chat_cost_base *= 0.3
+        elif state.chat_pool < 25:
+            chat_cost_base *= 0.6
+        final_chat_cost = max(0.2, min(chat_cost_base * cost_mult, state.chat_pool * 0.5))
+        final_think_cost = max(0.1, min(think_cost_base * cost_mult, state.thinking_value * 0.5))
+        state.chat_pool -= final_chat_cost
+        state.thinking_value -= final_think_cost
+        state.chain_count += 1
+        state.total_consumed_today += final_chat_cost + final_think_cost
+        state.last_reply_time = time.time()
+        state.activity_level = max(5.0, state.activity_level - 0.8 * difficulty)
+        if state.chat_pool < state.chat_ceiling * 0.15:
+            state.annoyance_level = min(80.0, state.annoyance_level + 1.5)
+        self._clamp_state(state, self._get_night_mode(channel_id))
+        return state
+
+    def apply_thinking_cost(
+        self,
+        channel_id: str,
+        *,
+        think_cost: float,
+        source: str = "thinking",
+    ) -> ChannelEnergyState:
+        """显式思考消耗入口。"""
+        state = self._ensure_channel(channel_id)
+        state.thinking_value -= max(0.0, float(think_cost or 0.0))
+        self._clamp_state(state, self._get_night_mode(channel_id))
+        return state
+
+    def apply_glance_cost(
+        self,
+        channel_id: str,
+        *,
+        cost: float = 0.3,
+        source: str = "glance",
+    ) -> ChannelEnergyState:
+        """显式窥屏消耗入口。"""
+        return self.apply_thinking_cost(channel_id, think_cost=cost, source=source)
+
     def tick(self, elapsed_sec: float):
         updated = False
         now = time.time()
         for _cid, state in self._channels.items():
             night_mode = self._get_night_mode(_cid)
-            old_chat = state.chat_pool
-            old_think = state.thinking_value
+            old_boost_active = state.boost_active
             elapsed_min = elapsed_sec / 60.0
-            combined = state.combined_ratio()
-            damping = max(0.15, combined * 0.6 + 0.25)
-            if night_mode.phase != "DAYTIME":
-                damping *= 0.5
-            base_chat_recovery = 3.0 * damping * elapsed_min
-            base_think_recovery = 0.8 * damping * elapsed_min
-            if state.boost_active and now < state.boost_expire:
-                base_chat_recovery *= 3.0
-                base_think_recovery *= 3.0
-            elif state.boost_active and now >= state.boost_expire:
+            if state.boost_active and now >= state.boost_expire:
                 state.boost_active = False
                 state.boost_source = ""
-            effective_chat_ceiling = state.chat_ceiling * (1.0 - night_mode.ceiling_penalty)
-            state.chat_pool = min(effective_chat_ceiling, state.chat_pool + base_chat_recovery)
-            state.thinking_value = min(state.thinking_ceiling, state.thinking_value + base_think_recovery)
-            decay_rate = 0.5 * elapsed_min
-            state.annoyance_level = max(0.0, state.annoyance_level - decay_rate)
             state.activity_level = max(10.0, min(100.0, state.activity_level - elapsed_min * 0.3))
             if night_mode.phase == "DAYTIME":
                 state.night_disturbance_count = 0
@@ -231,9 +355,13 @@ class EnergyChainDimension(DimensionBase):
                     if d.get("action") in ("soft_wake", "full_wake", "grumpy_glance")
                 )
                 if _recent_wakes <= 1:
-                    state.wake_adaptive_threshold = min(state.wake_max_threshold, state.wake_adaptive_threshold + 2.0)
+                    state.wake_adaptive_threshold = min(
+                        state.wake_max_threshold,
+                        state.wake_adaptive_threshold + 2.0,
+                    )
             state.last_update = now
-            if abs(state.chat_pool - old_chat) > 0.01 or abs(state.thinking_value - old_think) > 0.01:
+            self._clamp_state(state, night_mode)
+            if old_boost_active != state.boost_active:
                 updated = True
         return TickResult(
             dimension_name=self.dimension_name,
@@ -253,10 +381,14 @@ class EnergyChainDimension(DimensionBase):
             is_mentioned = bool(raw_extras.get("is_mentioned", False))
             content_len = getattr(ctx, "message_length", 0) or 0
             intensity = min(1.0, content_len / 200.0)
-            base_boost = 0.3 + intensity * 0.4
+            interaction_recovery = 0.3 + intensity * 0.4
             if is_repeat:
-                base_boost *= 0.3
-            state.chat_pool = min(state.chat_ceiling, state.chat_pool + base_boost)
+                interaction_recovery *= 0.3
+            self.recover_from_positive_interaction(
+                ctx.channel_id,
+                intensity=interaction_recovery,
+                source="user_message",
+            )
             state.activity_level = min(100.0, state.activity_level + 0.15 + intensity * 0.25)
             state.social_value = max(-50.0, min(100.0, state.social_value + 0.3))
             # 触发条件：重复提问同一话题 → 累积烦躁
@@ -303,39 +435,18 @@ class EnergyChainDimension(DimensionBase):
                     state.night_reply_count += 1
                     if state.night_reply_count >= state.night_reply_cap:
                         return
-            _think_remaining = state.thinking_value
-            _chat_remaining = state.chat_pool
-            chat_cost_base = 1.2 + complexity * 3.5
-            think_cost_base = 0.8 + complexity * 2.0
-            ratio = state.combined_ratio()
-            cost_mult = 0.4 if ratio < 0.2 else (0.7 if ratio < 0.5 else 1.0)
-            if is_admin_msg:
-                cost_mult *= 0.5
-            if _think_remaining < 10:
-                think_cost_base *= 0.4
-            elif _think_remaining < 25:
-                think_cost_base *= 0.6
-            elif _think_remaining < 50:
-                think_cost_base *= 0.8
-            if _chat_remaining < 10:
-                chat_cost_base *= 0.3
-            elif _chat_remaining < 25:
-                chat_cost_base *= 0.6
-            final_chat_cost = max(0.2, min(chat_cost_base * cost_mult, _chat_remaining * 0.5))
-            final_think_cost = max(0.1, min(think_cost_base * cost_mult, _think_remaining * 0.5))
-            state.chat_pool = max(0.0, state.chat_pool - final_chat_cost)
-            state.thinking_value = max(0.0, state.thinking_value - final_think_cost)
-            state.chain_count += 1
-            state.total_consumed_today += final_chat_cost + final_think_cost
-            state.last_reply_time = now
-            state.activity_level = max(5.0, state.activity_level - 0.8 * complexity)
-            if state.chat_pool < state.chat_ceiling * 0.15:
-                state.annoyance_level = min(80.0, state.annoyance_level + 1.5)
+            self.apply_reply_cost(
+                ctx.channel_id,
+                reply_tokens=reply_tokens,
+                complexity=complexity,
+                is_admin=is_admin_msg,
+                source=event_type,
+            )
         elif event_type == "thinking_completed":
             think_cost = getattr(ctx, "complexity", 1.0) or 1.0
-            state.thinking_value = max(0.0, state.thinking_value - think_cost * 1.5)
+            self.apply_thinking_cost(ctx.channel_id, think_cost=think_cost * 1.5, source=event_type)
         elif event_type == "glance":
-            state.thinking_value = max(0.0, state.thinking_value - 0.3)
+            self.apply_glance_cost(ctx.channel_id, cost=0.3, source=event_type)
         elif event_type == "bot_unanswered":
             # 触发条件：被忽略（连续多条bot消息无人回复）→ 累积烦躁
             unanswered_turns = int(raw_extras.get("unanswered_turns", 0) or 0)
@@ -787,14 +898,37 @@ class EnergyChainDimension(DimensionBase):
     def capture_snapshot(self, channel_id: str):
         return self._ensure_channel(channel_id).to_snapshot()
 
+    def capture_ledger_snapshot(self, channel_id: str) -> dict:
+        state = self._ensure_channel(channel_id)
+        night_mode = self._get_night_mode(channel_id)
+        self._clamp_state(state, night_mode)
+        return {
+            "chat_pool": round(state.chat_pool, 2),
+            "chat_ceiling": round(self._effective_chat_ceiling(state, night_mode), 2),
+            "thinking_value": round(state.thinking_value, 2),
+            "thinking_ceiling": round(state.thinking_ceiling, 2),
+            "annoyance_level": round(state.annoyance_level, 2),
+            "activity_level": round(state.activity_level, 2),
+            "social_value": round(state.social_value, 2),
+            "boost_active": state.boost_active,
+            "boost_source": state.boost_source,
+            "last_recovery_time": state.last_recovery_time,
+            "last_recovery_source": state.last_recovery_source,
+            "last_annoyance_relief_time": state.last_annoyance_relief_time,
+            "last_annoyance_relief_source": state.last_annoyance_relief_source,
+        }
+
     def apply_special_boost(self, channel_id: str, source: str, amount: float = 15.0, duration_sec: float = 300.0):
         """特殊事件充电池"""
         state = self._ensure_channel(channel_id)
-        state.chat_pool = min(state.chat_ceiling, state.chat_pool + amount)
-        state.thinking_value = min(state.thinking_ceiling, state.thinking_value + amount * 0.6)
+        state.chat_pool += amount
+        state.thinking_value += amount * 0.6
         state.boost_active = True
         state.boost_source = source
         state.boost_expire = time.time() + duration_sec
+        state.last_recovery_time = time.time()
+        state.last_recovery_source = source
+        self._clamp_state(state, self._get_night_mode(channel_id))
         logger.info(f"🔋 D6 充电: {source} +{amount:.1f} ch={channel_id[:8]}")
 
     def serialize(self) -> dict:
@@ -853,13 +987,19 @@ class EnergyChainDimension(DimensionBase):
 
     def calibrate(self, offline_seconds: float):
         offline_min = offline_seconds / 60.0
-        recovery_cap = 0.85
         ratio = min(1.0, offline_min / 180.0)
         for ch_id, state in self._channels.items():
-            recovery = offline_min * 2.5 * ratio * recovery_cap
-            state.chat_pool = min(state.chat_ceiling, state.chat_pool + recovery)
-            state.thinking_value = min(state.thinking_ceiling, state.thinking_value + recovery * 0.6)
-            state.annoyance_level = max(0.0, state.annoyance_level - offline_min * 3.0)
+            self.recover_from_rest(
+                ch_id,
+                rest_minutes=offline_min,
+                rest_quality=max(0.5, ratio),
+                source="offline_calibration",
+            )
+            self.relieve_annoyance(
+                ch_id,
+                amount=offline_min * 3.0,
+                source="offline_calibration",
+            )
             state.last_update = time.time()
             state.boost_active = False
             state.night_reply_count = 0
@@ -886,6 +1026,8 @@ class EnergyChainDimension(DimensionBase):
                 "social": round(state.social_value, 1),
                 "night_replies": state.night_reply_count,
                 "boost": state.boost_active,
+                "last_recovery_source": state.last_recovery_source,
+                "last_relief_source": state.last_annoyance_relief_source,
             }
         return {
             "dimension": self.dimension_name,
@@ -897,3 +1039,4 @@ class EnergyChainDimension(DimensionBase):
     def reset(self, user_id: str = "", channel_id: str = ""):
         if channel_id and channel_id in self._channels:
             del self._channels[channel_id]
+            return
