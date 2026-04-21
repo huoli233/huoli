@@ -51,8 +51,9 @@
 ### 7. Git 提交
 ```bash
 git add .
-git commit -m "[任务简述] - completed"
+git commit
 ```
+默认使用仓库内模板文件 `.gitmessage-cn.txt` 生成中文提交说明。
 规则补充：
 - 每完成一轮代码改动，并完成该轮对应的验证后，立即执行一次提交
 - 不要把多个改动轮次堆积到同一个提交里
@@ -64,6 +65,25 @@ git commit -m "[任务简述] - completed"
 - 如果是新的功能/重构/机制修复，默认先提交到 `test`
 - `develop` 的作用是作为阶段性开发基线和回退参考，不追求和 `test` 同步
 - `main` 禁止直接承接日常开发提交；稳定版更新必须由用户明确触发
+- 所有新提交必须使用中文标题 + 中文正文，禁止只写一句简短英文
+- 提交标题格式固定为：`类型：模块 - 本轮核心改动`
+- 提交正文固定包含 6 段：
+  - `本轮目标：`
+  - `具体改动：`
+  - `修复问题：`
+  - `影响范围：`
+  - `验证结果：`
+  - `回滚说明：`
+- 每次回复用户时，也必须提供中文结构化说明：
+  - `本次改动`
+  - `本次修复/优化点`
+  - `影响范围`
+  - `验证`
+  - `提交`
+  - `分支状态`
+  - `回滚参考`
+- 每次都要明确说明这次提交进入了哪个分支；如果只进了 `test`，要直接写明 `develop/main 尚未同步`
+- 如果没有 push，必须明确写明 `仅本地提交，远程未更新`
 
 ## 阻塞处理
 
@@ -81,5 +101,6 @@ git commit -m "[任务简述] - completed"
 4. Document everything — progress.txt 是给后续 Agent 看的
 5. Commit after every completed change round — 每完成一轮改动并验证通过，就立即提交
 6. Branch flow: `test` carries latest validated changes, `develop` lags 5-10 commits, `main` updates only after explicit user approval
-7. Never remove tasks — 只改 passes: false → true
-8. Stop if blocked — 阻塞就停，不要假装完成
+7. Chinese structured commit + rollback notes are mandatory for every new change round
+8. Never remove tasks — 只改 passes: false → true
+9. Stop if blocked — 阻塞就停，不要假装完成
