@@ -59,10 +59,11 @@ git commit -m "[任务简述] - completed"
 - 后续继续修改时，继续在上一个提交基础上开发，并在该轮结束后再次提交
 - 分支节奏固定为：
   - 最新改动先进入 `test`（测试版）
-  - `develop`（开发版）故意落后 `test` 2 到 3 个改动提交，用作开发回退参考
-  - `main`（稳定版）只接收已经确认稳定的版本
+  - `develop`（开发版）故意落后 `test` 5 到 10 个改动提交；只有当 `test` 已经累计领先 `develop` 至少 5 个提交，并且这些提交已经完成验证时，才允许把这一批次推进到 `develop`
+  - `main`（稳定版）不参与日常开发提交，也不按固定节奏自动更新；只有在用户明确确认“当前版本已经足够稳定、可以沉淀为稳定版”之后，才允许把经过验证的版本推进到 `main`
 - 如果是新的功能/重构/机制修复，默认先提交到 `test`
-- 只有在完成验证并确认稳定后，才允许把对应版本推进到 `main`
+- `develop` 的作用是作为阶段性开发基线和回退参考，不追求和 `test` 同步
+- `main` 禁止直接承接日常开发提交；稳定版更新必须由用户明确触发
 
 ## 阻塞处理
 
@@ -79,6 +80,6 @@ git commit -m "[任务简述] - completed"
 3. Browser test for UI — UI 改动必须浏览器验证
 4. Document everything — progress.txt 是给后续 Agent 看的
 5. Commit after every completed change round — 每完成一轮改动并验证通过，就立即提交
-6. Branch flow: `test` ahead, `develop` lags 2-3 commits, `main` stable only
+6. Branch flow: `test` carries latest validated changes, `develop` lags 5-10 commits, `main` updates only after explicit user approval
 7. Never remove tasks — 只改 passes: false → true
 8. Stop if blocked — 阻塞就停，不要假装完成
