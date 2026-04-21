@@ -57,6 +57,12 @@ git commit -m "[任务简述] - completed"
 - 每完成一轮代码改动，并完成该轮对应的验证后，立即执行一次提交
 - 不要把多个改动轮次堆积到同一个提交里
 - 后续继续修改时，继续在上一个提交基础上开发，并在该轮结束后再次提交
+- 分支节奏固定为：
+  - 最新改动先进入 `test`（测试版）
+  - `develop`（开发版）故意落后 `test` 2 到 3 个改动提交，用作开发回退参考
+  - `main`（稳定版）只接收已经确认稳定的版本
+- 如果是新的功能/重构/机制修复，默认先提交到 `test`
+- 只有在完成验证并确认稳定后，才允许把对应版本推进到 `main`
 
 ## 阻塞处理
 
@@ -73,5 +79,6 @@ git commit -m "[任务简述] - completed"
 3. Browser test for UI — UI 改动必须浏览器验证
 4. Document everything — progress.txt 是给后续 Agent 看的
 5. Commit after every completed change round — 每完成一轮改动并验证通过，就立即提交
-6. Never remove tasks — 只改 passes: false → true
-7. Stop if blocked — 阻塞就停，不要假装完成
+6. Branch flow: `test` ahead, `develop` lags 2-3 commits, `main` stable only
+7. Never remove tasks — 只改 passes: false → true
+8. Stop if blocked — 阻塞就停，不要假装完成
