@@ -78,6 +78,9 @@ class ModelInfo(ConfigBase):
     supports_tool_calling: bool | None = field(default=None)
     """是否支持工具调用；None 表示按客户端兼容策略推断"""
 
+    suppress_reasoning: bool = field(default=False)
+    """是否屏蔽 reasoning_content 输出"""
+
     def __post_init__(self):
         if not self.model_identifier:
             raise ValueError("模型标识符不能为空，请在配置中设置有效的模型标识符。")

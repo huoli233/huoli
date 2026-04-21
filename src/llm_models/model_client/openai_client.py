@@ -77,12 +77,6 @@ except ImportError as e:
 
 logger = get_logger("LLM模型")
 
-_LOCAL_QWEN_NO_REASONING_MODELS = {
-    "qwen/qwen3.5-9b",
-    "qwen_qwen3.5-4b",
-}
-
-
 def _convert_messages(
     messages: list[Message],
     allow_tool_context: bool = True,
@@ -378,12 +372,8 @@ def _build_stream_api_resp(
     return resp
 
 
-def _disable_reasoning_for_local_qwen(model_info: ModelInfo, response: APIResponse) -> None:
-    model_keys = {
-        str(getattr(model_info, "name", "") or "").strip().lower(),
-        str(getattr(model_info, "model_identifier", "") or "").strip().lower(),
-    }
-    if not model_keys & _LOCAL_QWEN_NO_REASONING_MODELS:
+def _apply_model_reasoning_policy(model_info: ModelInfo, response: APIResponse) -> None:
+    if not bool(getattr(model_info, "suppress_reasoning", False)):
         return
     content = str(response.content or "").strip()
     if content.startswith("Thinking Process:") or content.startswith("We need answer"):
@@ -751,7 +741,7 @@ class OpenaiClient(BaseClient):
                 extra_body=extra_params,
             )
             parsed_response, usage_record = await stream_response_handler(stream_resp, interrupt_flag)
-            _disable_reasoning_for_local_qwen(model_info, parsed_response)
+            _apply_model_reasoning_policy(model_info, parsed_response)
             return parsed_response, usage_record
 
         async def _do_normal_request():
@@ -767,7 +757,7 @@ class OpenaiClient(BaseClient):
                 extra_body=extra_params,
             )
             parsed_response, usage_record = async_response_parser(normal_resp)
-            _disable_reasoning_for_local_qwen(model_info, parsed_response)
+            _apply_model_reasoning_policy(model_info, parsed_response)
             return parsed_response, usage_record
 
         async def _do_request_with_interrupt():
@@ -795,7 +785,7 @@ class OpenaiClient(BaseClient):
                         extra_body=extra_params,
                     )
                     parsed_response, usage_record = await stream_response_handler(stream_resp, interrupt_flag)
-                    _disable_reasoning_for_local_qwen(model_info, parsed_response)
+                    _apply_model_reasoning_policy(model_info, parsed_response)
                     return parsed_response, usage_record
 
         try:

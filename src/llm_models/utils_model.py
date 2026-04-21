@@ -41,10 +41,6 @@ logger = get_logger("模型工具")
 _model_health_ledger: Dict[str, Dict[str, Any]] = {}
 _health_ledger_lock = _threading.Lock()
 _tool_call_unsupported_models: Set[str] = set()
-_STATIC_TOOL_CALL_UNSUPPORTED_MODELS: Set[str] = {
-    "qwen/qwen3.5-9b",
-    "qwen_qwen3.5-4b",
-}
 _provider_auth_ledger: Dict[str, Dict[str, float]] = {}
 
 
@@ -223,9 +219,6 @@ def _mark_tool_calling_unsupported(model_name: str, *, detail: str = "") -> None
 
 
 def _is_tool_calling_unsupported(model_name: str) -> bool:
-    normalized_name = str(model_name or "").strip().lower()
-    if normalized_name in _STATIC_TOOL_CALL_UNSUPPORTED_MODELS:
-        return True
     with _health_ledger_lock:
         return model_name in _tool_call_unsupported_models
 
