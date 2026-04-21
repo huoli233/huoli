@@ -26,6 +26,17 @@ def _ensure_database_ready():
         raise
 
 
+def _ensure_core_config_ready():
+    """显式启动核心配置中枢，避免 WebUI 独立路径缺少运行时配置。"""
+    try:
+        from src.config.core_config_engine import boot_core_config
+
+        boot_core_config()
+    except Exception as exc:
+        logger.error(f"❌ WebUI 核心配置初始化失败: {exc}", exc_info=True)
+        raise
+
+
 def create_app(
     host: str = "0.0.0.0",
     port: int = 8001,
@@ -41,6 +52,7 @@ def create_app(
     """
     app = FastAPI(title="Huoli Bot WebUI")
     _ensure_database_ready()
+    _ensure_core_config_ready()
 
     _setup_anti_crawler(app)
     _setup_cors(app, port)
