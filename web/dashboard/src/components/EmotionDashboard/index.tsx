@@ -5,6 +5,7 @@ import "./styles.css";
 type OverviewChannel = {
   channel_id: string;
   chat_type?: string;
+  chat_type_label?: string;
   class_name?: string;
   idle_seconds?: number | null;
   platform?: string;
@@ -325,14 +326,14 @@ export function EmotionDashboard() {
         </div>
         <div className="header-actions">
           <label className="channel-picker">
-            <span>频道</span>
+            <span>群聊 / 私聊</span>
             <select
               value={selectedChannel}
               onChange={(event) => setSelectedChannel(event.target.value)}
             >
               {(overview?.channels ?? []).map((channel) => (
                 <option key={channel.channel_id} value={channel.channel_id}>
-                  {channel.channel_id} · {channel.chat_type === "group" ? "群聊" : "私聊"}
+                  {channel.chat_type_label ?? (channel.chat_type === "group" ? "群聊" : "私聊")} · {channel.channel_id}
                 </option>
               ))}
             </select>

@@ -36,7 +36,7 @@ async def websocket_state_monitor_endpoint(
 
     session_id = f"state_{int(time.time() * 1000)}_{id(websocket)}"
     await websocket.accept()
-    logger.info(f"状态监控 WebSocket 已建立: {session_id}, channel={channel_id or 'all'}")
+    logger.info(f"状态监控 WebSocket 已建立: {session_id}, 会话={channel_id or '全部群聊/私聊'}")
 
     async def send_snapshot(target_channel: Optional[str] = None) -> None:
         chosen_channel = target_channel if target_channel is not None else channel_id

@@ -429,10 +429,12 @@ def list_heartfc_chats() -> Dict[str, Any]:
     for chat_id, chat in heartflow.heartflow_chat_list.items():
         stream = streams.get_stream(str(chat_id))
         last_active = float(heartflow._active_since.get(chat_id, 0.0) or 0.0)
+        chat_type = "group" if stream and stream.group_info else "private"
         chats.append(
             {
                 "channel_id": str(chat_id),
-                "chat_type": "group" if stream and stream.group_info else "private",
+                "chat_type": chat_type,
+                "chat_type_label": "群聊" if chat_type == "group" else "私聊",
                 "class_name": chat.__class__.__name__,
                 "last_active": last_active,
                 "idle_seconds": round(max(0.0, now - last_active), 3) if last_active else None,
