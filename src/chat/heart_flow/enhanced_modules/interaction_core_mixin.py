@@ -632,15 +632,78 @@ class EnhancedInteractionCoreMixin:
                 for message in candidate_pool
                 if str(getattr(message, "user_id", "") or "").strip() and not self._is_bot_message_obj(message)
             ]
-            return choose_preferred_message_target(
+            preferred = choose_preferred_message_target(
                 anchor_message=anchor_message,
                 candidate_messages=candidate_pool or candidate_messages,
                 relationship_candidates=relationship_candidates,
                 active_user_ids=active_user_ids,
             )
+            latest = candidate_pool[-1] if candidate_pool else None
+            if self._should_keep_latest_reply_target(latest, preferred):
+                return latest
+            return preferred
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 构建锚定消息异常: {exc}")
             return anchor_message
+
+    def _message_ts(self, msg: Any) -> float:
+        try:
+            return float(getattr(msg, "timestamp", 0.0) or getattr(msg, "time", 0.0) or 0.0)
+        except Exception:
+            return 0.0
+
+    def _message_user_id(self, msg: Any) -> str:
+        return str(getattr(msg, "user_id", "") or "").strip()
+
+    def _message_text(self, msg: Any) -> str:
+        try:
+            return str(self._extract_message_content(msg) or "").strip()
+        except Exception:
+            return str(
+                getattr(msg, "processed_plain_text", "")
+                or getattr(msg, "plain_text", "")
+                or getattr(msg, "content", "")
+                or ""
+            ).strip()
+
+    def _should_keep_latest_reply_target(self, latest: Any, preferred: Any) -> bool:
+        if latest is None or preferred is None or latest is preferred:
+            return False
+        latest_text = self._message_text(latest)
+        if not latest_text:
+            return False
+        latest_ts = self._message_ts(latest)
+        preferred_ts = self._message_ts(preferred)
+        if latest_ts and preferred_ts and latest_ts + 0.01 < preferred_ts:
+            return False
+        if latest_ts and preferred_ts and latest_ts - preferred_ts > 180.0:
+            return True
+        if self._message_user_id(latest) == self._message_user_id(preferred):
+            latest_norm = latest_text.strip()
+            preferred_norm = self._message_text(preferred).strip()
+            if latest_norm and latest_norm != preferred_norm:
+                return True
+        return False
+
+    def _build_current_target_message_block(self, target_message: Optional[Any]) -> str:
+        if target_message is None:
+            return ""
+        text = self._message_text(target_message)
+        if not text:
+            return ""
+        name = str(
+            getattr(target_message, "user_nickname", "")
+            or getattr(target_message, "nickname", "")
+            or getattr(target_message, "user_cardname", "")
+            or getattr(target_message, "user_id", "")
+            or "对方"
+        ).strip()
+        return (
+            "[当前必须回应的最新消息]\n"
+            f"发送者：{name}\n"
+            f"内容：{text[:240]}\n"
+            "请优先回应这条消息。除非这条消息明确承接旧话题，否则不要把回复焦点转回更早的聊天内容。"
+        )
 
     @staticmethod
     def _tag_decision_message(msg: Any, source: str) -> Any:
@@ -1838,4 +1901,3 @@ class EnhancedInteractionCoreMixin:
 
             self._engine_orch = get_engine_orchestrator(self.stream_id)
         return self._engine_orch
-

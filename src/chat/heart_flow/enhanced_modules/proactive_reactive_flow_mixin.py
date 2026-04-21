@@ -126,6 +126,9 @@ class ProactiveReactiveFlowMixin:
             panel_text = voice_summary.get("panel", "")
             if panel_text:
                 extra_info_parts.append(panel_text)
+            current_target_block = self._build_current_target_message_block(target_message)
+            if current_target_block:
+                extra_info_parts.append(current_target_block)
             decision_context_packet = self._build_decision_context_packet(
                 list(incoming_batch),
                 repetition_signal=self._analyze_repetition_pressure(incoming_batch),
@@ -871,4 +874,3 @@ class ProactiveReactiveFlowMixin:
                 reason="background_proactive未形成有效回复",
             )
         return acted
-

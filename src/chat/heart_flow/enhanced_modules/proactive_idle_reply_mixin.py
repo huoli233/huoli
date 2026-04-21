@@ -650,6 +650,9 @@ class ProactiveIdleReplyMixin:
                 _no_target_guard = self._build_proactive_no_target_guard(incoming_batch)
             if _no_target_guard:
                 extra_info = f"{extra_info}\n{_no_target_guard}" if extra_info else _no_target_guard
+            current_target_block = self._build_current_target_message_block(target_message)
+            if current_target_block:
+                extra_info = f"{extra_info}\n{current_target_block}" if extra_info else current_target_block
             _governor_panel = (
                 f"[行为Governor] mode={behavior_verdict.reply_mode} "
                 f"interrupt={behavior_verdict.interrupt_level} "

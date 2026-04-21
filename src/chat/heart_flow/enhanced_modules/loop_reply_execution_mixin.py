@@ -300,6 +300,9 @@ class LoopReplyExecutionMixin:
             voice_panel = voice_summary.get("panel", "") if isinstance(voice_summary, dict) else ""
             if voice_panel:
                 extra_parts.append(voice_panel)
+            current_target_block = self._build_current_target_message_block(target_message)
+            if current_target_block:
+                extra_parts.append(current_target_block)
             if content_plan:
                 extra_parts.append(f"[统一规划内容规划] {content_plan}")
 
@@ -428,4 +431,3 @@ class LoopReplyExecutionMixin:
             self._mark_message_content_deferred(target_message, "planner_reply_exception")
             logger.error(f"{self.log_prefix} 规划回复执行失败: {exc}")
             return False
-
