@@ -6,7 +6,7 @@ version = "1.12.0"
 [[api_providers]] # 聚合API（唯一供应商）
 name = "AggAPI"
 base_url = "http://154.193.217.165:3000/v1"
-api_key = "sk-yaO8Hw10Qs5iwBKwEOpvjXeedBWD22m9WphSS1aTooeobzJG"
+api_key = "your-aggapi-key-here"
 client_type = "openai"
 max_retry = 5
 timeout = 180

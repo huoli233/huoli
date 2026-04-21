@@ -20,8 +20,23 @@ __pycache__/
 
 # Logs and local runtime output
 logs/
+logs/reply/
 *.log
 *.log.jsonl
+
+# Runtime data / local state
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+
+# Local runtime config / secrets
+config/model_config.toml
+config/model_config_optimized.toml
+config/old/
 
 # Coverage / test output
 .coverage
@@ -57,6 +72,18 @@ tmp/
 temp/
 *.tmp
 *.temp
+*.bak
+*.old
+
+# Local tooling / workspace state
+.golutra/
+huoli_statistics.html
+_test_import.py
+新建 文本文档.bat
+
+# Local backup / copied project folders
+新建文件夹/
+新建文件夹 (2)/
 
 # Editor / OS files
 .idea/
