@@ -1,0 +1,113 @@
+maintenance:
+  max_iterations: 10
+  cooldown_seconds: 3600
+  batch_size: 5
+  timeout_seconds: 300
+
+tools:
+  search_chat_history:
+    description: "根据关键词或参与人查询当前 chat_id 下的 ChatHistory 概览"
+    params:
+      keyword:
+        type: string
+        required: false
+        description: "关键词（可选，支持多个关键词）"
+      participant:
+        type: string
+        required: false
+        description: "参与人昵称（可选）"
+
+  get_chat_history_detail:
+    description: "根据 memory_id 获取单条 ChatHistory 的详细内容"
+    params:
+      memory_id:
+        type: integer
+        required: true
+        description: "ChatHistory 主键 ID"
+
+  delete_chat_history:
+    description: "根据 memory_id 删除一条 ChatHistory 记录"
+    params:
+      memory_id:
+        type: integer
+        required: true
+        description: "需要删除的 ChatHistory 主键 ID"
+
+  create_chat_history:
+    description: "创建一条新的 ChatHistory 概括记录"
+    params:
+      theme:
+        type: string
+        required: true
+        description: "新的主题标题"
+      summary:
+        type: string
+        required: true
+        description: "新的概括内容"
+      keywords:
+        type: string
+        required: true
+        description: "关键词 JSON 字符串"
+      key_point:
+        type: string
+        required: true
+        description: "关键信息 JSON 字符串"
+      start_time:
+        type: string
+        required: true
+        description: "起始时间戳"
+      end_time:
+        type: string
+        required: true
+        description: "结束时间戳"
+
+  update_chat_history:
+    description: "按字段更新 ChatHistory 记录"
+    params:
+      memory_id:
+        type: integer
+        required: true
+        description: "需要更新的 ChatHistory 主键 ID"
+      theme:
+        type: string
+        required: false
+        description: "新的主题标题"
+      summary:
+        type: string
+        required: false
+        description: "新的概括内容"
+      keywords:
+        type: string
+        required: false
+        description: "关键词 JSON 字符串"
+      key_point:
+        type: string
+        required: false
+        description: "关键信息 JSON 字符串"
+
+  finish_maintenance:
+    description: "结束本次 dream 维护任务"
+    params:
+      reason:
+        type: string
+        required: false
+        description: "结束维护的原因说明"
+
+  search_jargon:
+    description: "根据关键词搜索 Jargon 记录"
+    params:
+      keyword:
+        type: string
+        required: true
+        description: "搜索关键词"
+
+goals:
+  - "发现冗余、重复或高度相似的记录，并进行合并或删除"
+  - "发现主题或概括过于含糊、啰嗦或缺少关键信息的记录，进行重写和精简"
+  - "保持信息的真实与可用性"
+  - "尽量保留有用的信息"
+
+merge_rules:
+  - "可以新建一个记录，然后删除旧记录来实现合并"
+  - "如果两个或多个记录的主题相似，内容是对主题不同方面的信息或讨论，且信息量较少，则可以合并为一条记录"
+  - "如果两个记录冲突，可以根据逻辑保留一个或者进行整合"

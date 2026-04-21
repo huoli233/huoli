@@ -144,8 +144,6 @@ complete_talk
 
 
 class BrainPlanner:
-    DEGRADED_ACTION_TYPE = "planner_degraded"
-
     def __init__(self, chat_id: str, action_manager: ActionManager):
         self.chat_id = chat_id
         self.log_prefix = (
@@ -194,7 +192,7 @@ class BrainPlanner:
         action_planner_infos = []
 
         try:
-            action = action_json.get("action", self.DEGRADED_ACTION_TYPE)
+            action = action_json.get("action", "complete_talk")
             logger.debug(
                 f"{self.log_prefix}解析动作JSON: action={action}, json={action_json}"
             )
@@ -260,23 +258,12 @@ class BrainPlanner:
                 and action not in available_action_names
             ):
                 logger.warning(
-                    f"{self.log_prefix}LLM 返回了当前不可用或无效的动作: '{action}' "
-                    f"(内部动作: {internal_action_names}, 可用插件动作: {available_action_names})，"
-                    "将标记为规划降级"
+                    f"{self.log_prefix}LLM 返回了当前不可用或无效的动作: '{action}' (内部动作: {internal_action_names}, 可用插件动作: {available_action_names})，将强制使用 'complete_talk'"
                 )
-                reasoning = (
-                    f"LLM 返回了当前不可用的动作 '{action}' "
-                    f"(可用: {available_action_names})。原始理由: {reasoning}"
-                )
-                return self._create_degraded_actions(
-                    reasoning=reasoning,
-                    available_actions=dict(current_available_actions),
-                    action_data={
-                        "error_type": "invalid_action",
-                        "invalid_action": action,
-                        "available_action_names": available_action_names,
-                    },
-                )
+                reasoning = f"LLM 返回了当前不可用的动作 '{action} ' (可用: {
+                    available_action_names})。原始理由: {reasoning} "
+                action = "complete_talk"
+                logger.warning(f"{self.log_prefix}动作已转换为 complete_talk")
 
             # 创建ActionPlannerInfo对象
             # 将列表转换为字典格式
@@ -293,10 +280,16 @@ class BrainPlanner:
 
         except Exception as e:
             logger.error(f"{self.log_prefix}解析单个action时出错: {e}")
-            return self._create_degraded_actions(
-                reasoning=f"解析单个action时出错: {e}",
-                available_actions=dict(current_available_actions),
-                action_data={"error_type": "parse_single_action"},
+            # 将列表转换为字典格式
+            available_actions_dict = dict(current_available_actions)
+            action_planner_infos.append(
+                ActionPlannerInfo(
+                    action_type="complete_talk",
+                    reasoning=f"解析单个action时出错: {e}",
+                    action_data={},
+                    action_message=None,
+                    available_actions=available_actions_dict,
+                )
             )
 
         return action_planner_infos
@@ -677,7 +670,10 @@ class BrainPlanner:
             # 调用LLM
             llm_start = time.perf_counter()
             llm_content, (reasoning_content, _, _) = (
-                await self.planner_llm.generate_response_async(prompt=prompt)
+                await asyncio.wait_for(
+                    self.planner_llm.generate_response_async(prompt=prompt),
+                    timeout=30.0,
+                )
             )
             llm_duration_ms = (time.perf_counter() - llm_start) * 1000
             llm_reasoning = reasoning_content
@@ -705,11 +701,15 @@ class BrainPlanner:
             extracted_reasoning = f"LLM 请求失败，模型出现问题: {req_e}"
             return (
                 extracted_reasoning,
-                self._create_degraded_actions(
-                    reasoning=extracted_reasoning,
-                    available_actions=available_actions,
-                    action_data={"error_type": "llm_request_failed"},
-                ),
+                [
+                    ActionPlannerInfo(
+                        action_type="complete_talk",
+                        reasoning=extracted_reasoning,
+                        action_data={},
+                        action_message=None,
+                        available_actions=available_actions,
+                    )
+                ],
                 llm_content,
                 llm_reasoning,
                 llm_duration_ms,
@@ -746,7 +746,7 @@ class BrainPlanner:
                     extracted_reasoning = (
                         extracted_reasoning or "LLM没有返回可用动作"
                     )
-                    actions = self._create_degraded_actions(
+                    actions = self._create_complete_talk(
                         extracted_reasoning, available_actions
                     )
 
@@ -755,13 +755,13 @@ class BrainPlanner:
                     f"{self.log_prefix}解析LLM响应JSON失败 {json_e}. LLM原始输出: '{llm_content}'"
                 )
                 extracted_reasoning = f"解析LLM响应JSON失败: {json_e}"
-                actions = self._create_degraded_actions(
+                actions = self._create_complete_talk(
                     extracted_reasoning, available_actions
                 )
                 traceback.print_exc()
         else:
             extracted_reasoning = "规划器没有获得LLM响应"
-            actions = self._create_degraded_actions(
+            actions = self._create_complete_talk(
                 extracted_reasoning, available_actions
             )
 
@@ -791,30 +791,6 @@ class BrainPlanner:
                 action_type="complete_talk",
                 reasoning=reasoning,
                 action_data={},
-                action_message=None,
-                available_actions=available_actions,
-            )
-        ]
-
-    def _create_degraded_actions(
-        self,
-        reasoning: str,
-        available_actions: Dict[str, ActionInfo],
-        action_data: Optional[Dict[str, Any]] = None,
-    ) -> List[ActionPlannerInfo]:
-        """创建显式规划降级动作，避免故障场景伪装成自然收束。"""
-        payload = {
-            "degraded": True,
-            "error_type": "planner_failure",
-            "wait_seconds": 3,
-        }
-        if isinstance(action_data, dict):
-            payload.update(action_data)
-        return [
-            ActionPlannerInfo(
-                action_type=self.DEGRADED_ACTION_TYPE,
-                reasoning=reasoning,
-                action_data=payload,
                 action_message=None,
                 available_actions=available_actions,
             )

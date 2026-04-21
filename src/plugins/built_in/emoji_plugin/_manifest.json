@@ -1,0 +1,23 @@
+{
+    "manifest_version": 1,
+    "name": "emoji_plugin",
+    "version": "1.0.0",
+    "description": "表情包插件，提供表情包管理和发送功能",
+    "author": {
+        "name": "HuoLi Team",
+        "url": "https://github.com/huoli"
+    },
+    "license": "GPL-3.0",
+    "keywords": ["emoji", "expression", "built-in"],
+    "categories": ["core", "communication"],
+    "host_application": {
+        "name": "HuoLi",
+        "min_version": "0.13.0",
+        "max_version": ""
+    },
+    "plugin_info": {
+        "entry_point": "plugin:CoreActionsPlugin",
+        "config_file": "config.toml",
+        "locales_path": "locales"
+    }
+}

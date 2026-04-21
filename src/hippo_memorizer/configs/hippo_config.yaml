@@ -1,0 +1,46 @@
+hippo_config:
+  batch_size: 30
+  batch_interval: 300.0
+  min_condense_interval: 600.0
+  max_buffer_size: 50
+  max_age_minutes: 30
+  max_summaries: 100
+
+action_templates:
+  recall: "撤回了一条消息: {content}"
+  kick: "踢出了成员: {target}"
+  mute: "禁言了成员: {target} ({duration}秒)"
+  unmute: "解除了成员禁言: {target}"
+  ban: "封禁了成员: {target}"
+  unban: "解封了成员: {target}"
+  reply: "回复了消息: {content}"
+  send_image: "发送了图片"
+  send_sticker: "发送了表情包: {sticker_name}"
+  search: "搜索了: {query}"
+  set_card: "设置了群名片: {target} -> {card}"
+  delete_msg: "删除了消息"
+  default: "执行了{action_type}操作"
+
+condense_prompts:
+  topic_extract:
+    description: "话题提取提示词"
+    template: |
+      请从以下聊天记录中提取主要话题。
+
+      聊天记录:
+      {conversation_text}
+
+      输出格式 JSON:
+      {{"topics": ["话题1", "话题2"]}}
+
+  summarize:
+    description: "话题摘要提示词"
+    template: |
+      请对以下话题内容进行摘要。
+
+      话题: {topic_name}
+      内容:
+      {content_text}
+
+      输出格式 JSON:
+      {{"summary": "摘要内容", "keywords": ["关键词1", "关键词2"], "key_points": ["要点1", "要点2"]}}

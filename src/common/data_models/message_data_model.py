@@ -1,0 +1,338 @@
+from typing import Optional, TYPE_CHECKING, List, Tuple, Union, Dict, Any
+from dataclasses import dataclass, field
+from enum import Enum
+from src.common.data_models.base_data_model import BaseDataModel
+
+if TYPE_CHECKING:
+    from .database_data_model import DatabaseMessages
+
+
+@dataclass
+class MessageAndActionModel(BaseDataModel):
+    chat_id: str = field(default_factory=str)
+    time: float = field(default_factory=float)
+    user_id: str = field(default_factory=str)
+    user_platform: str = field(default_factory=str)
+    user_nickname: str = field(default_factory=str)
+    user_cardname: Optional[str] = None
+    processed_plain_text: Optional[str] = None
+    display_message: Optional[str] = None
+    chat_info_platform: str = field(default_factory=str)
+    is_action_record: bool = field(default=False)
+    action_name: Optional[str] = None
+    is_command: bool = field(default=False)
+    intercept_message_level: int = field(default=0)
+
+    @classmethod
+    def from_DatabaseMessages(cls, message: "DatabaseMessages"):
+        return cls(
+            chat_id=message.chat_id,
+            time=message.time,
+            user_id=message.user_info.user_id,
+            user_platform=message.user_info.platform,
+            user_nickname=message.user_info.user_nickname,
+            user_cardname=message.user_info.user_cardname,
+            processed_plain_text=message.processed_plain_text,
+            display_message=message.display_message,
+            chat_info_platform=message.chat_info.platform,
+            is_command=message.is_command,
+            intercept_message_level=getattr(
+                message, "intercept_message_level", 0
+            ),
+        )
+
+
+class ReplyContentType(Enum):
+    TEXT = "text"
+    IMAGE = "image"
+    EMOJI = "emoji"
+    COMMAND = "command"
+    VOICE = "voice"
+    FORWARD = "forward"
+    HYBRID = "hybrid"
+
+    def __repr__(self) -> str:
+        return self.value
+
+
+def _coerce_reply_content_type(
+    value: "ReplyContentType | str",
+) -> "ReplyContentType | str":
+    if isinstance(value, ReplyContentType):
+        return value
+    try:
+        return ReplyContentType(value)
+    except (TypeError, ValueError):
+        return value
+
+
+@dataclass
+class ForwardNode(BaseDataModel):
+    user_id: Optional[str] = None
+    user_nickname: Optional[str] = None
+    content: Union[List["ReplyContent"], str] = field(default_factory=list)
+
+    @classmethod
+    def construct_as_id_reference(cls, message_id: str) -> "ForwardNode":
+        return cls(user_id="", user_nickname="", content=message_id)
+
+    @classmethod
+    def construct_as_created_node(
+        cls, user_id: str, user_nickname: str, content: List["ReplyContent"]
+    ) -> "ForwardNode":
+        return cls(
+            user_id=user_id, user_nickname=user_nickname, content=content
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        content: Union[List[Dict[str, Any]], str]
+        if isinstance(self.content, list):
+            content = [
+                item.to_dict() if isinstance(item, ReplyContent) else item
+                for item in self.content
+            ]
+        else:
+            content = self.content
+        return {
+            "user_id": self.user_id,
+            "user_nickname": self.user_nickname,
+            "content": content,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any] | None) -> "ForwardNode":
+        data = data or {}
+        content = data.get("content", [])
+        if isinstance(content, list):
+            content = [
+                item
+                if isinstance(item, ReplyContent)
+                else ReplyContent.from_dict(item)
+                if isinstance(item, dict)
+                else item
+                for item in content
+            ]
+        return cls(
+            user_id=data.get("user_id"),
+            user_nickname=data.get("user_nickname"),
+            content=content,
+        )
+
+
+@dataclass
+class ReplyContent(BaseDataModel):
+    content_type: ReplyContentType | str
+    content: Union[str, Dict, List[ForwardNode], List["ReplyContent"]]
+
+    @classmethod
+    def construct_as_text(cls, text: str):
+        return cls(content_type=ReplyContentType.TEXT, content=text)
+
+    @classmethod
+    def construct_as_image(cls, image_base64: str):
+        return cls(content_type=ReplyContentType.IMAGE, content=image_base64)
+
+    @classmethod
+    def construct_as_voice(cls, voice_base64: str):
+        return cls(content_type=ReplyContentType.VOICE, content=voice_base64)
+
+    @classmethod
+    def construct_as_emoji(cls, emoji_str: str):
+        return cls(content_type=ReplyContentType.EMOJI, content=emoji_str)
+
+    @classmethod
+    def construct_as_command(cls, command_arg: Dict):
+        return cls(content_type=ReplyContentType.COMMAND, content=command_arg)
+
+    @classmethod
+    def construct_as_hybrid(
+        cls, hybrid_content: List[Tuple[ReplyContentType | str, str]]
+    ):
+        hybrid_content_list: List[ReplyContent] = []
+        for content_type, content in hybrid_content:
+            assert content_type not in [
+                ReplyContentType.HYBRID,
+                ReplyContentType.FORWARD,
+                ReplyContentType.VOICE,
+                ReplyContentType.COMMAND,
+            ], "混合内容的每个项不能是混合、转发、语音或命令类型"
+            assert isinstance(content, str), "混合内容的每个项必须是字符串"
+            hybrid_content_list.append(
+                ReplyContent(content_type=content_type, content=content)
+            )
+        return cls(
+            content_type=ReplyContentType.HYBRID, content=hybrid_content_list
+        )
+
+    @classmethod
+    def construct_as_forward(cls, forward_nodes: List[ForwardNode]):
+        return cls(
+            content_type=ReplyContentType.FORWARD, content=forward_nodes
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        content_type = (
+            self.content_type.value
+            if isinstance(self.content_type, ReplyContentType)
+            else self.content_type
+        )
+        content: Any = self.content
+        if isinstance(self.content, list):
+            if self.content_type == ReplyContentType.FORWARD:
+                content = [
+                    item.to_dict() if isinstance(item, ForwardNode) else item
+                    for item in self.content
+                ]
+            else:
+                content = [
+                    item.to_dict() if isinstance(item, ReplyContent) else item
+                    for item in self.content
+                ]
+        return {"content_type": content_type, "content": content}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any] | None) -> "ReplyContent":
+        data = data or {}
+        content_type = _coerce_reply_content_type(data.get("content_type"))
+        content = data.get("content")
+        if content_type == ReplyContentType.FORWARD and isinstance(content, list):
+            content = [
+                item
+                if isinstance(item, ForwardNode)
+                else ForwardNode.from_dict(item)
+                if isinstance(item, dict)
+                else item
+                for item in content
+            ]
+        elif content_type == ReplyContentType.HYBRID and isinstance(
+            content, list
+        ):
+            content = [
+                item
+                if isinstance(item, ReplyContent)
+                else ReplyContent.from_dict(item)
+                if isinstance(item, dict)
+                else item
+                for item in content
+            ]
+        return cls(content_type=content_type, content=content)
+
+    def __post_init__(self):
+        self.content_type = _coerce_reply_content_type(self.content_type)
+        if isinstance(self.content_type, ReplyContentType):
+            if self.content_type not in [
+                ReplyContentType.HYBRID,
+                ReplyContentType.FORWARD,
+            ] and isinstance(self.content, List):
+                raise ValueError(
+                    f"非混合类型/转发类型的内容不能是列表，content_type: {self.content_type}, content: {self.content}"
+                )
+            elif self.content_type in [
+                ReplyContentType.HYBRID,
+                ReplyContentType.FORWARD,
+            ]:
+                if not isinstance(self.content, List):
+                    raise ValueError(
+                        f"混合类型/转发类型的内容必须是列表，content_type: {self.content_type}, content: {self.content}"
+                    )
+
+
+@dataclass
+class ReplySetModel(BaseDataModel):
+    reply_data: List[ReplyContent] = field(default_factory=list)
+
+    def __len__(self):
+        return len(self.reply_data)
+
+    def add_text_content(self, text: str):
+        self.reply_data.append(
+            ReplyContent(content_type=ReplyContentType.TEXT, content=text)
+        )
+
+    def add_image_content(self, image_base64: str):
+        self.reply_data.append(
+            ReplyContent(
+                content_type=ReplyContentType.IMAGE, content=image_base64
+            )
+        )
+
+    def add_voice_content(self, voice_base64: str):
+        self.reply_data.append(
+            ReplyContent(
+                content_type=ReplyContentType.VOICE, content=voice_base64
+            )
+        )
+
+    def add_hybrid_content_by_raw(
+        self, hybrid_content: List[Tuple[ReplyContentType | str, str]]
+    ):
+        hybrid_content_list: List[ReplyContent] = []
+        for content_type, content in hybrid_content:
+            assert content_type not in [
+                ReplyContentType.HYBRID,
+                ReplyContentType.FORWARD,
+                ReplyContentType.VOICE,
+                ReplyContentType.COMMAND,
+            ], "混合内容的每个项不能是混合、转发、语音或命令类型"
+            assert isinstance(content, str), "混合内容的每个项必须是字符串"
+            hybrid_content_list.append(
+                ReplyContent(content_type=content_type, content=content)
+            )
+        self.reply_data.append(
+            ReplyContent(
+                content_type=ReplyContentType.HYBRID,
+                content=hybrid_content_list,
+            )
+        )
+
+    def add_hybrid_content(self, hybrid_content: List[ReplyContent]):
+        for content in hybrid_content:
+            assert content.content_type not in [
+                ReplyContentType.HYBRID,
+                ReplyContentType.FORWARD,
+                ReplyContentType.VOICE,
+                ReplyContentType.COMMAND,
+            ], "混合内容的每个项不能是混合、转发、语音或命令类型"
+            assert isinstance(
+                content.content, str
+            ), "混合内容的每个项必须是字符串"
+        self.reply_data.append(
+            ReplyContent(
+                content_type=ReplyContentType.HYBRID, content=hybrid_content
+            )
+        )
+
+    def add_custom_content(self, content_type: str, content: Any):
+        self.reply_data.append(
+            ReplyContent(content_type=content_type, content=content)
+        )
+
+    def add_forward_content(self, forward_content: List[ForwardNode]):
+        self.reply_data.append(
+            ReplyContent(
+                content_type=ReplyContentType.FORWARD, content=forward_content
+            )
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "reply_data": [
+                item.to_dict() if isinstance(item, ReplyContent) else item
+                for item in self.reply_data
+            ]
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any] | None) -> "ReplySetModel":
+        data = data or {}
+        reply_data = data.get("reply_data", [])
+        return cls(
+            reply_data=[
+                item
+                if isinstance(item, ReplyContent)
+                else ReplyContent.from_dict(item)
+                if isinstance(item, dict)
+                else item
+                for item in reply_data
+            ]
+        )

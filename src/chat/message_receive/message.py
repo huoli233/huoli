@@ -1,8 +1,6 @@
 import time
 import asyncio
 import urllib3
-import ast
-import json
 
 from abc import abstractmethod
 from dataclasses import dataclass
@@ -30,26 +28,6 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # VLM 处理并发限制（避免同时处理太多图片导致卡死）
 # 从配置读取上限值，若配置尚未加载则回退默认值3
 _vlm_semaphore: asyncio.Semaphore | None = None
-
-
-def _parse_mapping_like(raw_value: Any) -> tuple[dict[str, Any], Optional[Any]]:
-    """Parse dict-like payloads from DB/text while preserving raw fallbacks."""
-    if isinstance(raw_value, dict):
-        return dict(raw_value), None
-    if raw_value in (None, ""):
-        return {}, None
-    if isinstance(raw_value, str):
-        text = raw_value.strip()
-        if not text:
-            return {}, None
-        for parser in (json.loads, ast.literal_eval):
-            try:
-                parsed = parser(text)
-            except Exception:
-                continue
-            if isinstance(parsed, dict):
-                return parsed, None
-    return {}, raw_value
 
 
 def _get_vlm_semaphore() -> asyncio.Semaphore:
@@ -383,34 +361,6 @@ class MessageRecv(Message):
         except Exception as e:
             logger.error(f"处理消息段失败: {str(e)}, 类型: {segment.type}, 数据: {segment.data}")
             return f"[处理失败的{segment.type}消息]"
-
-
-@dataclass
-class ReconstructedMessage(MessageRecv):
-    """Explicitly marks DB-reconstructed messages as degraded quote-only objects."""
-
-    def __init__(
-        self,
-        message_dict: dict[str, Any],
-        *,
-        reconstruction_source: str = "database",
-        missing_fields: Optional[List[str]] = None,
-    ):
-        super().__init__(message_dict)
-        self.reconstructed = True
-        self.reconstruction_source = reconstruction_source
-        self.reconstruction_missing_fields = list(missing_fields or [])
-        add_cfg = getattr(self.message_info, "additional_config", None)
-        if not isinstance(add_cfg, dict):
-            add_cfg = {}
-            self.message_info.additional_config = add_cfg
-        add_cfg["reconstructed"] = True
-        add_cfg["reconstruction_source"] = reconstruction_source
-        add_cfg["quote_safe_only"] = True
-        if self.reconstruction_missing_fields:
-            add_cfg["reconstruction_missing_fields"] = list(
-                self.reconstruction_missing_fields
-            )
 
 
 @dataclass

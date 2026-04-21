@@ -1,0 +1,61 @@
+knowledge_graph:
+  capacity: 500
+  min_text_length: 8
+  max_body_length: 500
+  min_keywords: 1
+  eviction_ratio: 0.25
+
+stopwords:
+  - "的"
+  - "了"
+  - "是"
+  - "在"
+  - "我"
+  - "有"
+  - "和"
+  - "就"
+  - "不"
+  - "人"
+  - "都"
+  - "一"
+  - "这"
+  - "中"
+  - "到"
+  - "那"
+  - "个"
+  - "你"
+  - "他"
+  - "她"
+  - "它"
+  - "们"
+  - "会"
+  - "对"
+  - "也"
+  - "很"
+  - "要"
+  - "能"
+  - "上"
+  - "下"
+  - "啊"
+  - "呢"
+  - "吗"
+  - "吧"
+  - "哦"
+
+separators:
+  - "，"
+  - "。"
+  - "！"
+  - "？"
+  - "；"
+  - "\n"
+  - ","
+  - "."
+  - "!"
+  - "?"
+  - ";"
+
+keyword_extraction:
+  min_segment_length: 2
+  max_segment_length: 6
+  bigram_enabled: true

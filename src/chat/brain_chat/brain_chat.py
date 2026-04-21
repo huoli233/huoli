@@ -302,9 +302,14 @@ class BrainChatting(ChatCoreBase):
             ]
 
             # 并行执行所有任务
-            results = await asyncio.gather(
-                *action_tasks, return_exceptions=False
-            )
+            try:
+                results = await asyncio.wait_for(
+                    asyncio.gather(*action_tasks, return_exceptions=True),
+                    timeout=60.0,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"{self.log_prefix} 动作并行执行超时(60s)")
+                results = []
 
             # 处理执行结果
             reply_loop_info = None
@@ -571,34 +576,6 @@ class BrainChatting(ChatCoreBase):
         """执行单个动作的通用函数"""
         try:
             with Timer(f"动作{action_planner_info.action_type}", cycle_timers):
-                if action_planner_info.action_type == "planner_degraded":
-                    reason = action_planner_info.reasoning or "规划器降级"
-                    action_data = action_planner_info.action_data or {}
-                    wait_seconds = action_data.get("wait_seconds", 3)
-                    try:
-                        wait_seconds = max(1.0, float(wait_seconds))
-                    except (TypeError, ValueError):
-                        wait_seconds = 3.0
-                    logger.warning(
-                        f"{self.log_prefix} 规划器进入降级等待，原因: {reason}"
-                    )
-                    await database_api.store_action_info(
-                        chat_stream=self.chat_stream,
-                        action_build_into_prompt=False,
-                        action_prompt_display=reason,
-                        action_done=False,
-                        thinking_id=thinking_id,
-                        action_data=action_data,
-                        action_name="planner_degraded",
-                    )
-                    await asyncio.sleep(wait_seconds)
-                    return {
-                        "action_type": "planner_degraded",
-                        "success": False,
-                        "reply_text": "",
-                        "command": "",
-                    }
-
                 if action_planner_info.action_type == "complete_talk":
                     # 直接处理complete_talk逻辑，不再通过动作系统
                     reason = action_planner_info.reasoning or "选择完成对话"

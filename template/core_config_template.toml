@@ -1,0 +1,293 @@
+# ============================================================
+# 核心配置模板
+# 包含心流、能量、主动回复、情绪、触发等全部运行时参数
+# 首次启动时自动复制到 config/core_config.toml
+# 修改 config/core_config.toml 后热重载生效
+# ============================================================
+
+[heartflow_timing]
+max_idle_wait_seconds = 120
+reflect_interval_seconds = 30
+max_reflect_rounds = 3
+max_chase_count = 2
+rest_default_seconds = 300
+peek_chance_ratio = 0.05
+transition_cooldown_ms = 500
+
+[dual_pool_energy]
+[dual_pool_energy.chat_value]
+ceiling = 100.0
+recovery_rate_per_min = 5.0
+cost_per_reply = 15.0
+cost_per_peek = 5.0
+[dual_pool_energy.brain_power]
+ceiling = 100.0
+cost_per_think = 3.0
+cost_per_reply = 8.0
+recovery_rate_per_sec = 0.005
+[dual_pool_energy.decay]
+fatigue_decay_rate = 3.0
+annoyance_decay_rate = 3.0
+min_recovery_gap_seconds = 6.0
+
+[fatigue_penalty]
+fatigue_cap = 0.8
+trauma_cap = 0.6
+annoyance_cap = 0.5
+frequency_bonus_cap = 0.3
+
+[emotion_stream]
+query_window_seconds = 300.0
+max_queries_per_window = 50
+repeat_detection_threshold = 3
+emotion_refresh_interval = 60.0
+recent_query_window_seconds = 60.0
+annoyed_repeat_count = 3
+social_delta_scale = 0.02
+
+[proactive_schedule]
+min_cooldown_seconds = 60.0
+max_concurrent_thinks = 3
+think_timeout_seconds = 30.0
+retry_max_count = 2
+queue_capacity = 20
+priority_boost_on_mention = 2.0
+backend_status_log_enabled = false
+backend_status_log_interval_sec = 10.0
+
+[proactive_decider]
+# 统一决策阈值（越低越容易主动）
+activation_bar = 0.52
+
+# 反馈账本奖惩
+reward_on_reply = 0.12
+penalty_on_ignore = -0.06
+penalty_on_negative = -0.25
+reward_decay_per_hour = 0.04
+reply_watch_window_sec = 300.0
+max_pending_events = 64
+reward_floor = -1.0
+reward_ceiling = 1.0
+
+# 沉默加成归一化窗口
+silence_full_score_sec = 600.0
+
+# 七路信号权重（总和不限，会自动归一化）
+wt_emotional_readiness = 0.22
+wt_fatigue_headroom = 0.15
+wt_vitality_reserve = 0.10
+wt_content_freshness = 0.12
+wt_social_standing = 0.08
+wt_inner_desire = 0.18
+wt_historical_reward = 0.15
+
+[silence_detection]
+idle_trigger_seconds = 180.0
+topic_launch_cooldown = 300.0
+frequency_limit_per_hour = 5
+min_active_users = 0
+
+[trigger_thresholds]
+energy_overflow_ratio = 0.85
+social_warmth_floor = 0.3
+plan_trigger_interval = 600.0
+curiosity_spike_threshold = 0.7
+
+[inner_voice]
+max_output_actions = 5
+desire_scale_min = 1
+desire_scale_max = 10
+fallback_action = "observe"
+
+[personality_sliders]
+sensitivity = 0.6
+tolerance = 0.4
+reactiveness = 0.5
+recovery_speed = 0.5
+social_warmth = 0.6
+curiosity_drive = 0.6
+reply_eagerness = 0.5
+
+[heartflow_decision]
+# 缓存TTL
+calm_slot_ttl = 5.0
+heated_slot_ttl = 2.0
+pulse_span_seconds = 60.0
+heated_pulse_limit = 5
+slot_capacity_cap = 120
+
+# 六维信号权重
+[heartflow_decision.dimension_weights]
+credibility = 0.24
+hazard = 0.18
+curiosity = 0.20
+immediacy = 0.16
+bond_strength = 0.12
+temperament = 0.10
+
+# 心境 → 因子映射
+[heartflow_decision.mood_factors]
+happy = 0.82
+excited = 0.90
+neutral = 0.50
+sad = 0.30
+angry = 0.22
+tired = 0.28
+
+# 柔性门槛引擎默认种子
+[heartflow_decision.barrier_seeds]
+respond_credibility = 0.6
+hazard_ceiling = 0.4
+curiosity_floor = 0.5
+inventiveness_bar = 0.3
+respond_cadence = 0.7
+rest_interval_sec = 30.0
+content_merit = 0.6
+topical_fit = 0.5
+mood_reactivity = 0.4
+mood_firmness = 0.7
+
+# 门槛引擎调谐参数
+[heartflow_decision.barrier_tuning]
+sensitivity = 0.1
+cooldown_seconds = 45.0
+max_single_shift = 0.2
+firmness_window = 10
+perf_ring_capacity = 800
+
+# 威胁评估权重
+[heartflow_decision.threat_weights]
+toxicity = 0.42
+turbulence = 0.22
+fragility = 0.16
+antisocial = 0.20
+
+# 信号融合参数
+[heartflow_decision.fusion]
+harmony_bonus_ceil = 0.12
+
+# 即时性检测关键词
+[heartflow_decision.immediacy]
+base_score = 0.45
+rush_boost = 0.28
+question_boost = 0.12
+daytime_boost = 0.06
+night_penalty = 0.10
+daytime_start_hour = 9
+daytime_end_hour = 17
+night_start_hour = 23
+night_end_hour = 5
+
+# 可信度基线
+[heartflow_decision.credibility]
+base_score = 0.58
+short_content_penalty = 0.12
+long_content_bonus = 0.08
+relationship_scale = 0.22
+short_threshold = 8
+long_threshold = 80
+
+# 关系强度基线
+[heartflow_decision.bond]
+base_score = 0.45
+relationship_scale = 0.42
+activity_scale = 0.28
+
+# 战术排序阈值
+[heartflow_decision.tactics]
+high_hazard_threshold = 0.75
+high_hazard_weight = 0.92
+hazard_penalty_factor = 0.42
+hit_bonus_unit = 0.018
+hit_bonus_cap = 0.08
+topic_base_factor = 0.68
+topic_novelty_factor = 0.12
+topic_hazard_penalty = 0.28
+silence_base = 0.42
+silence_hazard_boost = 0.38
+silence_credibility_penalty = 0.12
+
+# ---------------------------------------------------------------------------
+#  消息处理管线配置
+# ---------------------------------------------------------------------------
+[message_processor]
+# 启动保护期（秒），此期间跳过旧群消息
+boot_shield_duration = 30
+# 消息陈旧判定阈值（秒），超过此值认为是落后消息
+stale_threshold_seconds = 180
+# 去重缓存容量上限，溢出时保留较新的一半
+dedup_ring_capacity = 500
+# 短消息最小字符数（低于此则尝试过滤）
+short_msg_min_chars = 3
+# 短消息白名单（即便短也放行）
+short_msg_whitelist = ["?", "？", "!", "！", "在吗", "你在", "干嘛"]
+# 是否启用短消息过滤
+short_msg_filter_enabled = true
+# @消息是否也检查短消息长度（false=@消息无视短过滤）
+at_msg_also_filter = false
+# 兴趣度默认分（计算失败时回退）
+engagement_fallback = 0.5
+# 兴趣度阈值（达到此值或被@/提及才写入完整记忆）
+engagement_full_store_threshold = 0.6
+# 海马体临时记忆最低重要性
+hippocampus_min_importance = 0.2
+# 图片标签替换模板
+image_desc_template = "[图片：{desc}]"
+image_fallback_tag = "[图片]"
+# 消息日志截断长度
+log_text_max_chars = 120
+# 知识图谱学习的最短消息长度
+kg_learn_min_chars = 10
+
+[frequency_control]
+# 基线倍率（频率因子回归目标）
+baseline_multiplier = 1.0
+# 倍率允许范围
+multiplier_floor = 0.1
+multiplier_ceiling = 5.0
+# 指数衰减半衰期（秒），倍率自然回归基线的速率
+decay_half_life_seconds = 300.0
+# 自适应微调步进
+adapt_long_msg_chars = 80
+adapt_long_msg_delta = 0.05
+adapt_short_msg_chars = 5
+adapt_short_msg_delta = 0.03
+adapt_fast_interval_sec = 5.0
+adapt_fast_interval_delta = 0.08
+adapt_slow_interval_sec = 60.0
+adapt_slow_interval_delta = 0.05
+# 连续沉默（不回复）衰减系数
+silent_streak_decay = 0.9
+# 动态阈值分段
+silent_streak_tier_high = 5
+silent_streak_threshold_high = 3
+silent_streak_tier_mid = 3
+silent_streak_threshold_mid = 2
+silent_streak_threshold_default = 1
+# 介入间隔自适应
+engage_base_interval = 2.0
+engage_min_interval = 1.0
+engage_max_interval = 30.0
+engage_stretch_after_n = 5
+engage_stretch_ratio = 1.5
+engage_shrink_after_skips = 3
+engage_shrink_ratio = 0.8
+# 冷却时长（秒）
+cooldown_duration = 60.0
+# 管理器清理超时
+stale_idle_seconds = 1800.0
+# 滑动窗口限速
+window_max_requests = 10
+window_seconds = 60.0
+# 突发抑制
+burst_limit = 5
+burst_cooldown_seconds = 10.0
+
+[module_switches]
+heartflow_enabled = true
+proactive_enabled = true
+enhanced_focus_route_enabled = true
+emotion_stream_enabled = true
+energy_system_enabled = true
+inner_voice_enabled = true
+silence_watcher_enabled = true

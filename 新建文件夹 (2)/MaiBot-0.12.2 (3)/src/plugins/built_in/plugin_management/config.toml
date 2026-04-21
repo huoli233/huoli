@@ -1,0 +1,15 @@
+# plugin_management_plugin - 自动生成的配置文件
+# 通过系统API管理插件和组件的生命周期，包括加载、卸载、启用和禁用等操作。
+
+[plugin]
+
+# 是否启用插件
+enabled = false
+
+# 配置文件版本
+config_version = "1.1.0"
+
+# 有权限使用插件管理命令的用户列表，请填写字符串形式的用户ID
+permission = []
+
+

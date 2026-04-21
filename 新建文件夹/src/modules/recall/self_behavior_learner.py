@@ -1,0 +1,397 @@
+import time
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Optional
+
+from src.common.config.config_engine import ConfigEngine
+from src.common.logger import get_logger
+
+logger = get_logger("行为学习")
+
+
+@dataclass
+class LearnedPattern:
+    """学习到的模式"""
+
+    stream_id: str = ""
+    relation_stage: str = ""
+    action_type: str = ""
+    style_hint: str = ""
+    confidence: float = 0.5
+    sample_count: int = 0
+    learned_at: float = 0.0
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "stream_id": self.stream_id,
+            "relation_stage": self.relation_stage,
+            "action_type": self.action_type,
+            "style_hint": self.style_hint,
+            "confidence": self.confidence,
+            "sample_count": self.sample_count,
+            "learned_at": self.learned_at,
+        }
+
+
+class SelfBehaviorLearner:
+    """自我行为学习器
+
+    从自我行为记录中提炼可复用表达模式
+    """
+
+    def __init__(
+        self,
+        config_engine: Optional[ConfigEngine] = None,
+        model_client: Any = None,
+        prompt_manager: Any = None,
+        self_awareness: Any = None,
+        memory_core: Any = None,
+    ):
+        self._config = config_engine or ConfigEngine.get_instance()
+        self._model = model_client
+        self._prompts = prompt_manager
+        self._self_awareness = self_awareness
+        self._memory_core = memory_core
+
+        self._enabled = True
+        self._min_samples = 6
+        self._cooldown_seconds = 300.0
+        self._max_patterns_per_stream = 20
+
+        self._last_learn_ts_by_stream: Dict[str, float] = {}
+        self._patterns_by_stream: Dict[str, List[LearnedPattern]] = {}
+
+        self._load_config()
+        logger.info("自我行为学习器初始化完成")
+
+    def _load_config(self) -> None:
+        """从配置加载参数"""
+        self._enabled = self._config.get(
+            "self_behavior_learning", "enabled", True
+        )
+        self._min_samples = max(
+            3, self._config.get("self_behavior_learning", "min_samples", 6)
+        )
+        self._cooldown_seconds = max(
+            30.0,
+            self._config.get(
+                "self_behavior_learning", "cooldown_seconds", 300.0
+            ),
+        )
+        self._max_patterns_per_stream = max(
+            5,
+            self._config.get(
+                "self_behavior_learning", "max_patterns_per_stream", 20
+            ),
+        )
+
+    def bind_memory_core(self, memory_core: Any) -> None:
+        """绑定记忆核心"""
+        self._memory_core = memory_core
+
+    def bind_self_awareness(self, self_awareness: Any) -> None:
+        """绑定自我意识模块"""
+        self._self_awareness = self_awareness
+
+    async def capture_event(
+        self,
+        stream_id: str,
+        action_type: str,
+        content: str,
+        result: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """记录行为并在条件满足时触发学习"""
+        if not self._enabled:
+            return
+
+        relation_stage = self._resolve_relation_stage(context)
+        now = time.time()
+
+        if self._self_awareness:
+            self._self_awareness.record_action(
+                stream_id=stream_id,
+                action_type=action_type,
+                target=relation_stage,
+                content=content,
+                result=result,
+                extra={
+                    "relation_stage": relation_stage,
+                    "capture_source": "self_behavior_learner",
+                },
+            )
+
+        try:
+            if not self._should_trigger_learning(stream_id, now):
+                return
+
+            learned = await self._learn_for_stream(stream_id)
+            if learned is None:
+                return
+
+            self._last_learn_ts_by_stream[stream_id] = now
+            self._append_pattern(stream_id, learned)
+
+            if self._memory_core is not None and hasattr(
+                self._memory_core, "store_message"
+            ):
+                await self._memory_core.store_message(
+                    channel_id=stream_id,
+                    content=f"[自我行为学习]{learned.style_hint}",
+                    user_id="self_behavior_learner",
+                    importance=min(1.0, max(0.1, learned.confidence)),
+                    is_bot=True,
+                    extra_metadata={
+                        "memory_type": "self_behavior_pattern",
+                        "relation_stage": learned.relation_stage,
+                        "action_type": learned.action_type,
+                        "sample_count": learned.sample_count,
+                    },
+                )
+
+            logger.info(
+                f"自我行为学习: stream={stream_id}, stage={
+                    learned.relation_stage}, "
+                f"action={
+                    learned.action_type}, confidence={
+                    learned.confidence:.2f}"
+            )
+        except Exception as e:
+            logger.debug(f"自我行为学习降级: {e}")
+
+    def get_style_hints(
+        self,
+        stream_id: str,
+        relation_stage: Optional[str] = None,
+        limit: int = 3,
+    ) -> List[str]:
+        """获取风格提示"""
+        patterns = self._patterns_by_stream.get(stream_id, [])
+        if not patterns:
+            return []
+
+        selected: List[LearnedPattern] = []
+        if relation_stage:
+            selected = [
+                p for p in patterns if p.relation_stage == relation_stage
+            ]
+        if not selected:
+            selected = patterns
+
+        selected = sorted(
+            selected, key=lambda p: (p.confidence, p.learned_at), reverse=True
+        )
+        return [p.style_hint for p in selected[: max(1, limit)]]
+
+    def get_latest_patterns(
+        self, stream_id: str, limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """获取最新学习模式"""
+        patterns = self._patterns_by_stream.get(stream_id, [])
+        ordered = sorted(patterns, key=lambda p: p.learned_at, reverse=True)
+        return [p.to_dict() for p in ordered[: max(1, limit)]]
+
+    def _resolve_relation_stage(
+        self, context: Optional[Dict[str, Any]]
+    ) -> str:
+        """解析关系阶段"""
+        if not context:
+            return "unknown"
+        stage = str(context.get("relation_stage", "")).strip()
+        return stage or "unknown"
+
+    def _should_trigger_learning(self, stream_id: str, now: float) -> bool:
+        """判断是否应该触发学习"""
+        last_ts = self._last_learn_ts_by_stream.get(stream_id, 0.0)
+        if now - last_ts < self._cooldown_seconds:
+            return False
+
+        if not self._self_awareness:
+            return False
+
+        recent_actions = self._self_awareness.get_recent_actions(
+            stream_id=stream_id, limit=self._min_samples
+        )
+        return len(recent_actions) >= self._min_samples
+
+    async def _learn_for_stream(
+        self, stream_id: str
+    ) -> Optional[LearnedPattern]:
+        """为流学习模式"""
+        if not self._self_awareness:
+            return None
+
+        actions = self._self_awareness.get_recent_actions(
+            stream_id=stream_id, limit=max(self._min_samples, 20)
+        )
+        if len(actions) < self._min_samples:
+            return None
+
+        if self._model is not None:
+            try:
+                payload = [
+                    {
+                        "action_type": action.action_type,
+                        "target": action.target,
+                        "content": (
+                            action.content[:120] if action.content else ""
+                        ),
+                        "result": action.result,
+                        "timestamp": action.timestamp,
+                        "extra": action.extra,
+                    }
+                    for action in actions
+                ]
+
+                if hasattr(self._model, "generate_raw"):
+                    raw = await self._model.generate_raw(
+                        "self_behavior_learn",
+                        stream_id=stream_id,
+                        actions=str(payload),
+                    )
+                    parsed = self._parse_structured_result(raw)
+                    if parsed is not None:
+                        return parsed
+            except Exception as e:
+                logger.debug(f"模型学习失败，降级统计学习: {e}")
+
+        return self._fallback_learn(stream_id, actions)
+
+    def _parse_structured_result(self, raw: str) -> Optional[LearnedPattern]:
+        """解析结构化结果"""
+        import json
+
+        try:
+            start = raw.find("{")
+            end = raw.rfind("}") + 1
+            if start >= 0 and end > start:
+                data = json.loads(raw[start:end])
+            else:
+                return None
+        except json.JSONDecodeError:
+            return None
+
+        try:
+            return LearnedPattern(
+                stream_id=str(data.get("stream_id", "")),
+                relation_stage=str(data.get("relation_stage", "unknown")),
+                action_type=str(data.get("action_type", "send_reply")),
+                style_hint=str(data.get("style_hint", "")),
+                confidence=float(data.get("confidence", 0.5)),
+                sample_count=int(data.get("sample_count", 0)),
+                learned_at=time.time(),
+            )
+        except Exception:
+            return None
+
+    def _fallback_learn(
+        self, stream_id: str, actions: List[Any]
+    ) -> Optional[LearnedPattern]:
+        """降级学习"""
+        if not actions:
+            return None
+
+        succeeded = [
+            a
+            for a in actions
+            if str(getattr(a, "result", "")).lower() == "success"
+        ]
+        base = succeeded if succeeded else actions
+
+        stage_counter: Dict[str, int] = {}
+        action_counter: Dict[str, int] = {}
+        for item in base:
+            extra = getattr(item, "extra", {}) or {}
+            stage = str(
+                extra.get("relation_stage", getattr(item, "target", "unknown"))
+            )
+            stage_counter[stage] = stage_counter.get(stage, 0) + 1
+            action_type = getattr(item, "action_type", "unknown")
+            action_counter[action_type] = (
+                action_counter.get(action_type, 0) + 1
+            )
+
+        top_stage = (
+            max(stage_counter.items(), key=lambda x: x[1])[0]
+            if stage_counter
+            else "unknown"
+        )
+        top_action = (
+            max(action_counter.items(), key=lambda x: x[1])[0]
+            if action_counter
+            else "send_reply"
+        )
+
+        examples = [
+            getattr(a, "content", "").strip()
+            for a in base
+            if getattr(a, "content", "").strip()
+        ]
+        style_hint = (
+            examples[-1][:60] if examples else "保持简洁、自然、贴近上下文"
+        )
+
+        confidence = min(
+            0.95, max(0.35, len(base) / max(float(self._min_samples), 1.0))
+        )
+        return LearnedPattern(
+            stream_id=stream_id,
+            relation_stage=top_stage,
+            action_type=top_action,
+            style_hint=style_hint,
+            confidence=confidence,
+            sample_count=len(base),
+            learned_at=time.time(),
+        )
+
+    def _append_pattern(self, stream_id: str, pattern: LearnedPattern) -> None:
+        """追加模式"""
+        if not pattern.stream_id:
+            pattern.stream_id = stream_id
+
+        bucket = self._patterns_by_stream.setdefault(stream_id, [])
+        bucket.append(pattern)
+        if len(bucket) > self._max_patterns_per_stream:
+            self._patterns_by_stream[stream_id] = bucket[
+                -self._max_patterns_per_stream:
+            ]
+
+    def clear_patterns(self, stream_id: Optional[str] = None):
+        """清除学习模式"""
+        if stream_id:
+            self._patterns_by_stream.pop(stream_id, None)
+        else:
+            self._patterns_by_stream.clear()
+
+    def get_stats(self) -> Dict[str, Any]:
+        """获取统计信息"""
+        total_patterns = sum(len(v) for v in self._patterns_by_stream.values())
+        return {
+            "enabled": self._enabled,
+            "total_patterns": total_patterns,
+            "active_streams": len(self._patterns_by_stream),
+            "min_samples": self._min_samples,
+            "cooldown_seconds": self._cooldown_seconds,
+        }
+
+
+_self_behavior_learner_instance: Optional[SelfBehaviorLearner] = None
+
+
+def get_self_behavior_learner(
+    config_engine: Optional[ConfigEngine] = None,
+    model_client: Any = None,
+    prompt_manager: Any = None,
+    self_awareness: Any = None,
+    memory_core: Any = None,
+) -> SelfBehaviorLearner:
+    """获取自我行为学习器单例"""
+    global _self_behavior_learner_instance
+    if _self_behavior_learner_instance is None:
+        _self_behavior_learner_instance = SelfBehaviorLearner(
+            config_engine,
+            model_client,
+            prompt_manager,
+            self_awareness,
+            memory_core,
+        )
+    return _self_behavior_learner_instance

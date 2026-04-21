@@ -1,0 +1,50 @@
+recall_keywords:
+  - "记得"
+  - "上次"
+  - "以前"
+  - "之前"
+  - "还记得"
+  - "忘"
+  - "回忆"
+  - "那时候"
+  - "曾经"
+  - "过去"
+
+mention_patterns:
+  - "@"
+  - "提到"
+  - "说"
+  - "觉得"
+
+high_emotion_types:
+  - "joy"
+  - "anger"
+  - "sadness"
+  - "surprise"
+
+decision_weights:
+  confidence: 0.25
+  risk: 0.20
+  interest: 0.20
+  urgency: 0.15
+  social: 0.10
+  mood: 0.10
+
+confidence_thresholds:
+  high: 0.7
+  medium: 0.5
+  low: 0.3
+
+relationship_types:
+  intimate:
+    - "挚友"
+    - "好友"
+  familiar:
+    - "熟人"
+    - "认识"
+  stranger:
+    - "陌生人"
+  negative:
+    - "不太喜欢"
+    - "讨厌"
+    - "敌意"

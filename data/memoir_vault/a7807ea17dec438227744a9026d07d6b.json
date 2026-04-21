@@ -1,0 +1,37 @@
+{
+  "user_id": "3138039548",
+  "channel_id": "a7807ea17dec438227744a9026d07d6b",
+  "phase": "active",
+  "journal": [
+    {
+      "kind": "user_utterance",
+      "written_at": 1776427384.6139624,
+      "body_text": "我的刀盾",
+      "speaker_name": "你的哈哈",
+      "speaker_id": "3138039548",
+      "inner_monologue": "",
+      "action_list": [],
+      "expected_response": "",
+      "wait_limit_sec": 0,
+      "elapsed_wait": 0.0,
+      "reflection": "",
+      "mood_label": "",
+      "extras": {}
+    }
+  ],
+  "anticipation": {
+    "expected_reply_text": "",
+    "max_wait_sec": 0,
+    "commenced_at": 0.0,
+    "latest_ponder_at": 0.0,
+    "ponder_tally": 0
+  },
+  "born_at": 1776427384.8450444,
+  "touched_at": 1776427385.4709527,
+  "exchange_tally": 0,
+  "last_initiative_at": 0.0,
+  "consecutive_timeouts": 0,
+  "last_user_spoke_at": 1776427385.4709527,
+  "last_topic": "我的刀盾",
+  "last_mood": ""
+}

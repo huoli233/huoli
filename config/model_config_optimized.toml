@@ -1,0 +1,165 @@
+[inner]
+version = "1.11.0-optimized"
+
+# ============================================
+# 优化版模型配置 - 减少调用链延迟
+# ============================================
+
+[[api_providers]]
+name = "GeminiProxy"
+base_url = "http://154.193.217.165:3000/v1"
+api_key = "sk-prlNmubWwsigApmSCu6OgGGybxlTM6eQg0LrxZrXsYXuzcqA"
+client_type = "openai"
+max_retry = 2                           # 减少重试次数
+timeout = 60                             # 减少超时时间
+retry_interval = 3
+
+[[api_providers]]
+name = "LMStudio"
+base_url = "http://127.0.0.1:1234/v1"
+api_key = "lm-studio"
+client_type = "openai"
+max_retry = 1                           # 本地模型不重试
+timeout = 15                             # 本地模型15秒超时
+retry_interval = 1
+
+[[api_providers]]
+name = "SiliconFlow"
+base_url = "https://api.siliconflow.cn/v1"
+api_key = "sk-limgzochczzbslbdiipdsqmktpnhhweyajbuxuzkvskhlvjn"
+client_type = "openai"
+max_retry = 2
+timeout = 60
+retry_interval = 3
+
+
+# ============================================
+# 模型定义
+# ============================================
+
+[[models]]
+model_identifier = "gemini-3.1-flash-lite-preview"
+name = "gemini-3.1-flash-lite-preview"
+api_provider = "GeminiProxy"
+client_type = "gemini"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "gemini-3-flash"
+name = "gemini-3-flash"
+api_provider = "GeminiProxy"
+client_type = "gemini"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "qwen3-0.6b"
+name = "qwen3-0.6b"
+api_provider = "LMStudio"
+price_in = 0
+price_out = 0
+max_tokens = 4096
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "BAAI/bge-m3"
+name = "bge-m3"
+api_provider = "SiliconFlow"
+client_type = "openai"
+price_in = 0
+price_out = 0
+
+
+# ============================================
+# 任务配置 - 合并优化版
+# ============================================
+
+# 小模型池 - 处理所有快速任务（决策、工具、后台等）
+[model_task_config.lightweight]
+model_list = ["qwen3-0.6b"]               # 只用本地小模型，快！
+temperature = 0.3
+max_tokens = 2048
+slow_threshold = 20.0                     # 20秒就算慢
+selection_strategy = "random"
+
+# 大模型池 - 只处理回复生成
+[model_task_config.replyer]
+model_list = ["gemini-3.1-flash-lite-preview", "gemini-3-flash"]  # 减少到2个
+temperature = 0.3
+max_tokens = 2048
+slow_threshold = 30.0                     # 30秒就算慢
+selection_strategy = "random"
+
+# 决策模型 - 使用小模型快速决策
+[model_task_config.planner]
+model_list = ["qwen3-0.6b"]               # 只用本地小模型
+temperature = 0.3
+max_tokens = 512                          # 减少token，加快速度
+slow_threshold = 10.0                     # 10秒就算慢
+selection_strategy = "random"
+
+# 工具调用 - 合并到lightweight
+[model_task_config.tool_use]
+model_list = ["qwen3-0.6b"]               # 本地小模型处理工具
+temperature = 0.4
+max_tokens = 1024
+slow_threshold = 15.0
+selection_strategy = "random"
+
+# 图像识别
+[model_task_config.vlm]
+model_list = ["gemini-3.1-flash-lite-preview"]  # 只用1个
+max_tokens = 256
+slow_threshold = 20.0
+selection_strategy = "random"
+
+# 语音识别
+[model_task_config.voice]
+model_list = ["gemini-3-flash"]
+slow_threshold = 12.0
+selection_strategy = "random"
+
+# 嵌入模型
+[model_task_config.embedding]
+model_list = ["bge-m3"]
+slow_threshold = 5.0
+selection_strategy = "random"
+
+# 以下任务全部复用 lightweight 配置
+[model_task_config.utils]
+model_list = ["qwen3-0.6b"]
+temperature = 0.2
+max_tokens = 2048
+slow_threshold = 20.0
+selection_strategy = "random"
+
+[model_task_config.model_monitor]
+model_list = ["qwen3-0.6b"]
+temperature = 0.7
+max_tokens = 2048
+slow_threshold = 20.0
+selection_strategy = "random"
+
+[model_task_config.focus_chat]
+model_list = ["qwen3-0.6b"]
+temperature = 0.7
+max_tokens = 1024
+slow_threshold = 20.0
+selection_strategy = "random"
+
+[model_task_config.lpmm_entity_extract]
+model_list = ["qwen3-0.6b"]
+temperature = 0.2
+max_tokens = 800
+slow_threshold = 20.0
+selection_strategy = "random"
+
+[model_task_config.lpmm_rdf_build]
+model_list = ["qwen3-0.6b"]
+temperature = 0.2
+max_tokens = 800
+slow_threshold = 20.0
+selection_strategy = "random"

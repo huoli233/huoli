@@ -1,0 +1,19 @@
+# 用户配置 - 第一层A
+# 所有参数范围 0~1，通过滑块调整
+
+[personality]
+sensitivity = 0.6
+tolerance = 0.4
+reactiveness = 0.5
+recovery_speed = 0.5
+social_energy = 0.7
+
+[social]
+warmth = 0.6
+trust_tendency = 0.5
+boundary_strength = 0.6
+
+[heartflow]
+rest_tendency = 0.4
+curiosity = 0.6
+reply_eagerness = 0.5

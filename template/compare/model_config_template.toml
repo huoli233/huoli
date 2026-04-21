@@ -1,0 +1,240 @@
+[inner]
+version = "1.12.0"
+
+# 配置文件版本号迭代规则同bot_config.toml
+
+[[api_providers]] # 聚合API（唯一供应商）
+name = "AggAPI"
+base_url = "http://154.193.217.165:3000/v1"
+api_key = "sk-yaO8Hw10Qs5iwBKwEOpvjXeedBWD22m9WphSS1aTooeobzJG"
+client_type = "openai"
+max_retry = 5
+timeout = 180
+retry_interval = 15
+
+
+# ===== 🟢 轻量级任务模型 - 快速响应 (< 2B) =====
+# 适用场景: 简单问答、文本分类、关键词提取、快速决策
+
+[[models]] # Gemma 3 1B - 极速思考/最轻量
+model_identifier = "gemma-3-1b-it"
+name = "gemma-3-1b"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+
+# ===== 🟡 中等级任务模型 - 平衡性能 (4B-27B) =====
+# 适用场景: 一般对话、内容总结、翻译、长文本理解、多轮对话
+
+[[models]] # Gemma 3 12B - 中等复杂度任务
+model_identifier = "gemma-3-12b-it"
+name = "gemma-3-12b"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+[[models]] # Gemma 3 27B - 长文本理解/多轮对话
+model_identifier = "gemma-3-27b-it"
+name = "gemma-3-27b"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+
+# ===== 🔴 复杂任务模型 - 高性能 (26B-31B+) =====
+# 适用场景: 复杂推理、代码生成、创意写作、高级推理、专业领域问答
+
+[[models]] # Gemma 4 26B - 高级推理/工具调用
+model_identifier = "gemma-4-26b-a4b-it"
+name = "gemma-4-26b"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+[[models]] # Gemma 4 31B - 最复杂任务/多步骤推理
+model_identifier = "gemma-4-31b-it"
+name = "gemma-4-31b"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+
+# ===== 💬 聊天主力模型 =====
+
+[[models]] # Gemini 2.5 Flash - 聊天主力/图像识别
+model_identifier = "gemini-2.5-flash"
+name = "gemini-2.5-flash"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+[[models]] # Gemini 3 Flash - 聊天主力/图像识别
+model_identifier = "gemini-3-flash"
+name = "gemini-3-flash"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+[[models]] # Grok 4.20 推理 - 深度推理/图像识别
+model_identifier = "grok-4.20-0309-reasoning"
+name = "grok-4.20-reasoning"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+[[models]] # Grok 4.20 非推理 - 聊天/通用/图像识别
+model_identifier = "grok-4.20-0309-non-reasoning"
+name = "grok-4.20-chat"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+[[models]] # GLM5 - 聊天/通用
+model_identifier = "z-ai/glm5"
+name = "glm5"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+[[models]] # GLM4.7 - 聊天/通用
+model_identifier = "z-ai/glm4.7"
+name = "glm4.7"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+
+# ===== 🧠 复杂任务模型（受速率限制，按需分配，也可参与聊天） =====
+
+[[models]] # DeepSeek V3.2 - 复杂任务/聊天
+model_identifier = "deepseek-ai/deepseek-v3.2"
+name = "deepseek-v3.2"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+[[models]] # Kimi K2.5 - 复杂任务/聊天
+model_identifier = "moonshotai/kimi-k2.5"
+name = "kimi-k2.5"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+[[models]] # Minimax M2.7 - 复杂任务/聊天
+model_identifier = "minimaxai/minimax-m2.7"
+name = "minimax-m2.7"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+[[models]] # Qwen3.5 122B - 复杂任务/聊天
+model_identifier = "qwen/qwen3.5-122b-a10b"
+name = "qwen3.5-122b"
+api_provider = "AggAPI"
+price_in = 0.0
+price_out = 0.0
+
+
+# ===== 📊 嵌入模型 =====
+# bge-m3: 向量维度1024, 支持中英双语, 最大输入8192 tokens
+
+[[models]]
+model_identifier = "@cf/baai/bge-m3"
+name = "bge-m3"
+api_provider = "AggAPI"
+price_in = 0
+price_out = 0
+dimension = 1024
+
+
+
+# ========== 🟢 轻量级任务配置 (< 2B) ==========
+# 适用场景: 简单问答、文本分类、关键词提取、快速决策、表情包、取名、关系、情绪变化
+
+[model_task_config.utils]
+model_list = ["gemma-3-1b"]  # 1B模型，极速响应
+temperature = 0.2
+max_tokens = 4096
+slow_threshold = 10.0
+selection_strategy = "random"
+
+[model_task_config.planner]  # 决策：负责决定何时回复
+model_list = ["gemma-3-1b"]  # 轻量级决策
+temperature = 0.3
+max_tokens = 800
+slow_threshold = 8.0
+selection_strategy = "random"
+
+[model_task_config.voice]  # 语音识别
+model_list = ["gemma-3-1b"]
+slow_threshold = 10.0
+selection_strategy = "random"
+
+
+# ========== 🟡 中等级任务配置 (4B-27B) ==========
+# 适用场景: 一般对话、内容总结、翻译、长文本理解、多轮对话、工具调用
+
+[model_task_config.tool_use]  # 功能模型，需要使用支持工具调用的模型
+model_list = ["gemma-3-12b", "gemma-3-27b"]  # 12B和27B平衡性能
+temperature = 0.7
+max_tokens = 1024
+slow_threshold = 15.0
+selection_strategy = "random"
+
+[model_task_config.vlm]  # 图像识别模型 - 使用支持视觉的Gemini和Grok系列
+model_list = ["gemini-2.5-flash", "gemini-3-flash", "grok-4.20-reasoning", "grok-4.20-chat"]
+max_tokens = 1024
+slow_threshold = 20.0
+selection_strategy = "random"
+
+[model_task_config.lightweight]  # 轻量级但比1B强一些的任务
+model_list = ["gemma-3-12b", "gemma-3-27b"]
+temperature = 0.3
+max_tokens = 1024
+slow_threshold = 20.0
+selection_strategy = "random"
+
+
+# ========== 🔴 复杂任务配置 (26B-31B+) ==========
+# 适用场景: 复杂推理、代码生成、创意写作、高级推理、专业领域问答、实体提取、RDF构建
+
+[model_task_config.lpmm_entity_extract]  # 实体提取模型
+model_list = ["gemma-4-26b", "gemma-4-31b", "gemma-3-27b"]  # 优先使用大模型
+temperature = 0.2
+max_tokens = 800
+slow_threshold = 25.0
+selection_strategy = "random"
+
+[model_task_config.lpmm_rdf_build]  # RDF构建模型
+model_list = ["gemma-4-26b", "gemma-4-31b", "gemma-3-27b"]  # 优先使用大模型
+temperature = 0.2
+max_tokens = 800
+slow_threshold = 25.0
+selection_strategy = "random"
+
+
+# ========== 💬 聊天回复任务配置 ==========
+# 混合使用所有可用模型
+
+[model_task_config.replyer]  # 首要回复模型，还用于表达方式学习
+model_list = ["gemini-2.5-flash", "gemini-3-flash", "glm5", "glm4.7", "kimi-k2.5", "minimax-m2.7", "deepseek-v3.2", "qwen3.5-122b", "gemma-4-31b", "gemma-4-26b", "gemma-3-27b", "gemma-3-12b"]
+temperature = 0.3
+max_tokens = 2048
+slow_threshold = 30.0
+selection_strategy = "random"
+
+[model_task_config.focus_chat]  # 专注聊天模型配置 - 所有聊天模型轮询
+model_list = ["gemini-2.5-flash", "gemini-3-flash", "glm5", "glm4.7", "kimi-k2.5", "minimax-m2.7", "deepseek-v3.2", "qwen3.5-122b", "gemma-4-31b", "gemma-4-26b", "gemma-3-27b", "gemma-3-12b"]
+temperature = 0.7
+max_tokens = 1024
+slow_threshold = 60.0
+selection_strategy = "random"
+
+
+# ========== 📊 嵌入模型配置 ==========
+
+[model_task_config.embedding]
+model_list = ["bge-m3"]
+slow_threshold = 10.0
+selection_strategy = "random"

@@ -1,0 +1,29 @@
+# better_frequency_plugin - 自动生成的配置文件
+# 控制聊天频率，支持设置focus_value和talk_frequency调整值，提供命令
+
+# 插件基本信息
+[plugin]
+
+# 插件名称
+name = "better_frequency_plugin"
+
+# 插件版本
+version = "1.0.2"
+
+# 是否启用插件
+enabled = true
+
+
+# 频率控制配置
+[frequency]
+
+# 默认talk_frequency调整值
+default_talk_adjust = 1.0
+
+# 最大调整值
+max_adjust_value = 1.0
+
+# 最小调整值
+min_adjust_value = 0.0
+
+

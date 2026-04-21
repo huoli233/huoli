@@ -1,0 +1,28 @@
+{
+  "manifest_version": 1,
+  "name": "图片分析插件 (Image Analyze Action)",
+  "version": "1.0.0",
+  "description": "分析用户发送的图片内容",
+  "author": {
+    "name": "HHACore",
+    "url": ""
+  },
+  "license": "GPL-v3.0-or-later",
+  "host_application": {
+    "min_version": "0.10.0"
+  },
+  "keywords": ["image", "analyze", "action", "built-in"],
+  "categories": ["Image"],
+  "default_locale": "zh-CN",
+  "plugin_info": {
+    "is_built_in": true,
+    "plugin_type": "action_provider",
+    "components": [
+      {
+        "type": "action",
+        "name": "analyze_image",
+        "description": "分析用户发送的图片内容"
+      }
+    ]
+  }
+}

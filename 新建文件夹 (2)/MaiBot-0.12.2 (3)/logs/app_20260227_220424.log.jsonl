@@ -1,0 +1,111 @@
+{"logger_name": "database_model", "event": "开始同步数据库字段约束...", "level": "debug", "lineno": 848, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'chat_streams' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'chat_streams' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'llm_usage' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'llm_usage' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'emoji' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'emoji' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'messages' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'messages' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'images' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'images' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'image_descriptions' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'image_descriptions' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'emoji_description_cache' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'emoji_description_cache' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'online_time' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'online_time' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'person_info' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'person_info' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'expression' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'expression' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'action_records' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'action_records' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'jargon' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'jargon' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'chat_history' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'chat_history' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'thinking_back' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'thinking_back' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'fatigue_state' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'fatigue_state' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'heartflow_state' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'heartflow_state' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'memory_entry' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'memory_entry' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'memory_state' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'memory_state' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'trauma_record' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'trauma_record' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'emotion_log' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'emotion_log' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'dynamic_persona' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'dynamic_persona' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'stream_state' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'stream_state' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'expression_pattern' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'expression_pattern' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'hippocampus_buffer' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'hippocampus_buffer' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'kg_entities' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'kg_entities' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'kg_relations' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'kg_relations' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'key_value_store' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'key_value_store' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'image_analysis_cache' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'image_analysis_cache' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'topic_cache_entry' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'topic_cache_entry' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'topic_cache_meta' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'topic_cache_meta' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'context_cache_entry' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'context_cache_entry' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'webui_config' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'webui_config' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'channel_emotion_cache' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'channel_emotion_cache' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'session_record' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'session_record' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "检查表 'cross_context_memory' 的字段约束...", "level": "debug", "lineno": 874, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "表 'cross_context_memory' 的字段约束已同步", "level": "debug", "lineno": 922, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "数据库字段约束同步完成", "level": "debug", "lineno": 850, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "database_model", "event": "数据库初始化完成", "level": "info", "lineno": 857, "module": "src.common.database.database_model", "timestamp": "02-27 22:04:24"}
+{"logger_name": "config", "event": "MaiCore当前版本: 0.12.2", "level": "info", "lineno": 489, "module": "src.config.config", "timestamp": "02-27 22:04:24"}
+{"logger_name": "config", "event": "未检测到bot_config模板默认值变动", "level": "info", "lineno": 263, "module": "src.config.config", "timestamp": "02-27 22:04:24"}
+{"logger_name": "config", "event": "compare下的bot_config模板版本不低于当前模板，无需替换: M:\\HHACore\\MaiBot-0.12.2\\template\\compare\\bot_config_template.toml", "level": "debug", "lineno": 273, "module": "src.config.config", "timestamp": "02-27 22:04:24"}
+{"logger_name": "config", "event": "检测到bot_config配置文件版本号相同 (v7.3.5)，跳过更新", "level": "info", "lineno": 286, "module": "src.config.config", "timestamp": "02-27 22:04:24"}
+{"logger_name": "config", "event": "未检测到model_config模板默认值变动", "level": "info", "lineno": 263, "module": "src.config.config", "timestamp": "02-27 22:04:24"}
+{"logger_name": "config", "event": "compare下的model_config模板版本不低于当前模板，无需替换: M:\\HHACore\\MaiBot-0.12.2\\template\\compare\\model_config_template.toml", "level": "debug", "lineno": 273, "module": "src.config.config", "timestamp": "02-27 22:04:24"}
+{"logger_name": "config", "event": "检测到model_config配置文件版本号相同 (v1.11.0)，跳过更新", "level": "info", "lineno": 286, "module": "src.config.config", "timestamp": "02-27 22:04:24"}
+{"logger_name": "config", "event": "正在品鉴配置文件...", "level": "info", "lineno": 493, "module": "src.config.config", "timestamp": "02-27 22:04:24"}
+{"logger_name": "config", "event": "非常的新鲜，非常的美味！", "level": "info", "lineno": 496, "module": "src.config.config", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级1, 可学习0) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级1, 可学习0) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级1, 可学习0) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级0, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词 'learn_prompt' 已更新 (5字符)", "level": "info", "lineno": 164, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级1, 可学习0) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "更新失败: 'sys_prompt' 是系统级提示词，不可修改", "level": "warning", "lineno": 160, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 0个 (系统级0, 可学习0) 来自0个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "更新失败: 'ghost' 不存在", "level": "warning", "lineno": 157, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 0个 (系统级0, 可学习0) 来自0个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 0个 (系统级0, 可学习0) 来自0个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 3个 (系统级2, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 3个 (系统级1, 可学习2) 来自2个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级0, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词热重载完成: 1 -> 2", "level": "info", "lineno": 212, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词 'learn1' 已更新 (6字符)", "level": "info", "lineno": 164, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "已持久化 1 个提示词文件", "level": "info", "lineno": 181, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自2个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 0个 (系统级0, 可学习0) 来自0个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词目录不存在: C:\\Users\\mcpex\\AppData\\Local\\Temp\\tmpmsqm8v9b\\ghost", "level": "warning", "lineno": 60, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 66个 (系统级32, 可学习34) 来自11个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 66个 (系统级32, 可学习34) 来自11个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 66个 (系统级32, 可学习34) 来自11个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:04:24"}
+{"logger_name": "person_info", "event": "已加载 6 个用户名称 (Peewee)", "level": "debug", "lineno": 642, "module": "src.person_info.person_info", "timestamp": "02-27 22:04:26"}

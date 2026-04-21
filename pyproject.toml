@@ -1,0 +1,63 @@
+[project]
+name = "huoli"
+version = "0.1.0"
+description = "huoli 重写项目"
+requires-python = ">=3.12"
+dependencies = [
+    "aiohttp>=3.12.14",
+    "aiohttp-cors>=0.8.1",
+    "colorama>=0.4.6",
+    "faiss-cpu>=1.11.0",
+    "fastapi>=0.116.0",
+    "google-genai>=1.39.1",
+    "jieba>=0.42.1",
+    "json-repair>=0.47.6",
+    "matplotlib>=3.10.3",
+    "msgpack>=1.1.2",
+    "numpy>=2.2.6",
+    "openai>=1.95.0",
+    "pandas>=2.3.1",
+    "peewee>=3.18.2",
+    "pillow>=11.3.0",
+    "pyarrow>=20.0.0",
+    "pydantic>=2.11.7",
+    "PyYAML>=6.0.2",
+    "pypinyin>=0.54.0",
+    "python-dotenv>=1.1.1",
+    "python-multipart>=0.0.20",
+    "quick-algo>=0.1.3",
+    "rich>=14.0.0",
+    "ruff>=0.12.2",
+    "setuptools>=80.9.0",
+    "structlog>=25.4.0",
+    "toml>=0.10.2",
+    "tomlkit>=0.13.3",
+    "urllib3>=2.5.0",
+    "uvicorn>=0.35.0",
+    "zstandard>=0.25.0",
+]
+
+[tool.uv]
+index-url = "https://pypi.tuna.tsinghua.edu.cn/simple"
+
+[tool.ruff]
+include = ["*.py"]
+line-length = 120
+
+[tool.ruff.lint]
+fixable = ["ALL"]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+select = [
+    "E",
+    "F",
+    "B",
+]
+ignore = ["E711", "E501"]
+
+[tool.ruff.format]
+docstring-code-format = true
+indent-style = "space"
+quote-style = "double"
+skip-magic-trailing-comma = false
+line-ending = "auto"

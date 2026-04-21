@@ -1,4 +1,3 @@
-import copy
 from fastapi import APIRouter, HTTPException, Header, Cookie
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any, get_origin
@@ -1640,48 +1639,6 @@ class UpdatePluginConfigRequest(BaseModel):
     config: Dict[str, Any] = Field(..., description="配置数据")
 
 
-def _find_plugin_path_by_id(plugin_id: str) -> Optional[Path]:
-    """按 plugin_id 或目录名查找插件目录。"""
-    plugins_dir = Path("plugins")
-    if not plugins_dir.exists():
-        return None
-    for p in plugins_dir.iterdir():
-        if not p.is_dir():
-            continue
-        manifest_path = p / "_manifest.json"
-        if not manifest_path.exists():
-            continue
-        try:
-            with open(manifest_path, "r", encoding="utf-8") as f:
-                manifest = json.load(f)
-            if manifest.get("id") == plugin_id or p.name == plugin_id:
-                return p
-        except Exception:
-            continue
-    return None
-
-
-def get_plugin_runtime_context(plugin_id: str) -> Dict[str, Any]:
-    """获取插件运行态上下文。
-
-    Returns:
-        {
-            "plugin_instance": Optional[Any],
-            "runtime_loaded": bool,
-            "schema_source": "runtime" | "inferred",
-            "schema_editable": bool,
-        }
-    """
-    plugin_instance = find_plugin_instance(plugin_id)
-    runtime_loaded = plugin_instance is not None
-    return {
-        "plugin_instance": plugin_instance,
-        "runtime_loaded": runtime_loaded,
-        "schema_source": "runtime" if runtime_loaded else "inferred",
-        "schema_editable": runtime_loaded,
-    }
-
-
 @router.get("/config/{plugin_id}/schema")
 async def get_plugin_config_schema(
     plugin_id: str,
@@ -1704,30 +1661,52 @@ async def get_plugin_config_schema(
 
     try:
         # 尝试从已加载的插件中获取
-        runtime_ctx = get_plugin_runtime_context(plugin_id)
-        plugin_instance = runtime_ctx["plugin_instance"]
+        from src.plugin_system.core.plugin_manager import plugin_manager
+
+        # 查找插件实例
+        plugin_instance = None
+
+        # 遍历所有已加载的插件
+        for loaded_plugin_name in plugin_manager.list_loaded_plugins():
+            instance = plugin_manager.get_plugin_instance(loaded_plugin_name)
+            if instance:
+                # 匹配 plugin_name 或 manifest 中的 id
+                if instance.plugin_name == plugin_id:
+                    plugin_instance = instance
+                    break
+                # 也尝试匹配 manifest 中的 id
+                manifest_id = instance.get_manifest_info("id", "")
+                if manifest_id == plugin_id:
+                    plugin_instance = instance
+                    break
 
         if plugin_instance and hasattr(
             plugin_instance, "get_webui_config_schema"
         ):
             # 从插件实例获取 schema
-            schema = copy.deepcopy(
-                plugin_instance.get_webui_config_schema()
-            )
-            if isinstance(schema, dict):
-                schema["schema_source"] = runtime_ctx["schema_source"]
-                schema["schema_editable"] = runtime_ctx["schema_editable"]
-            return {
-                "success": True,
-                "schema": schema,
-                "schema_source": runtime_ctx["schema_source"],
-                "schema_editable": runtime_ctx["schema_editable"],
-                "runtime_loaded": runtime_ctx["runtime_loaded"],
-            }
+            schema = plugin_instance.get_webui_config_schema()
+            return {"success": True, "schema": schema}
 
         # 如果插件未加载，尝试从文件系统读取
         # 查找插件目录
-        plugin_path = _find_plugin_path_by_id(plugin_id)
+        plugins_dir = Path("plugins")
+        plugin_path = None
+
+        for p in plugins_dir.iterdir():
+            if p.is_dir():
+                manifest_path = p / "_manifest.json"
+                if manifest_path.exists():
+                    try:
+                        with open(manifest_path, "r", encoding="utf-8") as f:
+                            manifest = json.load(f)
+                        if (
+                            manifest.get("id") == plugin_id
+                            or p.name == plugin_id
+                        ):
+                            plugin_path = p
+                            break
+                    except Exception:
+                        continue
 
         if not plugin_path:
             raise HTTPException(
@@ -1754,9 +1733,7 @@ async def get_plugin_config_schema(
             },
             "sections": {},
             "layout": {"type": "auto", "tabs": []},
-            "schema_source": "inferred",
-            "schema_editable": False,
-            "_note": "插件未加载，仅返回推断结构；该结构不可用于驱动表单保存",
+            "_note": "插件未加载，仅返回当前配置结构",
         }
 
         # 从当前配置推断 schema
@@ -1821,8 +1798,7 @@ async def get_plugin_config_schema(
                         "ui_type": ui_type,
                         "required": False,
                         "hidden": False,
-                        # 推断态 schema 只允许展示，不允许驱动表单编辑
-                        "disabled": True,
+                        "disabled": False,
                         "order": 0,
                         "item_type": item_type,
                         "item_fields": item_fields,
@@ -1844,22 +1820,9 @@ async def get_plugin_config_schema(
                         "group": None,
                         "depends_on": None,
                         "depends_value": None,
-                        "schema_source": "inferred",
-                        "inferred": True,
                     }
 
-        return {
-            "success": True,
-            "schema": schema,
-            "schema_source": runtime_ctx["schema_source"],
-            "schema_editable": runtime_ctx["schema_editable"],
-            "runtime_loaded": runtime_ctx["runtime_loaded"],
-            "save_blocked_reason": (
-                None
-                if runtime_ctx["runtime_loaded"]
-                else "插件未加载，推断 schema 仅供查看，请先加载插件或改用原始 TOML 编辑"
-            ),
-        }
+        return {"success": True, "schema": schema}
 
     except HTTPException:
         raise
@@ -2116,26 +2079,33 @@ async def update_plugin_config(
     logger.info(f"更新插件配置: {plugin_id}")
 
     try:
-        runtime_ctx = get_plugin_runtime_context(plugin_id)
-        plugin_instance = runtime_ctx["plugin_instance"]
-
-        if not plugin_instance:
-            raise HTTPException(
-                status_code=409,
-                detail=(
-                    "插件当前未加载，禁止使用推断 schema 执行结构化配置保存；"
-                    "请先加载插件后重试"
-                ),
-            )
+        plugin_instance = find_plugin_instance(plugin_id)
 
         # 纠正 WebUI 提交的数据结构（扁平键与字符串列表）
-        if isinstance(request.config, dict):
+        if plugin_instance and isinstance(request.config, dict):
             request.config = normalize_dotted_keys(request.config)
             if isinstance(plugin_instance.config_schema, dict):
                 coerce_types(plugin_instance.config_schema, request.config)
 
         # 查找插件目录
-        plugin_path = _find_plugin_path_by_id(plugin_id)
+        plugins_dir = Path("plugins")
+        plugin_path = None
+
+        for p in plugins_dir.iterdir():
+            if p.is_dir():
+                manifest_path = p / "_manifest.json"
+                if manifest_path.exists():
+                    try:
+                        with open(manifest_path, "r", encoding="utf-8") as f:
+                            manifest = json.load(f)
+                        if (
+                            manifest.get("id") == plugin_id
+                            or p.name == plugin_id
+                        ):
+                            plugin_path = p
+                            break
+                    except Exception:
+                        continue
 
         if not plugin_path:
             raise HTTPException(
@@ -2164,8 +2134,6 @@ async def update_plugin_config(
             "success": True,
             "message": "配置已保存",
             "note": "配置更改将在插件重新加载后生效",
-            "schema_source": runtime_ctx["schema_source"],
-            "runtime_loaded": runtime_ctx["runtime_loaded"],
         }
 
     except HTTPException:

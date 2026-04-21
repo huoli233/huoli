@@ -1,0 +1,746 @@
+[categories.friendly]
+base_score = 0.5
+max_change_per_reply = 0.02
+acceleration_threshold = 0.8
+acceleration_multiplier = 2.0
+decay_rate = 0.01
+trauma_impact = 0.0
+
+[categories.neutral]
+base_score = 0.0
+max_change_per_reply = 0.01
+acceleration_threshold = 0.95
+acceleration_multiplier = 1.0
+decay_rate = 0.005
+trauma_impact = 0.0
+
+[categories.unfriendly]
+base_score = -1.0
+max_change_per_reply = 0.02
+acceleration_threshold = 0.8
+acceleration_multiplier = 2.5
+decay_rate = 0.015
+trauma_impact = 0.1
+
+[categories.hostile]
+base_score = -3.0
+max_change_per_reply = 0.03
+acceleration_threshold = 0.7
+acceleration_multiplier = 3.0
+decay_rate = 0.02
+trauma_impact = 0.3
+
+[categories.harassing]
+base_score = -5.0
+max_change_per_reply = 0.05
+acceleration_threshold = 0.6
+acceleration_multiplier = 3.5
+decay_rate = 0.03
+trauma_impact = 0.45
+
+[intents]
+compliment = 1.5
+comfort = 1.4
+help = 1.3
+apology = 1.2
+chat = 1.0
+question = 1.0
+criticism = 1.2
+manipulation = 1.5
+insult = 2.0
+threat = 3.0
+bullying = 2.5
+sexual = 3.0
+stalking = 2.5
+tease = 0.5
+flirt = 0.8
+
+[types.genuine_praise]
+category = "friendly"
+bonus = 1.3
+prompt_template = "behavior"
+
+[types.casual_compliment]
+category = "friendly"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.encouragement]
+category = "friendly"
+bonus = 1.2
+prompt_template = "behavior"
+
+[types.gratitude]
+category = "friendly"
+bonus = 1.1
+prompt_template = "behavior"
+
+[types.care_expression]
+category = "friendly"
+bonus = 1.3
+prompt_template = "behavior"
+
+[types.sharing_secrets]
+category = "friendly"
+bonus = 1.2
+prompt_template = "behavior"
+
+[types.comfort]
+category = "friendly"
+bonus = 1.4
+prompt_template = "behavior"
+
+[types.support]
+category = "friendly"
+bonus = 1.2
+prompt_template = "behavior"
+
+[types.gentle_humor]
+category = "friendly"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.remembering_details]
+category = "friendly"
+bonus = 1.3
+prompt_template = "behavior"
+
+[types.apology]
+category = "friendly"
+bonus = 1.1
+prompt_template = "behavior"
+
+[types.affection_expression]
+category = "friendly"
+bonus = 1.4
+prompt_template = "behavior"
+
+[types.casual_chat]
+category = "neutral"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.information_request]
+category = "neutral"
+bonus = 1.0
+prompt_template = "intent"
+
+[types.topic_change]
+category = "neutral"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.brief_response]
+category = "neutral"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.factual_statement]
+category = "neutral"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.question]
+category = "neutral"
+bonus = 1.0
+prompt_template = "intent"
+
+[types.observation]
+category = "neutral"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.greeting]
+category = "neutral"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.farewell]
+category = "neutral"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.unclear_intent]
+category = "neutral"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.cold_response]
+category = "unfriendly"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.passive_aggressive]
+category = "unfriendly"
+bonus = 1.3
+prompt_template = "behavior"
+
+[types.dismissive]
+category = "unfriendly"
+bonus = 1.1
+prompt_template = "behavior"
+
+[types.sarcastic_criticism]
+category = "unfriendly"
+bonus = 1.2
+prompt_template = "behavior"
+
+[types.ignoring_boundaries]
+category = "unfriendly"
+bonus = 1.3
+prompt_template = "behavior"
+
+[types.condescending]
+category = "unfriendly"
+bonus = 1.2
+prompt_template = "behavior"
+
+[types.backhanded_compliment]
+category = "unfriendly"
+bonus = 1.1
+prompt_template = "behavior"
+
+[types.manipulation]
+category = "unfriendly"
+bonus = 1.5
+prompt_template = "behavior"
+
+[types.gaslighting]
+category = "unfriendly"
+bonus = 1.8
+prompt_template = "behavior"
+
+[types.blame_shifting]
+category = "unfriendly"
+bonus = 1.3
+prompt_template = "behavior"
+
+[types.direct_insult]
+category = "hostile"
+bonus = 1.0
+prompt_template = "behavior"
+
+[types.personal_attack]
+category = "hostile"
+bonus = 1.2
+prompt_template = "behavior"
+
+[types.value_denial]
+category = "hostile"
+bonus = 1.5
+prompt_template = "behavior"
+
+[types.existence_threat]
+category = "hostile"
+bonus = 1.8
+prompt_template = "behavior"
+
+[types.dehumanizing]
+category = "hostile"
+bonus = 1.5
+prompt_template = "behavior"
+
+[types.violent_language]
+category = "hostile"
+bonus = 1.3
+prompt_template = "behavior"
+
+[types.bullying]
+category = "hostile"
+bonus = 1.4
+prompt_template = "behavior"
+
+[types.group_attack]
+category = "hostile"
+bonus = 1.3
+prompt_template = "behavior"
+
+[types.sexual_harassment]
+category = "harassing"
+bonus = 1.3
+prompt_template = "harassment"
+
+[types.repeated_stalking]
+category = "harassing"
+bonus = 1.2
+prompt_template = "harassment"
+
+[types.spam_flooding]
+category = "harassing"
+bonus = 1.0
+prompt_template = "harassment"
+
+[types.violent_threat]
+category = "harassing"
+bonus = 1.5
+prompt_template = "harassment"
+
+[types.doxxing_threat]
+category = "harassing"
+bonus = 1.8
+prompt_template = "harassment"
+
+[types.forced_interaction]
+category = "harassing"
+bonus = 1.2
+prompt_template = "harassment"
+
+[types.objectification]
+category = "harassing"
+bonus = 1.3
+prompt_template = "harassment"
+
+[types.explicit_content]
+category = "harassing"
+bonus = 1.5
+prompt_template = "harassment"
+
+[modules]
+model_understand = true
+social_value = true
+user_impression = true
+heartflow = true
+trauma_system = true
+persona_system = true
+fatigue_controller = true
+group_atmosphere = true
+harassment_detector = true
+injection_detector = true
+
+[trauma]
+chaos_sensitivity = 0.8
+mask_base_strength = 8.0
+mask_fatigue_rate = 0.3
+mask_recovery_rate = 0.05
+energy_recovery_rate = 0.15
+fragment_eval_min_interval = 120.0
+layer_cache_seconds = 60.0
+
+[heartflow_params]
+max_wait_seconds = 120
+thinking_interval = 30
+max_thinking_count = 3
+max_followup_count = 2
+rest_default_duration = 300
+peek_probability = 0.05
+
+[fatigue]
+fatigue_penalty_max = 0.8
+trauma_penalty_max = 0.6
+annoyance_penalty_max = 0.5
+frequency_bonus_max = 0.3
+
+[social_runtime]
+social_decay_per_hour = 0.015
+social_damping_polarization_weight = 0.5
+social_damping_interaction_weight = 0.15
+social_single_step_min = 0.5
+social_single_step_max = 2.0
+social_new_user_threshold = 10.0
+social_new_user_factor = 0.6
+social_trauma_sensitive_threshold = 5.0
+social_trauma_sensitive_boost = 0.25
+offset_decay_per_hour = 0.15
+positive_streak_coeff = 1.5
+negative_streak_coeff = 2.0
+min_change_threshold = 0.001
+min_elapsed_hours = 0.01
+
+[global_shield]
+default_duration = 300.0
+max_duration = 1800.0
+irritation_threshold = 150.0
+irritation_decay_rate = 0.1
+auto_shield_count_threshold = 5
+auto_shield_severity_threshold = 3.0
+
+[user_protection]
+default_duration = 300.0
+max_duration = 3600.0
+auto_protect_threshold = -80.0
+harassment_protect_duration = 600.0
+harassment_severity_threshold = 0.8
+cooldown_after_expire = 60.0
+max_severity_history = 10
+escalation_factor = 1.5
+max_escalation_count = 5
+
+[harassment_detector]
+enabled = true
+weight_harassment = 0.65
+weight_sentiment = 0.35
+block_threshold = 0.72
+warn_threshold = 0.42
+window_seconds = 300.0
+cumulative_block_threshold = 5.0
+cumulative_warn_ratio = 0.55
+cumulative_high_threshold = 10.0
+combined_high_threshold = 0.9
+cumulative_mid_threshold = 5.0
+combined_mid_threshold = 0.55
+block_duration_high = 120
+block_duration_mid = 60
+block_duration_low = 30
+
+[relationship]
+trend_window_sec = 3600.0
+trend_improving_threshold = 3.0
+trend_declining_threshold = -3.0
+stage_change_cooldown_sec = 120.0
+protection_ratio = 0.35
+
+[memory_retrieval]
+bm25_weight = 1.0
+vector_weight = 0.35
+rrf_k = 60
+embedding_dimension = 1536
+max_documents = 5000
+hippocampus_prefilter_topk = 25
+hippocampus_rerank_topk = 8
+
+[memory_capacity]
+review_interval_seconds = 900
+
+[memory_dedup]
+similarity_threshold = 0.9
+scan_interval_seconds = 1800
+max_pairs_per_scan = 60
+merge_top_k = 20
+
+[memory_aging]
+compress_age_days = 60.0
+compress_min_length = 150
+cleanup_age_days = 180.0
+cleanup_importance_threshold = 0.1
+max_compress_per_cycle = 5
+
+[decay_forgetting]
+decay_rate_per_hour = 0.005
+forget_threshold = 0.15
+cycle_interval_seconds = 300.0
+max_batch_for_llm = 15
+min_age_for_decay_seconds = 3600.0
+
+[clarity_labels]
+vivid_threshold = 0.85
+clear_threshold = 0.65
+hazy_threshold = 0.45
+dim_threshold = 0.25
+
+[clarity_labels.prompt_hints]
+"清晰" = "你清晰地记得这件事"
+"比较清楚" = "你比较清楚地记得这件事"
+"有些模糊" = "你对这件事的记忆有些模糊了"
+"很模糊" = "你对这件事已经记忆很模糊，只记得大概"
+"几乎遗忘" = "你几乎已经忘记了这件事，只有零星印象"
+
+[overload]
+stressed_threshold = 0.6
+overloaded_threshold = 0.8
+critical_threshold = 0.95
+cache_seconds = 60.0
+
+[overload.stressed_factors]
+creation = 0.85
+recall = 0.9
+learning = 0.8
+focus = 0.85
+confusion = 0.1
+
+[overload.overloaded_factors]
+creation = 0.6
+recall = 0.7
+learning = 0.5
+focus = 0.6
+confusion = 0.3
+
+[overload.critical_factors]
+creation = 0.3
+recall = 0.45
+learning = 0.25
+focus = 0.35
+confusion = 0.6
+
+[emotion_importance]
+enabled = true
+cooldown_seconds = 5.0
+min_content_length = 10
+
+[injection_detection]
+enabled = true
+operation_strategy = "adaptive"
+max_content_length = 4096
+cache_enabled = true
+cache_ttl_seconds = 3600.0
+cache_max_entries = 500
+quick_screen_enabled = true
+whitelisted_senders = []
+
+[expression_style]
+enabled = true
+harvest_interval_seconds = 300.0
+max_samples_per_harvest = 8
+max_styles_per_channel = 100
+style_retention_days = 30.0
+selection_top_k = 5
+
+[dream]
+enabled = true
+interval_seconds = 1800.0
+max_rounds = 12
+max_context_items = 20
+
+[inner_voice]
+mention_min_desire = 6
+private_chat_min_desire = 5
+resource_penalty_max = 5
+tiredness_penalty_max = 4
+
+[inner_voice.subject_patterns.salutation]
+patterns = ["^(你好|嗨|哈喽|早|晚|在吗|在？|有人吗)", "(早上好|晚上好|下午好|晚安)"]
+
+[inner_voice.subject_patterns.inquiry]
+patterns = ["[?？]$", "(什么|怎么|为什么|哪里|谁|多少|几)", "(吗|呢|吧)[?？]$"]
+
+[inner_voice.subject_patterns.directive]
+patterns = ["^(请|帮我|给我|告诉我|说|做)", "(帮我|给我|告诉我|说一下)"]
+
+[inner_voice.subject_patterns.sentiment]
+patterns = ["(开心|难过|伤心|生气|烦|累|爽|哈哈|呜呜|嘤嘤)", "[！!]{2,}"]
+
+[inner_voice.subject_patterns.knowledge]
+patterns = ["(知道|了解|懂|会|能|怎么|如何|为什么)", "(是什么|什么意思|怎么回事)"]
+
+[inner_voice.subject_patterns.chitchat]
+patterns = ["(嗯|哦|啊|呢|吧|嘛)", "(我觉得|我认为|我想)"]
+
+[inner_voice.upbeat_terms]
+"好奇" = 2.5
+"有趣" = 2.5
+"有意思" = 2.5
+"喜欢" = 2.0
+"开心" = 1.5
+"期待" = 2.0
+"聊聊" = 1.5
+"说说" = 1.0
+"听听" = 1.5
+"想回" = 2.0
+"想聊" = 2.0
+"想说" = 1.5
+
+[inner_voice.downbeat_terms]
+"不想理" = -3.0
+"不想回" = -3.0
+"不想聊" = -2.5
+"没兴趣" = -2.0
+"没意思" = -2.0
+"无聊" = -2.0
+"烦死" = -2.5
+"懒得" = -2.0
+"算了" = -1.5
+"不管" = -1.5
+"沉默" = -1.0
+"窥屏" = -0.5
+
+[inner_voice.rest_terms]
+"休息" = 3.0
+"累了" = 2.5
+"疲惫" = 2.5
+"烦死了" = 2.5
+"不想理" = 1.5
+"没精力" = 2.0
+"受不了" = 2.0
+
+[inner_voice.time_bands.deep_night]
+start = 2
+end = 6
+adjustment = -2
+
+[inner_voice.time_bands.late_night]
+start = 0
+end = 2
+adjustment = -1
+
+[inner_voice.time_bands.evening]
+start = 22
+end = 24
+adjustment = -1
+
+[inner_voice.time_bands.morning]
+start = 6
+end = 9
+adjustment = 0
+
+[inner_voice.time_bands.daytime]
+start = 9
+end = 18
+adjustment = 1
+
+[inner_voice.time_bands.afternoon]
+start = 18
+end = 22
+adjustment = 0
+
+[inner_voice.waiting_thoughts]
+short = ["对方可能在忙吧...", "再等等看", "不知道在做什么呢"]
+medium = ["等了一会了...", "是不是忘记回复了？", "嗯...还没消息"]
+long = ["等了挺久了", "要不要主动说点什么...", "快到时间了"]
+
+[inner_voice.resource_thresholds]
+chat_reserve_low = 30
+chat_reserve_mid = 50
+brain_reserve_low = 30
+brain_reserve_mid = 50
+streak_high = 5
+streak_mid = 3
+
+[inner_voice.tiredness_thresholds]
+mental_drain_high = 80
+mental_drain_mid = 60
+endurance_low = 20
+endurance_mid = 40
+willingness_gap_high = 0.5
+
+[memory_format]
+default_mode = "structured"
+max_tokens = 600
+include_timestamps = true
+max_items = 12
+
+[relationship.stage_thresholds]
+hostile = [-100.0, -45.0]
+stranger = [-45.0, -10.0]
+acquaintance = [-10.0, 20.0]
+familiar = [20.0, 45.0]
+close = [45.0, 70.0]
+trusted = [70.0, 101.0]
+
+[relationship.milestones]
+first_trust = 30.0
+stable_friendship = 55.0
+high_trust = 75.0
+
+[model]
+name = "gpt-4o-mini"
+temperature = 0.3
+max_tokens = 500
+cache_ttl = 60
+cache_max_size = 1000
+
+[personality]
+personality = ""
+states = []
+state_probability = 0.0
+
+[chat_energy.chat_value]
+max = 100.0
+recovery_rate = 5.0
+cost_base = 15.0
+cost_peek = 5.0
+
+[chat_energy.thinking_power]
+max = 100.0
+cost_think = 3.0
+cost_reply = 8.0
+recovery_rate = 0.005
+
+[chat_energy.decay]
+fatigue_rate = 3.0
+annoyance_rate = 3.0
+min_recovery_interval = 6.0
+
+[memory_persistence]
+checkpoint_interval_seconds = 300
+max_context_items = 120
+enabled = true
+
+[self_behavior_learning]
+enabled = true
+min_samples = 6
+cooldown_seconds = 300.0
+max_patterns_per_stream = 20
+
+[emoji]
+enabled = true
+max_for_prompt = 20
+cooldown_seconds = 30.0
+max_history = 100
+max_registered = 200
+content_policy = "禁止血腥暴力、露骨色情、仇恨歧视、违法诱导内容"
+
+[keyword_reaction]
+keyword_rules = []
+regex_rules = []
+
+[recall]
+enabled = true
+
+[recall.timing]
+min_delay_seconds = 5.0
+max_delay_seconds = 110.0
+analysis_interval_seconds = 3.0
+history_window_seconds = 3600.0
+
+[recall.typo]
+max_per_hour = 5
+
+[recall.recall]
+max_per_hour = 3
+
+[social_sync]
+weight_group = 0.55
+weight_private = 0.45
+
+[harassment_full]
+weight_harassment = 0.65
+weight_sentiment = 0.35
+block_threshold = 0.72
+warn_threshold = 0.42
+window_seconds = 300.0
+cumulative_block_threshold = 5.0
+cumulative_warn_ratio = 0.55
+block_duration_high = 120
+block_duration_mid = 60
+block_duration_low = 30
+
+[prompts]
+behavior = "templates/prompts/understanding/behavior.txt"
+sentiment = "templates/prompts/understanding/sentiment.txt"
+intent = "templates/prompts/understanding/intent.txt"
+user_state = "templates/prompts/understanding/user_state.txt"
+atmosphere = "templates/prompts/understanding/atmosphere.txt"
+harassment = "templates/prompts/understanding/harassment.txt"
+interest = "templates/prompts/understanding/interest.txt"
+inner_voice = "templates/prompts/heartflow/inner_voice.txt"
+persona_generate = "templates/prompts/persona/persona_generate.txt"
+persona_trauma = "templates/prompts/persona/persona_trauma.txt"
+trait_extract = "templates/prompts/impression/trait_extract.txt"
+topic_detect = "templates/prompts/impression/topic_detect.txt"
+fragment_stimulus = "templates/prompts/psychology/fragment_stimulus.txt"
+self_behavior_learn = "templates/prompts/understanding/self_behavior_learn.txt"
+memory_eviction_judge = "templates/prompts/memory/eviction_judge.txt"
+memory_merge_judge = "templates/prompts/memory/merge_judge.txt"
+memory_merge_fuse = "templates/prompts/memory/merge_fuse.txt"
+memory_format_template = "templates/prompts/memory/format_template.txt"
+emotion_importance = "templates/prompts/memory/emotion_importance.txt"
+overload_prompt = "templates/prompts/memory/overload_prompt.txt"
+batch_forget = "templates/prompts/memory/batch_forget.txt"
+compress_old = "templates/prompts/memory/compress_old.txt"
+injection_detection = "templates/prompts/security/injection_detection.txt"
+injection_counter_response = "templates/prompts/security/injection_counter_response.txt"
+injection_simple_denial = "templates/prompts/security/injection_simple_denial.txt"
+injection_guardian_system = "templates/prompts/security/injection_guardian_system.txt"
+injection_quick_screen = "templates/prompts/security/injection_quick_screen.txt"
+injection_status_annotation = "templates/prompts/security/injection_status_annotation.txt"
+expression_style_harvest = "templates/prompts/expression/style_harvest.txt"
+expression_style_select = "templates/prompts/expression/style_select.txt"
+expression_style_review = "templates/prompts/expression/style_review.txt"
+emoji_visual_describe = "templates/prompts/emoji/visual_describe.txt"
+emoji_emotion_extract = "templates/prompts/emoji/emotion_extract.txt"
+emoji_pick_sticker = "templates/prompts/emoji/pick_sticker.txt"
+emoji_content_review = "templates/prompts/emoji/content_review.txt"
+dream_maintenance_summary = "templates/prompts/dream/maintenance_summary.txt"
+dream_narrative_generate = "templates/prompts/dream/narrative_generate.txt"
+trauma_layers = "templates/prompts/psychology/trauma_layers.txt"
+trauma_trigger_eval = "templates/prompts/psychology/trauma_trigger_eval.txt"
+worldview_impact = "templates/prompts/psychology/worldview_impact.txt"

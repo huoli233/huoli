@@ -1,0 +1,275 @@
+[inner]
+version = "1.11.0"
+
+# 配置文件版本号迭代规则同bot_config.toml
+
+[[api_providers]] # API服务提供商（可以配置多个）
+name = "GeminiProxy"                    # API服务商名称（可随意命名，在models的api-provider中需使用这个命名）
+base_url = "http://154.193.217.165:3000/v1" # API服务商的BaseURL
+api_key = "sk-prlNmubWwsigApmSCu6OgGGybxlTM6eQg0LrxZrXsYXuzcqA"                # API密钥（请替换为实际的API密钥）
+client_type = "openai"                  # 请求客户端（可选，默认值为"openai"，使用gimini等Google系模型时请配置为"gemini"）
+max_retry = 3                           # 最大重试次数（单个模型API调用失败，最多重试的次数）
+timeout = 120                            # API请求超时时间（单位：秒）
+retry_interval = 5                      # 重试间隔时间（单位：秒）
+
+[[api_providers]]
+name = "LMStudio"
+base_url = "http://127.0.0.1:1234/v1"
+api_key = "lm-studio"
+client_type = "openai"
+max_retry = 2
+timeout = 30
+retry_interval = 2
+
+[[api_providers]] # SiliconFlow的API服务商配置（嵌入模型专用）
+name = "SiliconFlow"
+base_url = "https://api.siliconflow.cn/v1"
+api_key = "sk-limgzochczzbslbdiipdsqmktpnhhweyajbuxuzkvskhlvjn"
+client_type = "openai"
+max_retry = 3
+timeout = 120
+retry_interval = 5
+
+[[models]] # 模型（可以配置多个）
+model_identifier = "gemini-3-flash-preview"
+name = "gemini-3-flash-preview"
+api_provider = "GeminiProxy"
+client_type = "gemini"
+price_in = 0
+price_out = 0
+
+[[models]]
+model_identifier = "gemini-3-flash"
+name = "gemini-3-flash"
+api_provider = "GeminiProxy"
+client_type = "gemini"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "gemini-3.1-flash-lite-preview"
+name = "gemini-3.1-flash-lite-preview"
+api_provider = "GeminiProxy"
+client_type = "gemini"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "gemini-2.5-flash-lite"
+name = "gemini-2.5-flash-lite"
+api_provider = "GeminiProxy"
+client_type = "gemini"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "gemini-2.5-flash"
+name = "gemini-2.5-flash"
+api_provider = "GeminiProxy"
+client_type = "gemini"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "Gemma 4 26B A4B IT"
+name = "gemma-4-26b-a4b-it"
+api_provider = "GeminiProxy"
+client_type = "openai"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "Gemma 4 31B IT"
+name = "gemma-4-31b-it"
+api_provider = "GeminiProxy"
+client_type = "openai"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "Gemma 3 4B"
+name = "gemma-3-4b-it"
+api_provider = "GeminiProxy"
+client_type = "openai"
+price_in = 0
+price_out = 0
+supports_tool_calling = false
+
+[[models]]
+model_identifier = "Gemma 3 1B"
+name = "gemma-3-1b-it"
+api_provider = "GeminiProxy"
+client_type = "openai"
+price_in = 0
+price_out = 0
+supports_tool_calling = false
+
+[[models]]
+model_identifier = "Gemma 3n E2B"
+name = "gemma-3n-e2b-it"
+api_provider = "GeminiProxy"
+client_type = "openai"
+price_in = 0
+price_out = 0
+supports_tool_calling = false
+
+[[models]]
+model_identifier = "Gemma 3n E4B"
+name = "gemma-3n-e4b-it"
+api_provider = "GeminiProxy"
+client_type = "openai"
+price_in = 0
+price_out = 0
+supports_tool_calling = false
+
+[[models]]
+model_identifier = "z-ai/glm5"
+name = "glm5"
+api_provider = "GeminiProxy"
+client_type = "openai"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "moonshotai/kimi-k2.5"
+name = "kimi-k2.5"
+api_provider = "GeminiProxy"
+client_type = "openai"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "qwen/qwen3.5-397b-a17b"
+name = "qwen3.5-397b-a17b"
+api_provider = "GeminiProxy"
+client_type = "openai"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "qwen3-0.6b"
+name = "qwen3-0.6b"
+api_provider = "LMStudio"
+price_in = 0
+price_out = 0
+max_tokens = 10000
+supports_tool_calling = true
+[models.extra_params]
+enable_thinking = false
+
+[[models]]
+model_identifier = "BAAI/bge-m3"
+name = "bge-m3"
+api_provider = "SiliconFlow"
+client_type = "openai"
+price_in = 0
+price_out = 0
+
+[[models]]
+model_identifier = "Qwen/Qwen3.5-4B"
+name = "qwen3.5-4b"
+api_provider = "SiliconFlow"
+client_type = "openai"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B"
+name = "deepseek-r1-qwen3-8b"
+api_provider = "SiliconFlow"
+client_type = "openai"
+price_in = 0
+price_out = 0
+# 注意：硅基流动的 DeepSeek 模型可能不支持 function calling，暂不设 supports_tool_calling
+
+[model_task_config.utils] # 在麦麦的一些组件中使用的模型，例如表情包模块，取名模块，关系模块，麦麦的情绪变化等，是麦麦必须的的模型
+model_list = ["qwen3-0.6b"] # 只用本地小模型，快！
+temperature = 0.2
+max_tokens = 2048                         # 减少token，加快速度
+slow_threshold = 15.0                     # 本地模型15秒算慢
+selection_strategy = "random"
+
+[model_task_config.tool_use] #功能模型，需要使用支持工具调用的模型，请使用较快的小模型（调用量较大）
+model_list = ["qwen3-0.6b"] # 只用本地小模型，快！
+temperature = 0.4
+max_tokens = 1024
+slow_threshold = 10.0                     # 本地模型15秒算慢
+selection_strategy = "random"
+
+[model_task_config.model_monitor] # 模型驱动监控系统（后台小模型）
+model_list = ["qwen3-0.6b"]  # 纯本地LMStudio小模型
+temperature = 0.7
+max_tokens = 2048                           # 减少token
+slow_threshold = 15.0                       # 本地模型15秒算慢
+selection_strategy = "random"
+
+[model_task_config.replyer] # 首要回复模型，还用于表达方式学习
+model_list = ["gemini-3.1-flash-lite-preview", "gemini-3-flash"] # 减少到2个，快！
+temperature = 0.3
+max_tokens = 2048
+slow_threshold = 25.0                     # 30秒算慢
+selection_strategy = "random"
+
+[model_task_config.planner] #决策：负责决定麦麦该什么时候回复的模型
+model_list = ["qwen3-0.6b"] # 只用本地小模型决策，快！
+temperature = 0.3
+max_tokens = 512                            # 减少token，更快
+slow_threshold = 10.0                       # 决策10秒算慢
+selection_strategy = "random"
+
+[model_task_config.vlm] # 图像识别模型
+model_list = ["gemini-3.1-flash-lite-preview"] # 只用1个，减少选择时间
+max_tokens = 256
+slow_threshold = 15.0
+selection_strategy = "random"
+
+[model_task_config.voice] # 语音识别模型
+model_list = ["gemini-3-flash"]
+slow_threshold = 12.0
+selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
+
+# 嵌入模型
+[model_task_config.embedding]
+model_list = ["bge-m3"]
+slow_threshold = 5.0
+selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
+
+[model_task_config.focus_chat]
+model_list = ["qwen3-0.6b"]
+temperature = 0.7
+max_tokens = 1024
+slow_threshold = 60.0
+selection_strategy = "random"
+
+[model_task_config.lightweight]
+model_list = ["qwen3-0.6b"]
+temperature = 0.3
+max_tokens = 1024
+slow_threshold = 60.0
+selection_strategy = "random"
+
+# ------------LPMM知识库模型------------
+
+[model_task_config.lpmm_entity_extract] # 实体提取模型
+model_list = ["qwen3-0.6b"] # 只用本地小模型
+temperature = 0.2
+max_tokens = 800
+slow_threshold = 20.0                       # 本地模型20秒算慢
+selection_strategy = "random"
+
+[model_task_config.lpmm_rdf_build] # RDF构建模型
+model_list = ["qwen3-0.6b"] # 只用本地小模型
+temperature = 0.2
+max_tokens = 800
+slow_threshold = 20.0                       # 本地模型20秒算慢
+selection_strategy = "random"

@@ -1,0 +1,28 @@
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级1, 可学习0) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级1, 可学习0) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级1, 可学习0) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级0, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词 'learn_prompt' 已更新 (5字符)", "level": "info", "lineno": 164, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级1, 可学习0) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "更新失败: 'sys_prompt' 是系统级提示词，不可修改", "level": "warning", "lineno": 160, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 0个 (系统级0, 可学习0) 来自0个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "更新失败: 'ghost' 不存在", "level": "warning", "lineno": 157, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 0个 (系统级0, 可学习0) 来自0个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 0个 (系统级0, 可学习0) 来自0个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 3个 (系统级2, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 3个 (系统级1, 可学习2) 来自2个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 1个 (系统级0, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词热重载完成: 1 -> 2", "level": "info", "lineno": 212, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词 'learn1' 已更新 (6字符)", "level": "info", "lineno": 164, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "已持久化 1 个提示词文件", "level": "info", "lineno": 181, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自1个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 2个 (系统级1, 可学习1) 来自2个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 0个 (系统级0, 可学习0) 来自0个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词目录不存在: C:\\Users\\mcpex\\AppData\\Local\\Temp\\tmp67bqw3qs\\ghost", "level": "warning", "lineno": 60, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 66个 (系统级32, 可学习34) 来自11个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 66个 (系统级32, 可学习34) 来自11个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}
+{"logger_name": "prompt_store", "event": "提示词加载完成: 66个 (系统级32, 可学习34) 来自11个文件", "level": "info", "lineno": 73, "module": "src.chat.utils.prompt_store", "timestamp": "02-27 22:08:48"}

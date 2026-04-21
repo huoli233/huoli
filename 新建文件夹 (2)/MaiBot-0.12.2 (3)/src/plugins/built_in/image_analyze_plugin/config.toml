@@ -1,0 +1,20 @@
+# image_analyze - 自动生成的配置文件
+# 分析用户发送的图片内容
+
+# 插件启用配置
+[plugin]
+
+# 是否启用插件
+enabled = true
+
+# 配置文件版本
+config_version = "1.0.0"
+
+
+# 图片分析组件配置
+[components]
+
+# 是否启用图片分析动作
+enable_analyze_image = true
+
+

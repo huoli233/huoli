@@ -7,12 +7,7 @@ from src.common.data_models.message_data_model import ReplyContentType
 from src.config.config import global_config
 from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.message_receive.uni_message_sender import UniversalMessageSender
-from src.chat.message_receive.message import (
-    MessageSending,
-    MessageRecv,
-    ReconstructedMessage,
-    _parse_mapping_like,
-)
+from src.chat.message_receive.message import MessageSending, MessageRecv
 from src.common.message_types.seg import Seg
 from src.common.message_types.user_info import UserInfo
 from src.common.message_types.message_base import MessageBase
@@ -142,30 +137,14 @@ async def _send_to_target(
         return False
 
 
-def db_message_to_message_recv(
-    message_obj: "DatabaseMessages",
-) -> ReconstructedMessage:
-    """将数据库dict重建为显式降级的 ReconstructedMessage 对象
+def db_message_to_message_recv(message_obj: "DatabaseMessages") -> MessageRecv:
+    """将数据库dict重建为MessageRecv对象
     Args:
         message_dict: 消息字典
 
     Returns:
-        ReconstructedMessage: 仅适用于引用/展示，不应冒充完整原始消息
+        Optional[MessageRecv]: 找到的消息，如果没找到则返回None
     """
-    additional_config, raw_additional_config = _parse_mapping_like(
-        getattr(message_obj, "additional_config", None)
-    )
-    priority_info, raw_priority_info = _parse_mapping_like(
-        getattr(message_obj, "priority_info", None)
-    )
-    missing_fields = ["message_segment"]
-    if raw_additional_config is not None:
-        additional_config["_raw_additional_config"] = raw_additional_config
-    if raw_priority_info is not None:
-        additional_config["_raw_priority_info"] = raw_priority_info
-    if priority_info:
-        additional_config["reconstructed_priority_info"] = priority_info
-
     # 构建MessageRecv对象
     user_info = {
         "platform": getattr(message_obj, 'user_platform', None) or "",
@@ -191,27 +170,18 @@ def db_message_to_message_recv(
         "time": getattr(message_obj, 'time', None) or 0.0,
         "group_info": group_info,
         "user_info": user_info,
-        "additional_config": additional_config,
+        "additional_config": getattr(message_obj, 'additional_config', None) or {},
         "format_info": format_info,
         "template_info": template_info,
     }
 
     message_dict_recv = {
         "message_info": message_info,
-        "message_segment": {"type": "text", "data": getattr(message_obj, 'processed_plain_text', None) or ""},
         "raw_message": getattr(message_obj, 'processed_plain_text', None) or "",
         "processed_plain_text": getattr(message_obj, 'processed_plain_text', None) or "",
     }
 
-    reconstructed = ReconstructedMessage(
-        message_dict_recv,
-        reconstruction_source="database_action_reply",
-        missing_fields=missing_fields,
-    )
-    if priority_info:
-        reconstructed.priority_mode = "priority"
-        reconstructed.priority_info = priority_info
-    return reconstructed
+    return MessageRecv(message_dict_recv)
 
 
 # =============================================================================

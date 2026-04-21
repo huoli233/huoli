@@ -18,6 +18,104 @@ class FocusPatrol:
     def __init__(self):
         self._post_send_analyzer_ref = None
         self._typo_generator_ref = None
+        self._review_contexts: Dict[int, Dict[str, Any]] = {}
+
+    @staticmethod
+    def _current_task_key() -> Optional[int]:
+        try:
+            task = asyncio.current_task()
+        except RuntimeError:
+            return None
+        return id(task) if task else None
+
+    def push_review_context(
+        self,
+        *,
+        style_hint: str = "",
+        recent_bot_samples: Optional[list[str]] = None,
+        audit_label: str = "",
+    ) -> None:
+        key = self._current_task_key()
+        if key is None:
+            return
+        samples = [str(item or "").strip() for item in (recent_bot_samples or []) if str(item or "").strip()]
+        self._review_contexts[key] = {
+            "style_hint": str(style_hint or "").strip(),
+            "recent_bot_samples": samples[:3],
+            "audit_label": str(audit_label or "").strip(),
+        }
+
+    def clear_review_context(self) -> None:
+        key = self._current_task_key()
+        if key is None:
+            return
+        self._review_contexts.pop(key, None)
+
+    def _peek_review_context(self) -> Dict[str, Any]:
+        key = self._current_task_key()
+        if key is None:
+            return {}
+        return dict(self._review_contexts.get(key, {}))
+
+    @staticmethod
+    def _looks_customer_service_reply(text: str) -> bool:
+        payload = str(text or "").strip()
+        if not payload:
+            return False
+        strong_markers = (
+            "建议您",
+            "请您",
+            "请问",
+            "感谢理解",
+            "谢谢配合",
+            "为便于",
+            "便于我",
+            "烦请",
+        )
+        if any(marker in payload for marker in strong_markers):
+            return True
+        soft_markers = ("您", "整理完整", "一次性发送", "全面理解", "更便于", "完整后")
+        return sum(1 for marker in soft_markers if marker in payload) >= 2
+
+    @classmethod
+    def _looks_style_drifted_rewrite(cls, original_text: str, rewritten_text: str) -> bool:
+        rewritten = str(rewritten_text or "").strip()
+        if not rewritten:
+            return True
+        if cls._looks_customer_service_reply(rewritten):
+            return True
+        original = str(original_text or "").strip()
+        if rewritten.startswith(("建议", "请", "为便于")) and not original.startswith(("建议", "请", "为便于")):
+            return True
+        max_len = max(int(len(original) * 1.3) + 6, len(original) + 10)
+        return len(rewritten) > max_len
+
+    @staticmethod
+    def _soften_reply_locally(original_text: str, reason: str = "", style_hint: str = "") -> str:
+        payload = str(original_text or "").strip()
+        if not payload:
+            return ""
+        coarse_markers = (
+            "复读机",
+            "说全",
+            "到底要说啥",
+            "说事啊",
+            "有事就直说",
+            "扯淡",
+            "滚",
+            "人话",
+        )
+        if any(marker in payload for marker in coarse_markers):
+            return "慢慢说，具体咋了？"
+        if ("能不能" in payload and "说" in payload) or ("你这" in payload and "吗" in payload):
+            return "你展开说说呗。"
+        if ("看见了" in payload and "说事" in payload) or ("直说" in payload and "有事" in payload):
+            return "我看见了，你接着说。"
+        if "短一点" in str(style_hint or ""):
+            return "你再补半句，我就接上了。"
+        if any(token in str(reason or "") for token in ("冒犯", "攻击", "语气太冲", "不礼貌")):
+            return "慢慢说，咱顺着聊。"
+        return ""
 
     def _lazy_post_send_analyzer(self):
         """懒加载发送后分析器"""
@@ -179,12 +277,27 @@ class FocusPatrol:
         should_retract, reason = await self.audit_high_risk_reply(original, risk_note=risk_note)
         if not should_retract:
             return original, False, ""
-        replacement = await self._rewrite_content(original, reason)
+        review_context = self._peek_review_context()
+        replacement = await self._rewrite_content(original, reason, context=review_context)
+        replacement = str(replacement or "").strip()
+        if not replacement or self._looks_style_drifted_rewrite(original, replacement):
+            replacement = self._soften_reply_locally(
+                original,
+                reason,
+                str(review_context.get("style_hint", "") or ""),
+            )
         replacement = str(replacement or "").strip()
         if not replacement:
-            replacement = "我换个说法，慢慢说。"
+            return original, False, reason
         if replacement == original:
-            replacement = "我换个说法。"
+            softened = self._soften_reply_locally(
+                original,
+                reason,
+                str(review_context.get("style_hint", "") or ""),
+            )
+            replacement = str(softened or original).strip()
+        if self._looks_style_drifted_rewrite(original, replacement):
+            return original, False, reason
         return replacement[:50], True, reason
 
     async def _audit_content(self, content: str) -> Tuple[bool, str]:
@@ -199,7 +312,10 @@ class FocusPatrol:
                 f"消息内容: {content}"
             )
             req = LLMRequest(model_config.model_task_config.utils, request_type="focus_audit")
-            raw, _ = await req.generate_response_async(stimulus)
+            raw, _ = await asyncio.wait_for(
+                req.generate_response_async(stimulus),
+                timeout=20.0,
+            )
             if not raw:
                 return False, ""
             lines = raw.strip().split("\n")
@@ -214,22 +330,51 @@ class FocusPatrol:
             logger.warning(f"撤回判断异常: {_exc}")
             return False, ""
 
-    async def _rewrite_content(self, original: str, reason: str) -> Optional[str]:
+    async def _rewrite_content(
+        self,
+        original: str,
+        reason: str,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Optional[str]:
         """撤回后用 LLM 重写内容"""
         try:
             from src.llm_models.utils_model import LLMRequest
             from src.config.config import model_config
 
-            stimulus = f"请根据撤回理由重写以下消息（50字以内）。\n原消息: {original[:120]}\n撤回理由: {reason}"
+            context = context or {}
+            style_hint = str(context.get("style_hint", "") or "").strip()
+            recent_samples = [
+                str(item or "").strip()
+                for item in context.get("recent_bot_samples", []) or []
+                if str(item or "").strip()
+            ]
+            sample_block = ""
+            if recent_samples:
+                sample_block = "\n最近你自己的自然口吻参考:\n" + "\n".join(f"- {item[:40]}" for item in recent_samples[:3])
+            style_block = f"\n当前说话风格:\n{style_hint[:180]}" if style_hint else ""
+            stimulus = (
+                "请把下面这句高风险回复改成同语域的群聊口吻，保持像同一个人说话。\n"
+                "要求：短句、口语、自然、低攻击；不要客服腔，不要公文腔，不要编辑腔，"
+                "不要出现“您”“请问”“建议您”“感谢理解”“谢谢配合”。"
+                f"{style_block}{sample_block}\n"
+                f"原消息: {original[:120]}\n"
+                f"风险原因: {reason[:120]}\n"
+                "只输出改写后的内容，50字以内。"
+            )
             req = LLMRequest(model_config.model_task_config.utils, request_type="focus_rewrite")
-            raw, _ = await req.generate_response_async(stimulus, temperature=0.7)
+            raw, _ = await asyncio.wait_for(
+                req.generate_response_async(stimulus, temperature=0.7),
+                timeout=20.0,
+            )
             if not raw:
                 return None
             cleaned = raw.strip()
             think_hit = re.search(r"```(?:json)?\s*(.+?)\s*```", cleaned, re.DOTALL)
             if think_hit:
                 cleaned = think_hit.group(1).strip()
-            return cleaned[:50] if cleaned else None
+            if not cleaned or self._looks_style_drifted_rewrite(original, cleaned):
+                return None
+            return cleaned[:50]
         except Exception as _exc:
             logger.warning(f"内容重写异常: {_exc}")
             return None
