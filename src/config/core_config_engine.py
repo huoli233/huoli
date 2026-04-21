@@ -39,6 +39,7 @@ class CoreSettingsHub:
             "trigger_thresholds",
             "inner_voice",
             "personality_sliders",
+            "heartfc_thresholds",
             "runtime_tuning",
         }
     )
@@ -194,6 +195,10 @@ class CoreSettingsHub:
     def trigger_thresholds_block(self) -> Dict[str, Any]:
         """触发阈值参数"""
         return self.fetch_block("trigger_thresholds")
+
+    def heartfc_thresholds_block(self) -> Dict[str, Any]:
+        """heartFC 阈值参数"""
+        return self.fetch_block("heartfc_thresholds")
 
     def inner_voice_block(self) -> Dict[str, Any]:
         """内心独白参数"""

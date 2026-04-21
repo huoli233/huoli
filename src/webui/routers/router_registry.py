@@ -66,6 +66,10 @@ def iter_router_factories():
             lambda: __import__("src.webui.routers.chat", fromlist=["router"]).router,
         ),
         (
+            "heartflow",
+            lambda: __import__("src.webui.routers.heartflow", fromlist=["router"]).router,
+        ),
+        (
             "knowledge",
             lambda: __import__("src.webui.routers.knowledge", fromlist=["router"]).router,
         ),

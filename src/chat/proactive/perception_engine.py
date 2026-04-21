@@ -10,6 +10,7 @@
 所有阈值和描述原子权重从 CoreSettingsHub 读取。
 """
 
+import asyncio
 import json
 import re
 import time

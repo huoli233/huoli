@@ -79,6 +79,28 @@ wt_inner_desire = 0.22
 wt_historical_reward = 0.13
 wt_intention_drive = 0.08
 
+[heartfc_thresholds]
+# HeartFC 第一阶段动态阈值；默认值等价于历史硬编码行为
+rest_energy_ratio = 0.10
+rest_thinking_ratio = 0.08
+loafing_high = 0.60
+loafing_medium = 0.45
+loafing_idle = 0.45
+quiet_high = 0.55
+quiet_medium = 0.45
+quiet_watch_low = 0.60
+avoidance_high = 0.40
+avoidance_medium = 0.45
+social_low_willingness = 0.45
+boredom_peek_trigger = 55.0
+boredom_scan_trigger = 40.0
+boredom_downgrade_trigger = 35.0
+loafing_social_inhibit = 0.40
+boredom_reply_suppress_high = 0.60
+boredom_reply_suppress_medium = 0.30
+boredom_activation_reduce = 0.75
+boredom_drift_trigger = 0.50
+
 [silence_detection]
 idle_trigger_seconds = 180.0
 topic_launch_cooldown = 300.0

@@ -4,9 +4,6 @@ import random
 import re
 import time
 from dataclasses import dataclass, field, is_dataclass, replace as dataclass_replace
-
-# 独立随机数生成器实例，避免 random.seed() 污染全局状态
-_rng = random.Random()
 import datetime
 from collections import Counter, defaultdict, deque
 from types import SimpleNamespace
@@ -15,6 +12,7 @@ from src.chat.utils.timer_calculator import Timer
 from src.chat.replyer.context_block_builder import build_reply_context_block
 from src.chat.heart_flow.heartFC_chat import HeartFChatting
 from src.chat.heart_flow.energy_manager import EnergyChainDimension
+from src.chat.heart_flow.heartfc_thresholds import get_heartfc_thresholds
 from src.core.watch_state_machine import WatchLevel
 from src.core.group_pattern_detector import GroupPattern
 from src.core.group_scene_state import AtmosphereType
@@ -34,6 +32,9 @@ if TYPE_CHECKING:
     from src.chat.proactive.proactive_decider import ProactiveDecision
 
 logger = get_logger("心流增强")
+
+# 独立随机数生成器实例，避免 random.seed() 污染全局状态
+_rng = random.Random()
 
 
 @dataclass
@@ -1447,6 +1448,7 @@ class EnhancedHeartFChatting(HeartFChatting):
         )
         unanswered = int(getattr(self, "_unanswered_bot_turns", 0) or 0)
         watch_rank = int(getattr(presence_state, "watch_state_rank", 2) or 2)
+        thresholds = get_heartfc_thresholds()
 
         night_phase = getattr(self, "_cached_night_phase", None)
         night_name = getattr(night_phase, "name", str(night_phase)) if night_phase is not None else ""
@@ -1455,17 +1457,26 @@ class EnhancedHeartFChatting(HeartFChatting):
             verdict.interruption_policy = "block"
             verdict.should_rest = True
             verdict.reason_codes.append("night_rest")
-        elif energy_ratio <= 0.10 or thinking_ratio <= 0.08:
+        elif energy_ratio <= thresholds.rest_energy_ratio or thinking_ratio <= thresholds.rest_thinking_ratio:
             verdict.posture = "rest"
             verdict.interruption_policy = "block" if not direct_target else "peek_only"
             verdict.should_rest = True
             verdict.reason_codes.append("resource_exhausted")
-        elif loafing >= 0.60 and quiet_preference >= 0.55 and avoidance >= 0.40 and not direct_target:
+        elif (
+            loafing >= thresholds.loafing_high
+            and quiet_preference >= thresholds.quiet_high
+            and avoidance >= thresholds.avoidance_high
+            and not direct_target
+        ):
             verdict.posture = "loaf"
             verdict.interruption_policy = "block" if not recent_human_activity else "peek_only"
             verdict.should_loaf = True
             verdict.reason_codes.append("high_loafing_quiet")
-        elif loafing >= 0.45 and (quiet_preference >= 0.45 or avoidance >= 0.45) and not direct_target:
+        elif (
+            loafing >= thresholds.loafing_medium
+            and (quiet_preference >= thresholds.quiet_medium or avoidance >= thresholds.avoidance_medium)
+            and not direct_target
+        ):
             verdict.posture = "peek_only"
             verdict.interruption_policy = "peek_only"
             verdict.should_loaf = True
@@ -1475,7 +1486,7 @@ class EnhancedHeartFChatting(HeartFChatting):
             verdict.interruption_policy = "block"
             verdict.should_rest = True
             verdict.reason_codes.append("ignored_chain_rest")
-        elif watch_rank <= 1 and quiet_preference >= 0.60 and not direct_target:
+        elif watch_rank <= 1 and quiet_preference >= thresholds.quiet_watch_low and not direct_target:
             verdict.posture = "peek_only"
             verdict.interruption_policy = "peek_only"
             verdict.reason_codes.append("watch_low_quiet")
@@ -1489,8 +1500,8 @@ class EnhancedHeartFChatting(HeartFChatting):
         elif (
             verdict.interruption_policy == "allow"
             and not recent_human_activity
-            and loafing >= 0.45
-            and max(boredom, loneliness, social_willingness) < 0.45
+            and loafing >= thresholds.loafing_idle
+            and max(boredom, loneliness, social_willingness) < thresholds.social_low_willingness
         ):
             verdict.posture = "loaf"
             verdict.interruption_policy = "peek_only"
@@ -3416,6 +3427,7 @@ class EnhancedHeartFChatting(HeartFChatting):
         返回转移描述字符串，或 None 表示无转移
         """
         try:
+            thresholds = get_heartfc_thresholds()
             from src.core.watch_state_machine import (
                 get_watch_machine,
                 WatchLevel as WatchState,
@@ -3573,8 +3585,8 @@ class EnhancedHeartFChatting(HeartFChatting):
                 _peek_trigger_strength = 0.0
                 if has_ping:
                     _peek_trigger_strength += 0.55
-                if _boredom > 55:
-                    _peek_trigger_strength += min(0.25, (_boredom - 55) / 100.0)
+                if _boredom > thresholds.boredom_peek_trigger:
+                    _peek_trigger_strength += min(0.25, (_boredom - thresholds.boredom_peek_trigger) / 100.0)
                 if _aff > 55:
                     _peek_trigger_strength += 0.10
                 if _tier3_count > 0:
@@ -3611,7 +3623,7 @@ class EnhancedHeartFChatting(HeartFChatting):
                     _skim_trigger += 0.10
                 if _human_batch_count >= 3:
                     _skim_trigger += 0.08
-                if _boredom > 40:
+                if _boredom > thresholds.boredom_scan_trigger:
                     _skim_trigger += 0.06
                 if _skim_trigger > 0.38:
                     try:
@@ -3732,7 +3744,7 @@ class EnhancedHeartFChatting(HeartFChatting):
                     _fallback_trigger += 0.22
                 if _silence > 60:
                     _fallback_trigger += 0.15
-                if _boredom < 35:
+                if _boredom < thresholds.boredom_downgrade_trigger:
                     _fallback_trigger += 0.12
                 if _ref_max < 0.15 and not _is_heated:
                     _fallback_trigger += 0.18
@@ -3756,6 +3768,7 @@ class EnhancedHeartFChatting(HeartFChatting):
 
     def _integrate_presence_metabolism(self, eagerness_val: float, now: float) -> None:
         """从新维度系统统一采集存在态+代谢约束（替代旧 PresenceCore+MetabolismEngine）"""
+        thresholds = get_heartfc_thresholds()
         _has_interest_topic = False
         _has_close_friend = False
         try:
@@ -3787,7 +3800,9 @@ class EnhancedHeartFChatting(HeartFChatting):
             elif _boredom_drive > 0.38:
                 _watch_will = max(0.05, 0.5 - min(0.30, (_boredom_drive - 0.38) * 0.5))
             _social_will = (
-                max(0.05, 0.5 - min(0.35, max(0.0, (_loafing_sup - 0.40)) * 0.6)) if _loafing_sup > 0.40 else 0.5
+                max(0.05, 0.5 - min(0.35, max(0.0, (_loafing_sup - thresholds.loafing_social_inhibit)) * 0.6))
+                if _loafing_sup > thresholds.loafing_social_inhibit
+                else 0.5
             )
             _curiosity = 0.3 + (1.0 - _combined_ratio) * 0.3 if _has_interest_topic else 0.25
             _avoidance = max(0.0, min(0.8, _loafing_level / 100.0 * 0.5))
@@ -8891,7 +8906,6 @@ class EnhancedHeartFChatting(HeartFChatting):
             content = ""
             if messages:
                 for msg in reversed(messages):
-                    uid = getattr(msg, "user_id", "") or ""
                     if self._is_human_message_obj(msg):
                         content = getattr(msg, "processed_plain_text", "") or getattr(msg, "content", "")
                         break
@@ -10887,12 +10901,13 @@ class EnhancedHeartFChatting(HeartFChatting):
 
                 _emo_snap = get_emotion_driven_core().get_state_snapshot(self.stream_id)
                 _boredom_val = float(_emo_snap.get("boredom", 0.0) or 0.0)
-                if _boredom_val > 0.6:
+                thresholds = get_heartfc_thresholds()
+                if _boredom_val > thresholds.boredom_reply_suppress_high:
                     _raw_readiness = max(
                         0.05,
-                        _raw_readiness * (1.0 - (_boredom_val - 0.6) * 0.5),
+                        _raw_readiness * (1.0 - (_boredom_val - thresholds.boredom_reply_suppress_high) * 0.5),
                     )
-                elif _boredom_val > 0.3:
+                elif _boredom_val > thresholds.boredom_reply_suppress_medium:
                     _raw_readiness = max(0.05, _raw_readiness * 0.9)
             except Exception as _e:
                 logger.debug(f"{self.log_prefix} unknown异常: {_e}")
@@ -15222,6 +15237,7 @@ class EnhancedHeartFChatting(HeartFChatting):
 
         这里只允许小幅修正，不能把原本应被否决的主动行为轻易翻成通过。
         """
+        thresholds = get_heartfc_thresholds()
         # 长沉默激励：至少静默5分钟后才给极轻微鼓励
         if silence_sec > 300.0:
             _si = min(0.03, (silence_sec - 300.0) / 900.0 * 0.03)
@@ -15250,8 +15266,8 @@ class EnhancedHeartFChatting(HeartFChatting):
                 _sw = float(getattr(_ps, "social_willingness", 0.5) or 0.5)
                 _boredom = max(0.0, min(1.0, 1.0 - _out))
                 _loneliness = max(0.0, min(1.0, _sw * 0.6))
-        if _boredom > 0.75:
-            _bb = min(0.03, (_boredom - 0.75) * 0.12)
+        if _boredom > thresholds.boredom_activation_reduce:
+            _bb = min(0.03, (_boredom - thresholds.boredom_activation_reduce) * 0.12)
             verdict.activation_bar = max(0.55, verdict.activation_bar - _bb)
             verdict.breakdown["boredom_incentive"] = _bb
         if _loneliness > 0.8:
@@ -18879,7 +18895,7 @@ class EnhancedHeartFChatting(HeartFChatting):
             if _meta_ns:
                 _boredom_val = float(_meta_ns.get("boredom_level", 0.0) or 0.0)
             _fde.set_boredom_level(_boredom_val)
-            if _boredom_val > 0.5:
+            if _boredom_val > get_heartfc_thresholds().boredom_drift_trigger:
                 _recall_results = _fde.evaluate_boredom_drift()
                 if _recall_results:
                     logger.debug(f"{self.log_prefix} [GAP-N] 无聊回看: 触发了{len(_recall_results)}条消息重新激活")
@@ -19575,4 +19591,3 @@ class EnhancedHeartFChatting(HeartFChatting):
         except Exception as exc:
             logger.debug(f"{self.log_prefix} [GAP-T] 跨引擎验证异常: {exc}")
             return {"error": str(exc)[:60]}
-
