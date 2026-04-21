@@ -53,6 +53,10 @@
 git add .
 git commit -m "[任务简述] - completed"
 ```
+规则补充：
+- 每完成一轮代码改动，并完成该轮对应的验证后，立即执行一次提交
+- 不要把多个改动轮次堆积到同一个提交里
+- 后续继续修改时，继续在上一个提交基础上开发，并在该轮结束后再次提交
 
 ## 阻塞处理
 
@@ -68,6 +72,6 @@ git commit -m "[任务简述] - completed"
 2. Test before mark complete — 全部验证通过才算完成
 3. Browser test for UI — UI 改动必须浏览器验证
 4. Document everything — progress.txt 是给后续 Agent 看的
-5. One commit per task — 代码+进度一起提交
+5. Commit after every completed change round — 每完成一轮改动并验证通过，就立即提交
 6. Never remove tasks — 只改 passes: false → true
 7. Stop if blocked — 阻塞就停，不要假装完成
