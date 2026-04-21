@@ -2,7 +2,7 @@ import time
 import json
 import re
 import asyncio
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from src.common.logger import get_logger
 
@@ -251,7 +251,7 @@ class StyleAbsorber:
             records = (
                 Expression.select()
                 .where(Expression.chat_id == self.channel_id)
-                .where(Expression.rejected.is_(False))
+                .where(~Expression.rejected)
                 .order_by(Expression.last_active_time.desc())
                 .limit(limit)
             )
@@ -430,7 +430,7 @@ class StyleDatabase:
             records = (
                 Expression.select()
                 .where(Expression.chat_id == channel_id)
-                .where(Expression.rejected.is_(False))
+                .where(~Expression.rejected)
                 .order_by(Expression.count.desc())
                 .limit(limit)
             )
@@ -500,7 +500,7 @@ class StyleDatabase:
             records = (
                 Expression.select()
                 .where(Expression.chat_id == channel_id)
-                .where(Expression.rejected.is_(False))
+                .where(~Expression.rejected)
                 .where(
                     (Expression.situation.contains(keyword))
                     | (Expression.style.contains(keyword))
@@ -580,7 +580,7 @@ class StyleStatistics:
                 Expression.select()
                 .where(
                     (Expression.chat_id == channel_id)
-                    & (Expression.checked.is_(True))
+                    & Expression.checked
                 )
                 .count()
             )
@@ -588,7 +588,7 @@ class StyleStatistics:
                 Expression.select()
                 .where(
                     (Expression.chat_id == channel_id)
-                    & (Expression.rejected.is_(True))
+                    & Expression.rejected
                 )
                 .count()
             )

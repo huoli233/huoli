@@ -312,6 +312,14 @@ async def graceful_shutdown():
 
 def raw_main() -> MainSystem:
     """执行所有同步初始化步骤并返回 MainSystem 实例。"""
+    os.environ["HUOLI_SYNC_CONFIG_ON_IMPORT"] = "1"
+    try:
+        from src.common.database.database_model import ensure_database_initialized
+
+        ensure_database_initialized(sync_constraints=False)
+    except Exception as exc:
+        logger.error(f"数据库显式初始化失败: {exc}")
+        raise
     _load_worker_runtime()
     # 跨平台时区设定
     if platform.system().lower() != "windows":

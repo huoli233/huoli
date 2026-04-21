@@ -1,7 +1,6 @@
 import os
 import tomlkit
 import shutil
-import sys
 
 from datetime import datetime
 from tomlkit import TOMLDocument
@@ -58,6 +57,7 @@ TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "template")
 # 考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
 # 对该字段的更新，请严格参照语义化版本规范：https://semver.org/lang/zh-CN/
 MMC_VERSION = "0.13.0-sakana.1"
+_SYNC_ON_IMPORT_ENV = "HUOLI_SYNC_CONFIG_ON_IMPORT"
 
 
 def get_key_comment(toml_table, key):
@@ -365,6 +365,21 @@ def update_model_config():
     _update_config_generic("model_config", "model_config_template")
 
 
+def ensure_config_files_exist() -> None:
+    """仅在配置文件缺失时从模板生成，避免普通导入产生文件更新副作用。"""
+    bot_config_path = os.path.join(CONFIG_DIR, "bot_config.toml")
+    model_config_path = os.path.join(CONFIG_DIR, "model_config.toml")
+    if not os.path.exists(bot_config_path):
+        update_config()
+    if not os.path.exists(model_config_path):
+        update_model_config()
+
+
+def should_sync_config_on_import() -> bool:
+    """是否允许在模块导入时执行模板同步。默认关闭，仅在主程序启动路径显式开启。"""
+    return os.environ.get(_SYNC_ON_IMPORT_ENV, "").strip() == "1"
+
+
 @dataclass
 class Config(ConfigBase):
     """总配置类"""
@@ -506,8 +521,11 @@ def api_ada_load_config(config_path: str) -> APIAdapterConfig:
 
 # 获取配置文件路径
 logger.info(f"MaiCore当前版本: {MMC_VERSION}")
-update_config()
-update_model_config()
+if should_sync_config_on_import():
+    update_config()
+    update_model_config()
+else:
+    ensure_config_files_exist()
 
 logger.info("正在品鉴配置文件...")
 global_config = load_config(

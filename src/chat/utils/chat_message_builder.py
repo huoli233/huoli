@@ -5,7 +5,7 @@ import re
 import time
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional
 
 from src.chat.utils.utils import translate_timestamp_to_human_readable
 from src.common.database.database_model import (
@@ -525,7 +525,7 @@ def get_raw_msg_by_timestamp_with_chat(
             != getattr(global_config.bot, "qq_account", "")
         )
     if filter_command:
-        query = query.where(MessageRecord.is_command.is_(False))
+        query = query.where(~MessageRecord.is_command)
     return _materialize_query(
         _apply_limit(query, MessageRecord.time, limit, limit_mode)
     )
@@ -554,7 +554,7 @@ def get_raw_msg_by_timestamp_with_chat_inclusive(
             != getattr(global_config.bot, "qq_account", "")
         )
     if filter_command:
-        query = query.where(MessageRecord.is_command.is_(False))
+        query = query.where(~MessageRecord.is_command)
     return _materialize_query(
         _apply_limit(query, MessageRecord.time, limit, limit_mode)
     )
@@ -1318,8 +1318,6 @@ async def build_anonymous_messages(
     output_lines: list[str] = []
     pic_id_mapping: dict[str, str] = {}
     pic_counter = 1
-    pic_description_cache: dict[str, str] = {}
-
     def process_pic_ids(content: str) -> str:
         """处理内容中的图片ID。"""
         nonlocal pic_counter

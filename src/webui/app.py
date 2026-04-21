@@ -15,6 +15,17 @@ from src.common.constants import CORS_ALLOWED_ORIGINS  # noqa: E402
 logger = get_logger("WebUI应用")
 
 
+def _ensure_database_ready():
+    """显式初始化数据库，避免仅导入 ORM 模块就触发副作用。"""
+    try:
+        from src.common.database.database_model import ensure_database_initialized
+
+        ensure_database_initialized(sync_constraints=False)
+    except Exception as exc:
+        logger.error(f"❌ WebUI 数据库初始化失败: {exc}", exc_info=True)
+        raise
+
+
 def create_app(
     host: str = "0.0.0.0",
     port: int = 8001,
@@ -29,6 +40,7 @@ def create_app(
         enable_static: 是否启用静态文件服务
     """
     app = FastAPI(title="Huoli Bot WebUI")
+    _ensure_database_ready()
 
     _setup_anti_crawler(app)
     _setup_cors(app, port)

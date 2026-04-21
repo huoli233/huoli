@@ -10,10 +10,13 @@ from peewee import (
 from .database import db
 import datetime
 import re
+import threading
 import time
 from src.common.logger import get_logger
 
 logger = get_logger("数据库模型")
+_database_initialized = False
+_database_init_lock = threading.Lock()
 
 
 class BaseModel(Model):
@@ -601,6 +604,8 @@ def initialize_database(sync_constraints=False):
                                如果为 True，会检查并修复字段的 NULL 约束不一致问题。
     """
 
+    global _database_initialized
+
     try:
         with db:  # 管理 table_exists 检查的连接
             for model in MODELS:
@@ -680,7 +685,19 @@ def initialize_database(sync_constraints=False):
         # 如果检查失败（例如数据库不可用），则退出
         return
 
+    _database_initialized = True
     logger.info("数据库初始化完成")
+
+
+def ensure_database_initialized(sync_constraints: bool = False) -> None:
+    """显式初始化数据库，避免模块导入即产生建表副作用。"""
+    global _database_initialized
+    if _database_initialized:
+        return
+    with _database_init_lock:
+        if _database_initialized:
+            return
+        initialize_database(sync_constraints=sync_constraints)
 
 
 def sync_field_constraints():
@@ -1010,8 +1027,9 @@ def fix_image_id():
         logger.exception(f"修复 image_id 时出错: {e}")
 
 
-# 模块加载时调用初始化函数
-# PERF-003: sync_constraints 默认 False，避免启动时全量表重建
-# fix_image_id 改为按需执行，不再每次启动都跑
-initialize_database(sync_constraints=False)
+# 数据库初始化改为显式调用，避免导入模型模块时立即触发建表/扫描副作用。
+# 调用入口：
+# - bot.py / 主程序启动
+# - WebUI app 创建
+# - 需要独立访问数据库的脚本
 # fix_image_id() 需要时由调用方手动触发

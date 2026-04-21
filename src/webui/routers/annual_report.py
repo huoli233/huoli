@@ -382,7 +382,7 @@ async def get_social_network(year: int = 2025) -> SocialNetworkData:
             .where(
                 (Messages.time >= start_ts)
                 & (Messages.time <= end_ts)
-                & (Messages.is_mentioned.is_(True))
+                & Messages.is_mentioned
             )
             .count()
         )
@@ -716,7 +716,7 @@ async def get_expression_vibe(year: int = 2025) -> ExpressionVibeData:
             .where(
                 (Expression.last_active_time >= start_ts)
                 & (Expression.last_active_time <= end_ts)
-                & (Expression.rejected.is_(True))
+                & Expression.rejected
             )
             .count()
         )
@@ -727,7 +727,7 @@ async def get_expression_vibe(year: int = 2025) -> ExpressionVibeData:
             .where(
                 (Expression.last_active_time >= start_ts)
                 & (Expression.last_active_time <= end_ts)
-                & (Expression.checked.is_(True))
+                & Expression.checked
             )
             .count()
         )
@@ -781,7 +781,7 @@ async def get_expression_vibe(year: int = 2025) -> ExpressionVibeData:
             .where(
                 (Messages.time >= start_ts)
                 & (Messages.time <= end_ts)
-                & (Messages.is_picid.is_(True))
+                & Messages.is_picid
             )
             .count()
         )
@@ -943,7 +943,7 @@ async def get_achievements(year: int = 2025) -> AchievementData:
         # 1. 新学到的黑话数量
         # Jargon 表没有时间字段,统计全部已确认的黑话
         data.new_jargon_count = (
-            Jargon.select().where(Jargon.is_jargon.is_(True)).count()
+            Jargon.select().where(Jargon.is_jargon).count()
         )
 
         # 2. 代表性黑话示例
