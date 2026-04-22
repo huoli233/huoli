@@ -357,6 +357,153 @@ def _extract_circadian_rhythm(
     }
 
 
+def _extract_memory_stack(channel_id: str) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "ephemeral_short_term_count": 0,
+        "long_term_total": 0,
+        "long_term_by_category": {},
+        "planner_short_term_count": 0,
+        "planner_long_term_count": 0,
+        "memoir_phase": "open",
+        "memoir_exchange_tally": 0,
+        "memoir_consecutive_timeouts": 0,
+        "memoir_last_topic": "",
+        "memoir_last_mood": "",
+        "journal_count": 0,
+        "governance": {},
+        "health": {},
+        "overload": {},
+        "reactivation": {},
+        "knowledge_entry_count": 0,
+    }
+    try:
+        from src.core.memory_governance_engine import get_memory_governance_engine
+
+        payload["governance"] = get_memory_governance_engine(channel_id).get_snapshot().to_dict()
+    except Exception as exc:
+        logger.debug(f"记忆治理导出失败: {exc}")
+    try:
+        from src.memory_system.memory_consolidator import acquire_ephemeral_bank
+
+        bank = acquire_ephemeral_bank()
+        buffers = getattr(bank, "_channel_buffers", {}) or {}
+        payload["ephemeral_short_term_count"] = len(buffers.get(channel_id, []) or [])
+    except Exception as exc:
+        logger.debug(f"短期记忆导出失败: {exc}")
+    try:
+        from src.memory_system.memory_core import get_memory_core
+
+        hub = get_memory_core()
+        long_term_stats = hub.compile_statistics(channel_id)
+        payload["long_term_total"] = _safe_int(long_term_stats.get("total", 0))
+        payload["long_term_by_category"] = dict(long_term_stats.get("by_category", {}) or {})
+        payload["health"] = hub.generate_health_assessment(channel_id)
+        payload["overload"] = hub.retrieve_overload_status(channel_id)
+    except Exception as exc:
+        logger.debug(f"长期记忆导出失败: {exc}")
+    try:
+        from src.core.memory_reactivation_gate import get_reactivation_gate
+
+        payload["reactivation"] = get_reactivation_gate(channel_id).recent_activation_summary()
+    except Exception as exc:
+        logger.debug(f"记忆激活导出失败: {exc}")
+    try:
+        from src.core.unified_planner import get_unified_planner
+
+        planner_stats = get_unified_planner().get_context_stats(channel_id)
+        payload["planner_short_term_count"] = _safe_int(planner_stats.get("short_term_count", 0))
+        payload["planner_long_term_count"] = _safe_int(planner_stats.get("long_term_count", 0))
+    except Exception as exc:
+        logger.debug(f"规划器上下文导出失败: {exc}")
+    try:
+        from src.chat.proactive.session_tracker import get_memoir_cabinet
+
+        memoir = get_memoir_cabinet().lookup_by_channel(channel_id)
+        if memoir is not None:
+            payload["memoir_phase"] = str(getattr(memoir, "phase", "open") or "open")
+            payload["memoir_exchange_tally"] = _safe_int(getattr(memoir, "exchange_tally", 0))
+            payload["memoir_consecutive_timeouts"] = _safe_int(getattr(memoir, "consecutive_timeouts", 0))
+            payload["memoir_last_topic"] = str(getattr(memoir, "last_topic", "") or "")
+            payload["memoir_last_mood"] = str(getattr(memoir, "last_mood", "") or "")
+            try:
+                payload["journal_count"] = len(memoir.latest_entries(999))
+            except Exception:
+                payload["journal_count"] = 0
+    except Exception as exc:
+        logger.debug(f"回忆录导出失败: {exc}")
+    try:
+        from src.modules.modcore.social_cognition.knowledge_graph import get_knowledge_graph_manager
+
+        kg = get_knowledge_graph_manager(channel_id)
+        payload["knowledge_entry_count"] = _safe_int(getattr(kg, "entry_count", 0))
+    except Exception as exc:
+        logger.debug(f"知识图谱导出失败: {exc}")
+    return payload
+
+
+def _extract_autonomy_runtime(chat: Any, channel_id: str) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "active_intentions": [],
+        "intention_alive_count": 0,
+        "intention_drive": 0.0,
+        "max_intention_urgency": 0.0,
+        "reward_score": 0.0,
+        "pending_proactive_events": 0,
+        "self_recent_messages_count": 0,
+        "self_recent_actions_count": 0,
+        "self_recent_events_count": 0,
+        "background_event": {},
+    }
+    try:
+        from src.chat.proactive.intention_pool import get_intention_pool
+
+        pool = get_intention_pool()
+        payload["active_intentions"] = pool.build_planner_intent_payload(channel_id, limit=3)
+        snapshot = pool.snapshot(channel_id)
+        payload["intention_alive_count"] = _safe_int(snapshot.get("alive_count", 0))
+        payload["max_intention_urgency"] = round(_safe_float(snapshot.get("max_urgency", 0.0)), 3)
+        payload["intention_drive"] = round(_safe_float(pool.build_decision_signal(channel_id), 0.0), 3)
+    except Exception as exc:
+        logger.debug(f"意图池导出失败: {exc}")
+    try:
+        from src.chat.proactive.proactive_decider import get_proactive_decider
+
+        decider = get_proactive_decider()
+        payload["reward_score"] = round(_safe_float(decider.ledger.channel_reward(channel_id), 0.0), 3)
+        pending = getattr(decider.ledger, "_pending", []) or []
+        payload["pending_proactive_events"] = sum(
+            1
+            for evt in pending
+            if not bool(getattr(evt, "resolved", False))
+            and str(getattr(evt, "channel_id", "") or "") == str(channel_id)
+        )
+    except Exception as exc:
+        logger.debug(f"主动账本导出失败: {exc}")
+    try:
+        from src.chat.proactive.proactive_integration_hub import get_proactive_integration_hub
+
+        state = get_proactive_integration_hub().get_state_snapshot(channel_id)
+        if isinstance(state, dict) and "error" not in state:
+            self_awareness = state.get("self_awareness_data", {}) or {}
+            payload["self_recent_messages_count"] = _safe_int(self_awareness.get("recent_messages_count", 0))
+            payload["self_recent_actions_count"] = _safe_int(self_awareness.get("recent_actions_count", 0))
+            payload["self_recent_events_count"] = _safe_int(self_awareness.get("recent_events_count", 0))
+    except Exception as exc:
+        logger.debug(f"主动整合快照导出失败: {exc}")
+    try:
+        background_event = getattr(chat, "_last_background_event", {}) if chat is not None else {}
+        if isinstance(background_event, dict):
+            payload["background_event"] = {
+                "type": str(background_event.get("type", "") or ""),
+                "priority": round(_safe_float(background_event.get("priority", 0.0)), 3),
+                "budget_remaining": _safe_int(background_event.get("budget_remaining", 0)),
+                "scheduled_at": _safe_float(background_event.get("scheduled_at", 0.0)),
+            }
+    except Exception as exc:
+        logger.debug(f"后台事件导出失败: {exc}")
+    return payload
+
+
 def _extract_relationship_profile(chat: Any, world_state: Dict[str, Any]) -> Dict[str, Any]:
     world_target = world_state.get("target", {}) if isinstance(world_state, dict) else {}
     runtime = _extract_runtime_snapshot(chat)
@@ -439,6 +586,8 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
     energy = _extract_energy_domain(channel_id)
     emergence = _extract_emergence_state(channel_id)
     relation = _extract_relationship_profile(chat, world_state)
+    memory_stack = _extract_memory_stack(channel_id)
+    autonomy_runtime = _extract_autonomy_runtime(chat, channel_id)
     subject = world_state.get("subject", {}) if isinstance(world_state, dict) else {}
     scene = world_state.get("scene", {}) if isinstance(world_state, dict) else {}
     behavior = world_state.get("behavior", {}) if isinstance(world_state, dict) else {}
@@ -573,6 +722,8 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
             "chaos_load": round(chaos_load, 3),
             "reply_quality_cap": round(_clamp(1.0 - relation.get("mask_load", 0.0) / 12.0, 0.25, 1.0), 3),
         },
+        "memory_stack": memory_stack,
+        "autonomy_runtime": autonomy_runtime,
         "relationship_profile": relation,
         "emergence_core": emergence,
         "circadian_rhythm": circadian,

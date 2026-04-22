@@ -29,6 +29,7 @@ class IntegratedState:
     intention_data: Dict[str, Any] = field(default_factory=dict)
     energy_data: Dict[str, Any] = field(default_factory=dict)
     metabolism_data: Dict[str, Any] = field(default_factory=dict)
+    memory_data: Dict[str, Any] = field(default_factory=dict)
     signal_bundle: Optional[SignalBundle] = None
     verdict: Optional[ProactiveDecision] = None
 
@@ -185,6 +186,7 @@ class ProactiveIntegrationHub:
         state.intention_data = self._collect_intention_data(channel_id)
         state.energy_data = self._collect_energy_data(channel_id)
         state.metabolism_data = self._collect_metabolism_data(channel_id)
+        state.memory_data = self._collect_memory_data(channel_id)
         state.signal_bundle = self._build_signal_bundle(state)
         self._state_cache[channel_id] = state
         return state
@@ -392,6 +394,53 @@ class ProactiveIntegrationHub:
             logger.debug(f"代谢数据收集失败: {e}")
             return {}
 
+    def _collect_memory_data(self, channel_id: str) -> Dict[str, Any]:
+        """收集短期/长期/回忆录/知识/过载治理状态。"""
+        memory_data: Dict[str, Any] = {}
+        try:
+            from src.core.memory_governance_engine import get_memory_governance_engine
+
+            memory_data["governance"] = get_memory_governance_engine(channel_id).get_snapshot().to_dict()
+        except Exception as e:
+            logger.debug(f"记忆治理数据收集失败: {e}")
+        try:
+            from src.memory_system.memory_consolidator import acquire_ephemeral_bank
+
+            bank = acquire_ephemeral_bank()
+            channel_buffers = getattr(bank, "_channel_buffers", {}) or {}
+            memory_data["short_term_count"] = len(channel_buffers.get(channel_id, []) or [])
+        except Exception as e:
+            logger.debug(f"短期记忆数据收集失败: {e}")
+        try:
+            from src.memory_system.memory_core import get_memory_core
+
+            hub = get_memory_core()
+            memory_data["long_term_stats"] = hub.compile_statistics(channel_id)
+            memory_data["health"] = hub.generate_health_assessment(channel_id)
+            memory_data["overload"] = hub.retrieve_overload_status(channel_id)
+        except Exception as e:
+            logger.debug(f"长期记忆数据收集失败: {e}")
+        try:
+            from src.core.memory_reactivation_gate import get_reactivation_gate
+
+            memory_data["reactivation"] = get_reactivation_gate(channel_id).recent_activation_summary()
+        except Exception as e:
+            logger.debug(f"记忆激活数据收集失败: {e}")
+        try:
+            from src.core.unified_planner import get_unified_planner
+
+            memory_data["planner_context"] = get_unified_planner().get_context_stats(channel_id)
+        except Exception as e:
+            logger.debug(f"规划器上下文统计收集失败: {e}")
+        try:
+            from src.modules.modcore.social_cognition.knowledge_graph import get_knowledge_graph_manager
+
+            kg = get_knowledge_graph_manager(channel_id)
+            memory_data["knowledge"] = {"entry_count": int(getattr(kg, "entry_count", 0) or 0)}
+        except Exception as e:
+            logger.debug(f"知识图谱统计收集失败: {e}")
+        return memory_data
+
     def _build_signal_bundle(self, state: IntegratedState) -> SignalBundle:
         """将整合状态转换为 SignalBundle"""
         emotion = state.emotion_state
@@ -400,6 +449,7 @@ class ProactiveIntegrationHub:
         intention = state.intention_data
         energy = state.energy_data
         metabolism = state.metabolism_data
+        memory_data = state.memory_data
         emotional_readiness = emotion.get("proactive_willingness", 0.0)
         if perception:
             emotional_readiness = max(emotional_readiness, perception.get("engagement_pull", 0.0))
@@ -412,7 +462,7 @@ class ProactiveIntegrationHub:
         if intention:
             intention_drive = intention.get("drive_score", 0.0)
         silence_seconds = silence.get("silence_seconds", 0.0)
-        return SignalBundle(
+        bundle = SignalBundle(
             emotional_readiness=emotional_readiness,
             boredom=emotion.get("boredom", 0.0),
             loneliness=emotion.get("loneliness", 0.0),
@@ -424,6 +474,37 @@ class ProactiveIntegrationHub:
             silence_seconds=silence_seconds,
             channel_id=state.channel_id,
         )
+        governance = memory_data.get("governance", {}) if isinstance(memory_data.get("governance"), dict) else {}
+        overload = memory_data.get("overload", {}) if isinstance(memory_data.get("overload"), dict) else {}
+        planner_context = memory_data.get("planner_context", {}) if isinstance(memory_data.get("planner_context"), dict) else {}
+        session = state.session_data
+
+        utilization = self._metric_or_default(governance.get("utilization"), 0.0)
+        if utilization >= 0.85:
+            bundle.content_novelty = max(0.12, bundle.content_novelty - 0.18)
+            bundle.intention_drive = max(0.0, bundle.intention_drive - 0.08)
+        elif utilization >= 0.65:
+            bundle.content_novelty = max(0.18, bundle.content_novelty - 0.08)
+
+        overload_ratio = self._metric_or_default(overload.get("load_ratio"), 0.0)
+        amnesia_pressure = self._metric_or_default(overload.get("amnesia_pressure"), 0.0)
+        if overload.get("emergency_needed"):
+            bundle.vitality_ratio = min(bundle.vitality_ratio, 0.18)
+            bundle.inner_voice_desire = min(bundle.inner_voice_desire, 3)
+        elif overload_ratio >= 0.8 or amnesia_pressure >= 0.6:
+            bundle.vitality_ratio = min(bundle.vitality_ratio, 0.35)
+            bundle.inner_voice_desire = min(bundle.inner_voice_desire, 4)
+
+        if session.get("is_waiting") and int(session.get("consecutive_timeouts", 0) or 0) <= 1:
+            bundle.intention_drive = min(1.0, bundle.intention_drive + 0.12)
+        elif int(session.get("consecutive_timeouts", 0) or 0) >= 3:
+            bundle.intention_drive = max(0.0, bundle.intention_drive - 0.10)
+
+        short_term_count = int(planner_context.get("short_term_count", 0) or 0)
+        long_term_count = int(planner_context.get("long_term_count", 0) or 0)
+        if short_term_count > 0 and long_term_count > 0:
+            bundle.content_novelty = min(1.0, bundle.content_novelty + 0.04)
+        return bundle
 
     def _extract_social_standing(self, state: IntegratedState) -> float:
         """从能量链数据中提取社交声望值（范围 -50~100 → 归一化传递给主动决策器）"""
@@ -627,6 +708,7 @@ class ProactiveIntegrationHub:
             "intention_data": state.intention_data,
             "energy_data": state.energy_data,
             "metabolism_data": state.metabolism_data,
+            "memory_data": state.memory_data,
             "signal_bundle": state.signal_bundle.__dict__ if state.signal_bundle else None,
             "verdict": state.verdict.__dict__ if state.verdict else None,
         }

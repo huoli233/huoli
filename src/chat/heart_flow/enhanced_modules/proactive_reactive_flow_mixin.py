@@ -476,6 +476,18 @@ class ProactiveReactiveFlowMixin:
         )
         if not governor_verdict.allow_generation or governor_verdict.reply_mode != "proactive":
             return False, self._summarize_behavior_governor(governor_verdict)
+        _scheduled_event = None
+        if is_background:
+            try:
+                _scheduled_event = self._check_background_event_schedule()
+            except Exception as _event_exc:
+                logger.debug(f"{self.log_prefix} 后台事件调度检查失败: {_event_exc}")
+            if _scheduled_event:
+                self._last_background_event = _scheduled_event
+                _event_type = str(_scheduled_event.get("type", "") or "")
+                _event_priority = float(_scheduled_event.get("priority", 0.0) or 0.0)
+                if _event_priority >= 0.18:
+                    return True, f"后台事件触发:{_event_type}(priority={_event_priority:.2f})"
         # 优先尝试 IntegrationHub (async，在此处 await)
         _hub_succeeded = False
         try:
@@ -815,12 +827,27 @@ class ProactiveReactiveFlowMixin:
         _delivery_form = "standalone"
         _mention_user_name = ""
         _reference_user_name = ""
+        _scheduled_event = getattr(self, "_last_background_event", None) or {}
         if _proactive_plan is not None:
             _proactive_topic = str(getattr(_proactive_plan, "extra_notes", "") or "")
             _proactive_emotion = str(getattr(_proactive_plan, "emotion_hint", "") or "")
             _delivery_form = str(getattr(_proactive_plan, "delivery_form", "standalone") or "standalone")
             _mention_user_name = str(getattr(_proactive_plan, "mention_user_name", "") or "")
             _reference_user_name = str(getattr(_proactive_plan, "reference_user_name", "") or "")
+        if isinstance(_scheduled_event, dict) and _scheduled_event:
+            _event_type = str(_scheduled_event.get("type", "") or "")
+            if _event_type == "proactive_greeting" and not _proactive_topic:
+                _proactive_topic = "打个招呼"
+            elif _event_type == "random_observation" and not _proactive_topic:
+                _proactive_topic = "随手观察群里气氛"
+            elif _event_type == "mood_expression" and not _proactive_emotion:
+                _proactive_emotion = "情绪表达"
+            elif _event_type == "memory_recall" and not _proactive_topic:
+                _proactive_topic = "回想起之前聊过的话题"
+            elif _event_type == "topic_resurrection" and not _proactive_topic:
+                _proactive_topic = "把旧话题重新捞起来"
+            if _event_type and _event_type not in thought_text:
+                thought_text = f"[后台事件:{_event_type}] {thought_text}"
 
         # 收集近期消息供执行器定位引用目标
         _proactive_incoming = []
@@ -864,12 +891,14 @@ class ProactiveReactiveFlowMixin:
             logger.error(f"{self.log_prefix} ⚠️ 后台主动回复超时(120s)")
         if acted:
             self._last_idle_proactive_ts = now_act
+            self._last_background_event = {}
             await self._finalize_external_proactive_reply_flow(
                 _proactive_incoming,
                 source="background_proactive",
                 desire_level=_actual_desire,
             )
         else:
+            self._last_background_event = {}
             self._restore_pre_reply_resource_snapshot(
                 _pre_reply_resource_snapshot,
                 reason="background_proactive未形成有效回复",

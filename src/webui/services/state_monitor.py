@@ -99,6 +99,8 @@ def _label_source(value: Any) -> str:
         "group_climate": "群聊气候",
         "pending_response": "待回应状态",
         "circadian_rhythm": "昼夜节律",
+        "memory_stack": "记忆栈",
+        "autonomy_runtime": "自主运行",
     }.get(str(value or "").strip(), str(value or "") or "状态源")
 
 
@@ -143,6 +145,23 @@ def _label_model_tier(value: Any) -> str:
         "small": "小模型",
         "large": "大模型",
     }.get(str(value or "").strip().lower(), str(value or "") or "跳过")
+
+
+def _label_memoir_phase(value: Any) -> str:
+    return {
+        "open": "开放会话",
+        "anticipating": "等待回应",
+    }.get(str(value or "").strip().lower(), str(value or "") or "开放会话")
+
+
+def _label_background_event(value: Any) -> str:
+    return {
+        "proactive_greeting": "主动打招呼",
+        "random_observation": "随机观察",
+        "mood_expression": "心情表达",
+        "memory_recall": "记忆触发",
+        "topic_resurrection": "旧话题复燃",
+    }.get(str(value or "").strip().lower(), str(value or "") or "无后台事件")
 
 
 def _label_rest_posture(value: Any) -> str:
@@ -268,6 +287,8 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
     tempo = domains.get("tempo", {})
     group_climate = domains.get("group_climate", {})
     circadian = domains.get("circadian_rhythm", {})
+    memory_stack = domains.get("memory_stack", {})
+    autonomy = domains.get("autonomy_runtime", {})
 
     signals: list[Dict[str, Any]] = []
 
@@ -653,6 +674,87 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
             )
         )
 
+    memory_overload = memory_stack.get("overload", {}) if isinstance(memory_stack.get("overload"), dict) else {}
+    load_ratio = _safe_float(memory_overload.get("load_ratio", 0.0))
+    if bool(memory_overload.get("emergency_needed", False)) or load_ratio >= 0.8:
+        signals.append(
+            _signal_card(
+                key="memory_overload",
+                label="记忆过载",
+                family="runtime",
+                severity="high" if load_ratio < 0.92 else "critical",
+                value=load_ratio,
+                display_value=_format_percent(load_ratio),
+                trend="rising",
+                source_domain="memory_stack",
+                icon="🧠",
+            )
+        )
+
+    memoir_timeouts = _safe_float(memory_stack.get("memoir_consecutive_timeouts", 0.0))
+    if memoir_timeouts >= 3:
+        signals.append(
+            _signal_card(
+                key="memoir_consecutive_timeouts",
+                label="连续未回应",
+                family="runtime",
+                severity="medium" if memoir_timeouts < 5 else "high",
+                value=memoir_timeouts,
+                display_value=f"{int(memoir_timeouts)}次",
+                trend="rising",
+                source_domain="memory_stack",
+                icon="🕰️",
+            )
+        )
+
+    intention_drive = _safe_float(autonomy.get("intention_drive", 0.0))
+    if intention_drive >= 0.7:
+        signals.append(
+            _signal_card(
+                key="intention_drive",
+                label="主动意图堆积",
+                family="drive",
+                severity="medium" if intention_drive < 0.9 else "high",
+                value=intention_drive,
+                display_value=_format_percent(intention_drive),
+                trend="rising",
+                source_domain="autonomy_runtime",
+                icon="🧭",
+            )
+        )
+
+    pending_proactive = _safe_float(autonomy.get("pending_proactive_events", 0.0))
+    if pending_proactive > 0:
+        signals.append(
+            _signal_card(
+                key="pending_proactive_events",
+                label="主动事件待结算",
+                family="runtime",
+                severity="info" if pending_proactive < 3 else "medium",
+                value=pending_proactive,
+                display_value=f"{int(pending_proactive)}条",
+                trend="holding",
+                source_domain="autonomy_runtime",
+                icon="📌",
+            )
+        )
+
+    background_event = autonomy.get("background_event", {}) if isinstance(autonomy.get("background_event"), dict) else {}
+    if str(background_event.get("type", "") or "").strip():
+        signals.append(
+            _signal_card(
+                key="background_event",
+                label="后台事件排队",
+                family="runtime",
+                severity="info",
+                value=_safe_float(background_event.get("priority", 0.0)),
+                display_value=_label_background_event(background_event.get("type", "")),
+                trend="ready",
+                source_domain="autonomy_runtime",
+                icon="🎲",
+            )
+        )
+
     if bool(circadian.get("is_burnthrough", False)):
         signals.append(
             _signal_card(
@@ -1021,6 +1123,60 @@ def _build_behavior_detail(
     }
 
 
+def _build_memory_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
+    memory_stack = domains.get("memory_stack", {})
+    governance = memory_stack.get("governance", {}) if isinstance(memory_stack.get("governance"), dict) else {}
+    health = memory_stack.get("health", {}) if isinstance(memory_stack.get("health"), dict) else {}
+    overload = memory_stack.get("overload", {}) if isinstance(memory_stack.get("overload"), dict) else {}
+    reactivation = memory_stack.get("reactivation", {}) if isinstance(memory_stack.get("reactivation"), dict) else {}
+    return {
+        "ephemeral_short_term_count": int(_safe_float(memory_stack.get("ephemeral_short_term_count", 0), 0)),
+        "planner_short_term_count": int(_safe_float(memory_stack.get("planner_short_term_count", 0), 0)),
+        "planner_long_term_count": int(_safe_float(memory_stack.get("planner_long_term_count", 0), 0)),
+        "long_term_total": int(_safe_float(memory_stack.get("long_term_total", 0), 0)),
+        "long_term_by_category": dict(memory_stack.get("long_term_by_category", {}) or {}),
+        "memoir_phase": str(memory_stack.get("memoir_phase", "open") or "open"),
+        "memoir_phase_label": _label_memoir_phase(memory_stack.get("memoir_phase", "open")),
+        "memoir_exchange_tally": int(_safe_float(memory_stack.get("memoir_exchange_tally", 0), 0)),
+        "memoir_consecutive_timeouts": int(_safe_float(memory_stack.get("memoir_consecutive_timeouts", 0), 0)),
+        "memoir_last_topic": str(memory_stack.get("memoir_last_topic", "") or ""),
+        "memoir_last_mood": str(memory_stack.get("memoir_last_mood", "") or ""),
+        "journal_count": int(_safe_float(memory_stack.get("journal_count", 0), 0)),
+        "governance_total": int(_safe_float(governance.get("total", 0), 0)),
+        "governance_utilization": round(_safe_float(governance.get("utilization", 0.0)), 3),
+        "governance_pending_evict": int(_safe_float(governance.get("pending_evict", 0), 0)),
+        "governance_last_op": str(governance.get("last_op", "") or "无操作"),
+        "health_score": int(_safe_float(health.get("health_score", 100), 100)),
+        "health_grade": str(health.get("health_grade", "优秀") or "优秀"),
+        "overload_gauge_level": str(overload.get("gauge_level", "") or ""),
+        "overload_load_ratio": round(_safe_float(overload.get("load_ratio", 0.0)), 3),
+        "overload_amnesia_pressure": round(_safe_float(overload.get("amnesia_pressure", 0.0)), 3),
+        "overload_emergency_needed": bool(overload.get("emergency_needed", False)),
+        "knowledge_entry_count": int(_safe_float(memory_stack.get("knowledge_entry_count", 0), 0)),
+        "reactivation_summary": dict(reactivation),
+    }
+
+
+def _build_autonomy_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
+    autonomy = domains.get("autonomy_runtime", {})
+    background_event = autonomy.get("background_event", {}) if isinstance(autonomy.get("background_event"), dict) else {}
+    return {
+        "active_intentions": list(autonomy.get("active_intentions", []) or []),
+        "intention_alive_count": int(_safe_float(autonomy.get("intention_alive_count", 0), 0)),
+        "intention_drive": round(_safe_float(autonomy.get("intention_drive", 0.0)), 3),
+        "max_intention_urgency": round(_safe_float(autonomy.get("max_intention_urgency", 0.0)), 3),
+        "reward_score": round(_safe_float(autonomy.get("reward_score", 0.0)), 3),
+        "pending_proactive_events": int(_safe_float(autonomy.get("pending_proactive_events", 0), 0)),
+        "self_recent_messages_count": int(_safe_float(autonomy.get("self_recent_messages_count", 0), 0)),
+        "self_recent_actions_count": int(_safe_float(autonomy.get("self_recent_actions_count", 0), 0)),
+        "self_recent_events_count": int(_safe_float(autonomy.get("self_recent_events_count", 0), 0)),
+        "background_event_type": str(background_event.get("type", "") or ""),
+        "background_event_label": _label_background_event(background_event.get("type", "")),
+        "background_event_priority": round(_safe_float(background_event.get("priority", 0.0)), 3),
+        "background_budget_remaining": int(_safe_float(background_event.get("budget_remaining", 0), 0)),
+    }
+
+
 def _build_initiative_state(domains: Dict[str, Any], prediction: Dict[str, Any]) -> Dict[str, Any]:
     emergence = domains.get("emergence_core", {})
     boredom = _safe_float(emergence.get("boredom_load", 0.0))
@@ -1072,6 +1228,8 @@ def _build_display_policy() -> Dict[str, list[str]]:
             "资源账本的聊天值和思考值",
             "昼夜节律、睡眠债、困意和熬夜压力",
             "情绪账本、主动驱动和当前感受",
+            "记忆栈、记忆过载、回忆录和知识条目",
+            "主动意图、待结算事件和后台随机事件",
             "群聊感知、话题焦点、活跃人数",
             "目标用户关系、好感、信任、压力",
             "发言预测的驱动和抑制因素",
@@ -1107,6 +1265,8 @@ def _build_presentation(
     circadian_detail = _build_circadian_detail(domains)
     emotion_detail = _build_emotion_detail(domains)
     behavior_detail = _build_behavior_detail(chat, domains, dashboard_snapshot)
+    memory_detail = _build_memory_detail(domains)
+    autonomy_detail = _build_autonomy_detail(domains)
 
     active_signals = _build_active_signals(domains)
     resource_detail = _build_resource_detail(domains)
@@ -1228,6 +1388,8 @@ def _build_presentation(
         "circadian_detail": circadian_detail,
         "emotion_detail": emotion_detail,
         "behavior_detail": behavior_detail,
+        "memory_detail": memory_detail,
+        "autonomy_detail": autonomy_detail,
         "initiative_state": initiative_state,
         "scene_context": scene_context,
         "participant_impacts": participant_impacts,

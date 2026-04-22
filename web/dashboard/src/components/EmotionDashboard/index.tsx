@@ -77,6 +77,8 @@ type Presentation = {
   circadian_detail?: CircadianDetail;
   emotion_detail?: EmotionDetail;
   behavior_detail?: BehaviorDetail;
+  memory_detail?: MemoryDetail;
+  autonomy_detail?: AutonomyDetail;
   initiative_state?: InitiativeState;
   scene_context: SceneContext;
   participant_impacts: ParticipantImpact[];
@@ -220,6 +222,62 @@ type BehaviorDetail = {
   model_governor: ModelGovernorDetail;
 };
 
+type MemoryDetail = {
+  ephemeral_short_term_count: number;
+  planner_short_term_count: number;
+  planner_long_term_count: number;
+  long_term_total: number;
+  long_term_by_category: Record<string, number>;
+  memoir_phase: string;
+  memoir_phase_label: string;
+  memoir_exchange_tally: number;
+  memoir_consecutive_timeouts: number;
+  memoir_last_topic: string;
+  memoir_last_mood: string;
+  journal_count: number;
+  governance_total: number;
+  governance_utilization: number;
+  governance_pending_evict: number;
+  governance_last_op: string;
+  health_score: number;
+  health_grade: string;
+  overload_gauge_level: string;
+  overload_load_ratio: number;
+  overload_amnesia_pressure: number;
+  overload_emergency_needed: boolean;
+  knowledge_entry_count: number;
+  reactivation_summary: Record<string, number>;
+};
+
+type AutonomyDetail = {
+  active_intentions: Array<{
+    intent_id: string;
+    kind: string;
+    target_user: string;
+    source: string;
+    description: string;
+    expected_outcome: string;
+    effective_urgency: number;
+    age_seconds: number;
+    idle_seconds: number;
+    attempt_count: number;
+    fail_count: number;
+    lifecycle: string;
+  }>;
+  intention_alive_count: number;
+  intention_drive: number;
+  max_intention_urgency: number;
+  reward_score: number;
+  pending_proactive_events: number;
+  self_recent_messages_count: number;
+  self_recent_actions_count: number;
+  self_recent_events_count: number;
+  background_event_type: string;
+  background_event_label: string;
+  background_event_priority: number;
+  background_budget_remaining: number;
+};
+
 type InitiativeState = {
   boredom_load: number;
   loneliness_load: number;
@@ -356,6 +414,8 @@ export function EmotionDashboard() {
   const circadianDetail = packet?.presentation?.circadian_detail;
   const emotionDetail = packet?.presentation?.emotion_detail;
   const behaviorDetail = packet?.presentation?.behavior_detail;
+  const memoryDetail = packet?.presentation?.memory_detail;
+  const autonomyDetail = packet?.presentation?.autonomy_detail;
   const initiativeState = packet?.presentation?.initiative_state;
   const displayPolicy = packet?.presentation?.display_policy ?? fallbackDisplayPolicy;
   const selectedOverview = (overview?.channels ?? []).find(
@@ -756,6 +816,99 @@ export function EmotionDashboard() {
               </span>
             ))}
           </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <h2>记忆栈</h2>
+            <span>{memoryDetail?.health_grade ?? "未知"}</span>
+          </div>
+          <div className="metric-wall">
+            <div className={`metric-tile tone-${metricTone(1 - (memoryDetail?.overload_load_ratio ?? 0))}`}>
+              <span>记忆负载</span>
+              <strong>{percent(memoryDetail?.overload_load_ratio)}</strong>
+              <p>{memoryDetail?.overload_emergency_needed ? "已触发紧急压力" : memoryDetail?.overload_gauge_level || "正常"}</p>
+            </div>
+            <div className="metric-tile">
+              <span>短期记忆</span>
+              <strong>{memoryDetail?.ephemeral_short_term_count ?? 0}</strong>
+              <p>规划器短期 {memoryDetail?.planner_short_term_count ?? 0}</p>
+            </div>
+            <div className="metric-tile">
+              <span>长期记忆</span>
+              <strong>{memoryDetail?.long_term_total ?? 0}</strong>
+              <p>规划器长期 {memoryDetail?.planner_long_term_count ?? 0}</p>
+            </div>
+            <div className="metric-tile">
+              <span>知识条目</span>
+              <strong>{memoryDetail?.knowledge_entry_count ?? 0}</strong>
+              <p>健康分 {memoryDetail?.health_score ?? 100}</p>
+            </div>
+            <div className="metric-tile">
+              <span>回忆录阶段</span>
+              <strong>{memoryDetail?.memoir_phase_label ?? "开放会话"}</strong>
+              <p>轮次 {memoryDetail?.memoir_exchange_tally ?? 0} · 超时 {memoryDetail?.memoir_consecutive_timeouts ?? 0}</p>
+            </div>
+            <div className="metric-tile">
+              <span>治理状态</span>
+              <strong>{memoryDetail?.governance_last_op ?? "无操作"}</strong>
+              <p>待淘汰 {memoryDetail?.governance_pending_evict ?? 0} · 日志 {memoryDetail?.journal_count ?? 0}</p>
+            </div>
+          </div>
+          <div className="topic-wrap">
+            {Object.entries(memoryDetail?.long_term_by_category ?? {}).map(([key, value]) => (
+              <span className="topic-chip is-secondary" key={`mem-${key}`}>
+                {key}:{value}
+              </span>
+            ))}
+            {Object.entries(memoryDetail?.reactivation_summary ?? {}).map(([key, value]) => (
+              <span className="topic-chip" key={`react-${key}`}>
+                {key}:{value}
+              </span>
+            ))}
+          </div>
+          <p className="panel-note">
+            最近话题：{memoryDetail?.memoir_last_topic || "暂无"} · 最近心情：{memoryDetail?.memoir_last_mood || "暂无"}
+          </p>
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <h2>自主账本</h2>
+            <span>{autonomyDetail?.background_event_label || "无后台事件"}</span>
+          </div>
+          <div className="metric-wall">
+            <div className={`metric-tile tone-${metricTone(autonomyDetail?.intention_drive ?? 0)}`}>
+              <span>主动驱动总线</span>
+              <strong>{percent(autonomyDetail?.intention_drive)}</strong>
+              <p>活跃意图 {autonomyDetail?.intention_alive_count ?? 0}</p>
+            </div>
+            <div className="metric-tile">
+              <span>最高意图紧迫度</span>
+              <strong>{percent(autonomyDetail?.max_intention_urgency)}</strong>
+              <p>待结算事件 {autonomyDetail?.pending_proactive_events ?? 0}</p>
+            </div>
+            <div className="metric-tile">
+              <span>历史反馈分</span>
+              <strong>{fixed(autonomyDetail?.reward_score, 2)}</strong>
+              <p>近期动作 {autonomyDetail?.self_recent_actions_count ?? 0}</p>
+            </div>
+            <div className="metric-tile">
+              <span>后台事件</span>
+              <strong>{autonomyDetail?.background_event_label || "无"}</strong>
+              <p>优先级 {fixed(autonomyDetail?.background_event_priority, 2)} · 剩余额度 {autonomyDetail?.background_budget_remaining ?? 0}</p>
+            </div>
+          </div>
+          <div className="topic-wrap">
+            {(autonomyDetail?.active_intentions ?? []).map((intent) => (
+              <span className="topic-chip is-secondary" key={intent.intent_id}>
+                {intent.kind}:{Math.round(intent.effective_urgency * 100)}%
+              </span>
+            ))}
+          </div>
+          <p className="panel-note">
+            自我感知：最近消息 {autonomyDetail?.self_recent_messages_count ?? 0} 条，最近动作 {autonomyDetail?.self_recent_actions_count ?? 0} 条，最近事件 {autonomyDetail?.self_recent_events_count ?? 0} 条
+          </p>
         </section>
 
         <section className="panel panel-signals">
