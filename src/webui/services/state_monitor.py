@@ -902,7 +902,7 @@ def _build_display_policy() -> Dict[str, list[str]]:
         ],
         "hidden": [
             "内部阈值",
-            "debug reason",
+            "调试原因",
             "缓存字段",
             "旧命名残留",
             "纯计数器原值",

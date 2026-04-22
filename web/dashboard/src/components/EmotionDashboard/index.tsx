@@ -25,11 +25,14 @@ type ActiveSignal = {
   key: string;
   label: string;
   family: string;
+  family_label?: string;
   severity: string;
   value: number;
   display_value: string;
   trend: string;
+  trend_label?: string;
   source_domain: string;
+  source_domain_label?: string;
   icon: string;
   color: string;
 };
@@ -51,6 +54,7 @@ type ParticipantImpact = {
 type SceneContext = {
   channel_id: string;
   scene_heat: string;
+  scene_heat_label?: string;
   scene_heat_score: number;
   topic_focus: string[];
   active_user_count: number;
@@ -70,6 +74,8 @@ type Presentation = {
   resident_overview: Record<string, ResidentCard>;
   active_signals: ActiveSignal[];
   resource_detail?: ResourceDetail;
+  circadian_detail?: CircadianDetail;
+  emotion_detail?: EmotionDetail;
   initiative_state?: InitiativeState;
   scene_context: SceneContext;
   participant_impacts: ParticipantImpact[];
@@ -94,6 +100,7 @@ type Prediction = {
   relationship_influence?: number;
   resource_influence?: number;
   scene_influence?: number;
+  circadian_influence?: number;
   driving_factors: string[];
   suppressing_factors: string[];
 };
@@ -101,6 +108,7 @@ type Prediction = {
 type ResourceDetail = {
   energy_reserve_ratio: number;
   energy_phase: string;
+  energy_phase_label?: string;
   chat_reserve: number;
   chat_capacity: number;
   chat_percent: number;
@@ -112,6 +120,45 @@ type ResourceDetail = {
   social_field_score: number;
   last_recovery_source: string;
   last_irritation_relief_source: string;
+};
+
+type CircadianDetail = {
+  phase: string;
+  phase_label: string;
+  is_night: boolean;
+  is_sleeping: boolean;
+  is_burnthrough: boolean;
+  can_reply: boolean;
+  drowsiness_value: number;
+  sleep_debt: number;
+  overnight_pressure: number;
+  sleep_reserve: number;
+  dawn_recovery_progress: number;
+  peek_window_open: boolean;
+  sleep_reply_used: number;
+  sleep_reply_cap: number;
+  remaining_sleep_replies: number;
+  reply_quota_label: string;
+  response_suppression: number;
+  body_state_label: string;
+  mood_hint: string;
+  expression_style_label: string;
+};
+
+type EmotionDetail = {
+  mood_bias: number;
+  mood_label: string;
+  curiosity_drive: number;
+  social_desire: number;
+  boredom_load: number;
+  loneliness_load: number;
+  environment_fatigue_load: number;
+  initiative_drive: number;
+  withdrawal_drive: number;
+  energy_ratio: number;
+  silence_seconds: number;
+  unanswered_count: number;
+  feeling_text: string;
 };
 
 type InitiativeState = {
@@ -156,9 +203,9 @@ const severityRank: Record<string, number> = {
 
 const fallbackDisplayPolicy: DisplayPolicy = {
   resident: ["精力储备", "内在心情", "注意状态", "社交姿态", "安全护盾", "流转阶段", "场景热度", "发言预测"],
-  active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/群聊升温"],
-  detail: ["资源账本的聊天值和思考值", "群聊感知、话题焦点、活跃人数", "目标用户关系、好感、信任、压力", "发言预测的驱动和抑制因素"],
-  hidden: ["内部阈值", "debug reason", "缓存字段", "旧命名残留", "纯计数器原值"],
+  active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "情绪低落/好奇心/社交欲显著变化", "浅睡/深睡/熬穿/黎明恢复/睡眠债", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/群聊升温"],
+  detail: ["资源账本的聊天值和思考值", "昼夜节律、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "群聊感知、话题焦点、活跃人数", "目标用户关系、好感、信任、压力", "发言预测的驱动和抑制因素"],
+  hidden: ["内部阈值", "调试原因", "缓存字段", "旧命名残留", "纯计数器原值"],
 };
 
 function formatClock(timestamp: number): string {
@@ -193,6 +240,10 @@ function humanSceneHeat(value: string | undefined): string {
     quiet: "偏安静",
     dead: "低活跃",
   }[value ?? ""] ?? (value || "-");
+}
+
+function countText(value: number | undefined | null, unit: string): string {
+  return `${Math.round(Number(value ?? 0))}${unit}`;
 }
 
 function connectionLabel(value: string): string {
@@ -243,6 +294,8 @@ export function EmotionDashboard() {
   const timeline = packet?.presentation?.timeline ?? [];
   const prediction = packet?.prediction;
   const resourceDetail = packet?.presentation?.resource_detail;
+  const circadianDetail = packet?.presentation?.circadian_detail;
+  const emotionDetail = packet?.presentation?.emotion_detail;
   const initiativeState = packet?.presentation?.initiative_state;
   const displayPolicy = packet?.presentation?.display_policy ?? fallbackDisplayPolicy;
   const selectedOverview = (overview?.channels ?? []).find(
@@ -385,7 +438,7 @@ export function EmotionDashboard() {
     <div className="dashboard-shell">
       <header className="dashboard-header">
         <div>
-          <p className="eyebrow">Huoli Telemetry</p>
+          <p className="eyebrow">火力状态监控</p>
           <h1>机器人实时状态栏</h1>
           <p className="subtle">
             免登录查看。顶部显示常驻状态，卡片流只显示当前激活状态，关系、能量、群聊感知和预测依据放在详情区。
@@ -450,7 +503,7 @@ export function EmotionDashboard() {
         <section className="panel">
           <div className="panel-header">
             <h2>资源账本</h2>
-            <span>{resourceDetail?.energy_phase ?? "unknown"}</span>
+            <span>{resourceDetail?.energy_phase_label ?? "未知"}</span>
           </div>
           <div className="metric-wall">
             <div className={`metric-tile tone-${metricTone(resourceDetail?.chat_percent ?? 0)}`}>
@@ -472,6 +525,45 @@ export function EmotionDashboard() {
               <span>资源烦躁</span>
               <strong>{fixed(resourceDetail?.irritation_load)}</strong>
               <p>{resourceDetail?.last_irritation_relief_source || "暂无缓解事件"}</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <h2>昼夜节律</h2>
+            <span>{circadianDetail?.phase_label ?? "清醒"}</span>
+          </div>
+          <div className="metric-wall">
+            <div className={`metric-tile tone-${metricTone((100 - (circadianDetail?.drowsiness_value ?? 0)) / 100)}`}>
+              <span>困意值</span>
+              <strong>{countText(circadianDetail?.drowsiness_value, "")}</strong>
+              <p>{circadianDetail?.body_state_label ?? "正常"}</p>
+            </div>
+            <div className={`metric-tile tone-${metricTone(1 - (circadianDetail?.sleep_debt ?? 0))}`}>
+              <span>睡眠债</span>
+              <strong>{percent(circadianDetail?.sleep_debt)}</strong>
+              <p>{circadianDetail?.mood_hint ?? "状态平稳"}</p>
+            </div>
+            <div className={`metric-tile tone-${metricTone((circadianDetail?.sleep_reserve ?? 100) / 100)}`}>
+              <span>睡眠储备</span>
+              <strong>{countText(circadianDetail?.sleep_reserve, "")}</strong>
+              <p>黎明恢复 {percent(circadianDetail?.dawn_recovery_progress)}</p>
+            </div>
+            <div className="metric-tile">
+              <span>夜间回复</span>
+              <strong>{circadianDetail?.reply_quota_label ?? "不限"}</strong>
+              <p>{circadianDetail?.can_reply ? "允许回复" : "建议继续休息"} · {circadianDetail?.peek_window_open ? "窥屏窗口打开" : "窥屏窗口关闭"}</p>
+            </div>
+            <div className="metric-tile">
+              <span>熬夜压力</span>
+              <strong>{countText(circadianDetail?.overnight_pressure, "")}</strong>
+              <p>{circadianDetail?.is_burnthrough ? "熬穿已激活" : circadianDetail?.is_sleeping ? "睡眠中" : circadianDetail?.is_night ? "夜间节律" : "清醒时段"}</p>
+            </div>
+            <div className="metric-tile">
+              <span>表达风格</span>
+              <strong>{circadianDetail?.expression_style_label ?? "正常"}</strong>
+              <p>回复抑制 {percent(circadianDetail?.response_suppression)}</p>
             </div>
           </div>
         </section>
@@ -506,6 +598,50 @@ export function EmotionDashboard() {
           <p className="panel-note">{initiativeState?.effect_summary ?? "主动驱动会进入发言预测，不再只是日志里的装饰值。"}</p>
         </section>
 
+        <section className="panel">
+          <div className="panel-header">
+            <h2>情绪账本</h2>
+            <span>{emotionDetail?.mood_label ?? "平静"}</span>
+          </div>
+          <div className="drive-radar">
+            <div>
+              <span>情绪基调</span>
+              <strong>{percent(emotionDetail?.mood_bias)}</strong>
+            </div>
+            <div>
+              <span>好奇心</span>
+              <strong>{percent(emotionDetail?.curiosity_drive)}</strong>
+            </div>
+            <div>
+              <span>社交欲</span>
+              <strong>{percent(emotionDetail?.social_desire)}</strong>
+            </div>
+            <div>
+              <span>无聊</span>
+              <strong>{percent(emotionDetail?.boredom_load)}</strong>
+            </div>
+            <div>
+              <span>孤独</span>
+              <strong>{percent(emotionDetail?.loneliness_load)}</strong>
+            </div>
+            <div>
+              <span>疲劳</span>
+              <strong>{percent(emotionDetail?.environment_fatigue_load)}</strong>
+            </div>
+            <div>
+              <span>主动意愿</span>
+              <strong>{percent(emotionDetail?.initiative_drive)}</strong>
+            </div>
+            <div>
+              <span>撤离倾向</span>
+              <strong>{percent(emotionDetail?.withdrawal_drive)}</strong>
+            </div>
+          </div>
+          <p className="panel-note">
+            {emotionDetail?.feeling_text ?? "当前没有明显情绪波动"} · 已沉默 {countText(emotionDetail?.silence_seconds, "秒")} · 未回应 {emotionDetail?.unanswered_count ?? 0} 次
+          </p>
+        </section>
+
         <section className="panel panel-signals">
           <div className="panel-header">
             <h2>当前激活状态</h2>
@@ -525,9 +661,9 @@ export function EmotionDashboard() {
                     </div>
                   </div>
                   <div className="signal-meta">
-                    <span>{signal.family}</span>
-                    <span>{signal.trend}</span>
-                    <span>{signal.source_domain}</span>
+                    <span>{signal.family_label ?? signal.family}</span>
+                    <span>{signal.trend_label ?? signal.trend}</span>
+                    <span>{signal.source_domain_label ?? signal.source_domain}</span>
                   </div>
                 </article>
               ))
@@ -538,12 +674,12 @@ export function EmotionDashboard() {
         <section className="panel">
           <div className="panel-header">
             <h2>群聊情境</h2>
-            <span>{humanSceneHeat(sceneContext?.scene_heat)}</span>
+            <span>{sceneContext?.scene_heat_label ?? humanSceneHeat(sceneContext?.scene_heat)}</span>
           </div>
           <div className="detail-grid">
             <div className="detail-row">
               <span>场景热度</span>
-              <strong>{humanSceneHeat(sceneContext?.scene_heat)} · {percent(sceneContext?.scene_heat_score)}</strong>
+              <strong>{sceneContext?.scene_heat_label ?? humanSceneHeat(sceneContext?.scene_heat)} · {percent(sceneContext?.scene_heat_score)}</strong>
             </div>
             <div className="detail-row">
               <span>活跃人数</span>
@@ -675,6 +811,10 @@ export function EmotionDashboard() {
             <div>
               <span>群聊影响</span>
               <strong>{fixed(prediction?.scene_influence, 2)}</strong>
+            </div>
+            <div>
+              <span>昼夜影响</span>
+              <strong>{fixed(prediction?.circadian_influence, 2)}</strong>
             </div>
           </div>
           <div className="prediction-columns">
