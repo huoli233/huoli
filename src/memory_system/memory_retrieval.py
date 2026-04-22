@@ -408,6 +408,13 @@ def _build_compound_query_context(message: str, target: str) -> str:
         return history
 
     normalized_latest = _squash_text_for_match(latest)
+    split_terms = [
+        token.strip()
+        for token in re.split(r"[\s,，。！？!?;；:：|/]+", latest)
+        if len(token.strip()) >= 2
+    ]
+    if not _looks_like_ambiguous_memory_reference(latest, split_terms) and not _looks_like_self_recall_memory_query(latest):
+        return latest
     if len(normalized_latest) > 8:
         return history
 
@@ -440,6 +447,13 @@ def _is_valid_memory_query_text(text: str) -> bool:
 def _compress_memory_query_text(message: str, target: str) -> str:
     """压缩检索问题，优先保留最新用户句和必要前情，避免整段元消息污染检索。"""
     latest = str(target or "").strip()
+    split_terms = [
+        token.strip()
+        for token in re.split(r"[\s,，。！？!?;；:：|/]+", latest)
+        if len(token.strip()) >= 2
+    ]
+    if latest and not _looks_like_ambiguous_memory_reference(latest, split_terms) and not _looks_like_self_recall_memory_query(latest):
+        return latest[:120]
     if latest and len(_squash_text_for_match(latest)) <= 12:
         history_lines = [line.strip() for line in str(message or "").splitlines() if line.strip()]
         tail = history_lines[-4:]
@@ -1414,7 +1428,7 @@ async def _react_agent_solve_question(
                 )
             except asyncio.TimeoutError:
                 logger.warning(f"{react_log_prefix}工具并行执行超时(30s)，跳过本轮工具结果")
-                observations = [f"工具执行超时" for _ in tool_tasks]
+                observations = ["工具执行超时" for _ in tool_tasks]
             high_value_observation = ""
 
             # 处理执行结果
