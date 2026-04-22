@@ -51,6 +51,16 @@ if TYPE_CHECKING:
     from src.chat.proactive.proactive_decider import ProactiveDecision
 
 class StrategyActionStateMixin:
+    @staticmethod
+    def _metric_ratio(value: Any, default: float = 0.0) -> float:
+        try:
+            numeric = float(value if value is not None else default)
+        except Exception:
+            numeric = float(default or 0.0)
+        if numeric > 1.0:
+            numeric /= 100.0
+        return max(0.0, min(1.0, numeric))
+
     def _decide_action(
         self,
         pinged_msg,
@@ -83,6 +93,44 @@ class StrategyActionStateMixin:
             engagement_boost = awareness.engagement_pull
             if engagement_boost >= 0.7:
                 return True
+        dashboard_verdict = {}
+        if hasattr(self, "_get_dashboard_verdict"):
+            try:
+                dashboard_verdict = self._get_dashboard_verdict() or {}
+            except Exception as exc:
+                logger.debug(f"{self.log_prefix} 仪表盘裁定读取失败: {exc}")
+        dashboard_reply = bool(dashboard_verdict.get("reply", False))
+        dashboard_urgency = str(dashboard_verdict.get("reply_urgency", "") or "")
+        dashboard_confidence = float(dashboard_verdict.get("confidence", 0.0) or 0.0)
+        relation_view = {}
+        if hasattr(self, "_resolve_relation_view"):
+            try:
+                relation_view = self._resolve_relation_view() or {}
+            except Exception as exc:
+                logger.debug(f"{self.log_prefix} 关系快照读取失败: {exc}")
+        annoyance_value = float(relation_view.get("annoyance_value", 0.0) or 0.0)
+        pressure_value = float(relation_view.get("psychological_pressure", 0.0) or 0.0)
+        affection_value = float(relation_view.get("affection", 0.0) or 0.0)
+        trust_value = float(relation_view.get("trust_value", relation_view.get("trust_score", 0.0)) or 0.0)
+        emotion_state = getattr(self, "_cached_emotion_state", {}) or {}
+        boredom = self._metric_ratio(emotion_state.get("boredom", 0.0), 0.0)
+        loneliness = self._metric_ratio(emotion_state.get("loneliness", 0.0), 0.0)
+        social_desire = self._metric_ratio(emotion_state.get("social_desire", 0.0), 0.0)
+        night_phase = str(getattr(getattr(self, "_cached_night_phase", None), "value", "") or "").strip().lower()
+        if not night_phase:
+            night_phase = str(getattr(getattr(self, "_cached_night_phase", None), "name", "") or "").strip().lower()
+        if pinged_msg is None:
+            if night_phase in {"deep_sleep", "deep_valley"}:
+                return False
+            if night_phase in {"burned_out", "burnthrough"}:
+                return False
+            if not dashboard_reply and dashboard_confidence >= 0.72 and dashboard_urgency in {"跳过", "不回复"}:
+                return False
+            if annoyance_value >= 70.0 or pressure_value >= 60.0:
+                if affection_value < 45.0 and trust_value < 25.0:
+                    return False
+        if dashboard_reply and dashboard_confidence >= 0.82 and dashboard_urgency in {"立即回复", "尽快回复"}:
+            return True
         # 概率决策：基础意愿 × 频率调节 × 觉察加成
         freq_adjust = frequency_control_manager.get_or_create_frequency_control(
             self.stream_id
@@ -101,6 +149,26 @@ class StrategyActionStateMixin:
             desire = voice.reply_desire_level
             if 4 <= desire < 7:
                 combined_prob *= 1.0 + desire * 0.05
+        if dashboard_confidence > 0:
+            dashboard_prob = {
+                "立即回复": 0.92,
+                "尽快回复": 0.76,
+                "可稍后回": 0.55,
+                "跳过": 0.18,
+                "不回复": 0.05,
+            }.get(dashboard_urgency, 0.5 if dashboard_reply else 0.25)
+            combined_prob = combined_prob * 0.55 + dashboard_prob * 0.45
+        emotional_pull = max(boredom, loneliness, social_desire)
+        if emotional_pull >= 0.65 and annoyance_value < 55.0 and pressure_value < 45.0:
+            combined_prob += 0.12
+        elif emotional_pull >= 0.40 and annoyance_value < 65.0:
+            combined_prob += 0.06
+        if annoyance_value >= 50.0:
+            combined_prob *= max(0.18, 1.0 - min(0.55, (annoyance_value - 50.0) / 100.0))
+        if pressure_value >= 40.0:
+            combined_prob *= max(0.22, 1.0 - min(0.45, (pressure_value - 40.0) / 100.0))
+        if affection_value >= 35.0 or trust_value >= 35.0:
+            combined_prob += 0.06
         chatterbox_penalty = float(getattr(self, "_chatterbox_penalty", 0.0) or 0.0)
         if chatterbox_penalty > 0:
             combined_prob *= max(0.12, 1.0 - min(0.75, chatterbox_penalty * 0.18))

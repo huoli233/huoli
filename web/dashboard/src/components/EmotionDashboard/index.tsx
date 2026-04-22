@@ -76,6 +76,7 @@ type Presentation = {
   resource_detail?: ResourceDetail;
   circadian_detail?: CircadianDetail;
   emotion_detail?: EmotionDetail;
+  behavior_detail?: BehaviorDetail;
   initiative_state?: InitiativeState;
   scene_context: SceneContext;
   participant_impacts: ParticipantImpact[];
@@ -159,6 +160,64 @@ type EmotionDetail = {
   silence_seconds: number;
   unanswered_count: number;
   feeling_text: string;
+};
+
+type DecisionDetail = {
+  reply_urgency: string;
+  should_reply: boolean;
+  decision_reason: string;
+  detail_notes: string[];
+  suggested_tone: string;
+  decision_stage: string;
+  confidence: number;
+};
+
+type BehaviorGovernorDetail = {
+  reply_mode: string;
+  reply_mode_label: string;
+  interrupt_level: string;
+  interrupt_level_label: string;
+  quote_policy: string;
+  quote_policy_label: string;
+  silence_policy: string;
+  silence_policy_label: string;
+  allow_generation: boolean;
+  model_tier: string;
+  model_tier_label: string;
+  reason_codes: string[];
+  reason_labels: string[];
+};
+
+type RestGovernorDetail = {
+  posture: string;
+  posture_label: string;
+  interruption_policy: string;
+  interruption_policy_label: string;
+  should_rest: boolean;
+  should_loaf: boolean;
+  reason_codes: string[];
+  reason_labels: string[];
+};
+
+type ModelGovernorDetail = {
+  tier: string;
+  tier_label: string;
+  rate_limited: boolean;
+  fallback_to_small: boolean;
+  dynamic_cooldown_sec: number;
+  dynamic_hourly_cap: number;
+  reason_codes: string[];
+  reason_labels: string[];
+};
+
+type BehaviorDetail = {
+  watch_state: string;
+  watch_state_label: string;
+  flow_phase_label: string;
+  reply_decision: DecisionDetail;
+  behavior_governor: BehaviorGovernorDetail;
+  rest_governor: RestGovernorDetail;
+  model_governor: ModelGovernorDetail;
 };
 
 type InitiativeState = {
@@ -296,6 +355,7 @@ export function EmotionDashboard() {
   const resourceDetail = packet?.presentation?.resource_detail;
   const circadianDetail = packet?.presentation?.circadian_detail;
   const emotionDetail = packet?.presentation?.emotion_detail;
+  const behaviorDetail = packet?.presentation?.behavior_detail;
   const initiativeState = packet?.presentation?.initiative_state;
   const displayPolicy = packet?.presentation?.display_policy ?? fallbackDisplayPolicy;
   const selectedOverview = (overview?.channels ?? []).find(
@@ -640,6 +700,62 @@ export function EmotionDashboard() {
           <p className="panel-note">
             {emotionDetail?.feeling_text ?? "当前没有明显情绪波动"} · 已沉默 {countText(emotionDetail?.silence_seconds, "秒")} · 未回应 {emotionDetail?.unanswered_count ?? 0} 次
           </p>
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <h2>行为机制</h2>
+            <span>{behaviorDetail?.flow_phase_label ?? "待命"}</span>
+          </div>
+          <div className="detail-grid compact">
+            <div className="detail-row">
+              <span>关注姿态</span>
+              <strong>{behaviorDetail?.watch_state_label ?? "-"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>行动裁定</span>
+              <strong>{behaviorDetail?.reply_decision.reply_urgency ?? "-"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>行为模式</span>
+              <strong>{behaviorDetail?.behavior_governor.reply_mode_label ?? "-"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>打断等级</span>
+              <strong>{behaviorDetail?.behavior_governor.interrupt_level_label ?? "-"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>静默策略</span>
+              <strong>{behaviorDetail?.behavior_governor.silence_policy_label ?? "-"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>模型等级</span>
+              <strong>{behaviorDetail?.behavior_governor.model_tier_label ?? "-"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>休息姿态</span>
+              <strong>{behaviorDetail?.rest_governor.posture_label ?? "-"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>当前语气</span>
+              <strong>{behaviorDetail?.reply_decision.suggested_tone ?? "-"}</strong>
+            </div>
+          </div>
+          <p className="panel-note">
+            {behaviorDetail?.reply_decision.decision_reason ?? "暂无行为裁定理由"}
+          </p>
+          <div className="topic-wrap">
+            {(behaviorDetail?.behavior_governor.reason_labels ?? []).map((item) => (
+              <span className="topic-chip is-secondary" key={`bg-${item}`}>
+                {item}
+              </span>
+            ))}
+            {(behaviorDetail?.rest_governor.reason_labels ?? []).map((item) => (
+              <span className="topic-chip" key={`rg-${item}`}>
+                {item}
+              </span>
+            ))}
+          </div>
         </section>
 
         <section className="panel panel-signals">

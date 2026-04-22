@@ -580,6 +580,7 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
             "phase": str(subject.get("phase", "standby") or "standby"),
             "phase_label": str(subject.get("phase_label", "待命") or "待命"),
             "watch_state": str(subject.get("watch_level", "peek") or "peek"),
+            "watch_state_label": str(subject.get("watch_level_label", "瞥一眼") or "瞥一眼"),
             "night_phase": circadian.get("phase", "awake"),
             "night_phase_label": circadian.get("phase_label", "清醒"),
             "sleeping": bool(circadian.get("is_sleeping", False)),

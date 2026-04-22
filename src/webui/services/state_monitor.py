@@ -102,6 +102,111 @@ def _label_source(value: Any) -> str:
     }.get(str(value or "").strip(), str(value or "") or "状态源")
 
 
+def _label_reply_mode(value: Any) -> str:
+    return {
+        "observe": "观察",
+        "reply": "回复",
+        "proactive": "主动开口",
+        "defer": "延后",
+        "rest": "休息",
+    }.get(str(value or "").strip().lower(), str(value or "") or "观察")
+
+
+def _label_interrupt_level(value: Any) -> str:
+    return {
+        "ignore": "忽略",
+        "peek": "窥屏",
+        "skim": "扫视",
+        "engage": "参与",
+    }.get(str(value or "").strip().lower(), str(value or "") or "忽略")
+
+
+def _label_quote_policy(value: Any) -> str:
+    return {
+        "none": "不引用",
+        "soft_reference": "软引用",
+        "quote": "引用",
+    }.get(str(value or "").strip().lower(), str(value or "") or "不引用")
+
+
+def _label_silence_policy(value: Any) -> str:
+    return {
+        "silent": "静默",
+        "ambient": "随群",
+        "reengage": "重新接入",
+    }.get(str(value or "").strip().lower(), str(value or "") or "静默")
+
+
+def _label_model_tier(value: Any) -> str:
+    return {
+        "skip": "跳过",
+        "small": "小模型",
+        "large": "大模型",
+    }.get(str(value or "").strip().lower(), str(value or "") or "跳过")
+
+
+def _label_rest_posture(value: Any) -> str:
+    return {
+        "active": "活跃",
+        "peek_only": "只窥屏",
+        "loaf": "摸鱼",
+        "rest": "休息",
+    }.get(str(value or "").strip().lower(), str(value or "") or "活跃")
+
+
+def _label_rest_interrupt(value: Any) -> str:
+    return {
+        "allow": "允许",
+        "peek_only": "只窥屏",
+        "block": "阻断",
+    }.get(str(value or "").strip().lower(), str(value or "") or "允许")
+
+
+def _label_behavior_reason(code: Any) -> str:
+    mapping = {
+        "admin_force": "管理员强制",
+        "night_rest": "夜间休息",
+        "resource_exhausted": "资源不足",
+        "high_loafing_quiet": "高摸鱼高安静偏好",
+        "soft_loafing_guard": "轻度摸鱼保护",
+        "ignored_chain_rest": "连续未回应后休息",
+        "watch_low_quiet": "关注度低且偏安静",
+        "direct_target_override": "直接目标覆盖",
+        "quiet_idle_loaf": "安静空窗摸鱼",
+        "direct_relevance": "直接相关",
+        "weak_human_signal": "弱人类信号",
+        "ambient_human_signal": "环境信号",
+        "recent_human_activity": "最近有人说话",
+        "interest_rebound": "兴趣回弹",
+        "default_silence": "默认静默",
+        "no_anchor_quote_none": "无锚点不引用",
+        "explicit_quote_anchor": "显式引用锚点",
+        "anchor_soft_reference": "软引用锚点",
+        "anchor_timeout_quote_none": "锚点超时",
+        "recent_targeted_quote": "近期目标引用",
+        "stale_context_soft_reference": "旧上下文软引用",
+        "context_timeout_quote_none": "上下文超时",
+        "night_freeze": "夜间冻结",
+        "ignored_chain": "连续未回应",
+        "chatterbox_guard": "话痨保护",
+        "air_chat_guard": "空气对话保护",
+        "consecutive_speaks_guard": "连续发言保护",
+        "idle_backoff": "空窗退避",
+        "scene_allows_reengage": "场景允许重新接入",
+        "scene_unsuitable": "场景不适合",
+        "long_silence": "长时间沉默",
+        "risk_large_candidate": "高风险升级大模型",
+        "behavior_model_skip": "行为层建议跳过模型",
+        "behavior_blocked": "行为层阻断",
+        "low_signal_skip": "低信号跳过",
+        "large_demoted_noncritical": "非关键场景降级",
+        "large_high_value": "高价值场景升级",
+        "behavior_prefers_skip": "行为层偏向跳过",
+    }
+    payload = str(code or "").strip()
+    return mapping.get(payload, payload or "未命名原因")
+
+
 def _signal_card(
     *,
     key: str,
@@ -845,6 +950,77 @@ def _build_emotion_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _build_behavior_detail(
+    chat: Any,
+    domains: Dict[str, Any],
+    dashboard_snapshot: Dict[str, Any],
+) -> Dict[str, Any]:
+    flow_runtime = domains.get("flow_runtime", {})
+    reply_decision = {}
+    if isinstance(dashboard_snapshot, dict) and dashboard_snapshot.get("available"):
+        snapshot = dashboard_snapshot.get("snapshot", {})
+        if isinstance(snapshot, dict):
+            reply_decision = snapshot.get("reply_decision", {}) or {}
+
+    behavior = getattr(chat, "_last_behavior_governor_verdict", None) if chat is not None else None
+    rest = getattr(chat, "_last_rest_governor_verdict", None) if chat is not None else None
+    model = getattr(chat, "_last_model_governor_verdict", None) if chat is not None else None
+
+    behavior_codes = [str(code).strip() for code in list(getattr(behavior, "reason_codes", []) or []) if str(code).strip()]
+    rest_codes = [str(code).strip() for code in list(getattr(rest, "reason_codes", []) or []) if str(code).strip()]
+    model_codes = [str(code).strip() for code in list(getattr(model, "upgrade_reason_codes", []) or []) if str(code).strip()]
+
+    return {
+        "watch_state": str(flow_runtime.get("watch_state", "") or ""),
+        "watch_state_label": str(flow_runtime.get("watch_state_label", "瞥一眼") or "瞥一眼"),
+        "flow_phase_label": str(flow_runtime.get("phase_label", "待命") or "待命"),
+        "reply_decision": {
+            "reply_urgency": str(reply_decision.get("reply_urgency", "可稍后回") or "可稍后回"),
+            "should_reply": bool(reply_decision.get("reply", False)),
+            "decision_reason": str(reply_decision.get("decision_reason", "") or "暂无裁定理由"),
+            "detail_notes": [str(item) for item in list(reply_decision.get("detail_notes", []) or []) if str(item).strip()],
+            "suggested_tone": str(reply_decision.get("suggested_tone", "") or "正常回应"),
+            "decision_stage": str(reply_decision.get("decision_stage", "") or ""),
+            "confidence": round(_safe_float(reply_decision.get("confidence", 0.0)), 2),
+        },
+        "behavior_governor": {
+            "reply_mode": str(getattr(behavior, "reply_mode", "observe") or "observe"),
+            "reply_mode_label": _label_reply_mode(getattr(behavior, "reply_mode", "observe")),
+            "interrupt_level": str(getattr(behavior, "interrupt_level", "ignore") or "ignore"),
+            "interrupt_level_label": _label_interrupt_level(getattr(behavior, "interrupt_level", "ignore")),
+            "quote_policy": str(getattr(behavior, "quote_policy", "none") or "none"),
+            "quote_policy_label": _label_quote_policy(getattr(behavior, "quote_policy", "none")),
+            "silence_policy": str(getattr(behavior, "silence_policy", "silent") or "silent"),
+            "silence_policy_label": _label_silence_policy(getattr(behavior, "silence_policy", "silent")),
+            "allow_generation": bool(getattr(behavior, "allow_generation", True)),
+            "model_tier": str(getattr(behavior, "model_tier", "small") or "small"),
+            "model_tier_label": _label_model_tier(getattr(behavior, "model_tier", "small")),
+            "reason_codes": behavior_codes,
+            "reason_labels": [_label_behavior_reason(code) for code in behavior_codes],
+        },
+        "rest_governor": {
+            "posture": str(getattr(rest, "posture", "active") or "active"),
+            "posture_label": _label_rest_posture(getattr(rest, "posture", "active")),
+            "interruption_policy": str(getattr(rest, "interruption_policy", "allow") or "allow"),
+            "interruption_policy_label": _label_rest_interrupt(getattr(rest, "interruption_policy", "allow")),
+            "should_rest": bool(getattr(rest, "should_rest", False)),
+            "should_loaf": bool(getattr(rest, "should_loaf", False)),
+            "reason_codes": rest_codes,
+            "reason_labels": [_label_behavior_reason(code) for code in rest_codes],
+        },
+        "model_governor": {
+            "tier": str(getattr(model, "tier", "skip") or "skip"),
+            "tier_label": _label_model_tier(getattr(model, "tier", "skip")),
+            "rate_limited": bool(getattr(model, "rate_limited", False)),
+            "fallback_to_small": bool(getattr(model, "fallback_to_small", False)),
+            "dynamic_cooldown_sec": round(_safe_float(getattr(model, "dynamic_cooldown_sec", 0.0)), 1),
+            "dynamic_hourly_cap": int(_safe_float(getattr(model, "dynamic_hourly_cap", 0), 0)),
+            "reason_codes": model_codes,
+            "reason_labels": [_label_behavior_reason(code) for code in model_codes],
+        },
+    }
+
+
 def _build_initiative_state(domains: Dict[str, Any], prediction: Dict[str, Any]) -> Dict[str, Any]:
     emergence = domains.get("emergence_core", {})
     boredom = _safe_float(emergence.get("boredom_load", 0.0))
@@ -912,6 +1088,7 @@ def _build_display_policy() -> Dict[str, list[str]]:
 
 def _build_presentation(
     *,
+    chat: Any,
     channel_id: str,
     domains: Dict[str, Any],
     dashboard_snapshot: Dict[str, Any],
@@ -929,6 +1106,7 @@ def _build_presentation(
     relationship = domains.get("relationship_profile", {})
     circadian_detail = _build_circadian_detail(domains)
     emotion_detail = _build_emotion_detail(domains)
+    behavior_detail = _build_behavior_detail(chat, domains, dashboard_snapshot)
 
     active_signals = _build_active_signals(domains)
     resource_detail = _build_resource_detail(domains)
@@ -1049,6 +1227,7 @@ def _build_presentation(
         "resource_detail": resource_detail,
         "circadian_detail": circadian_detail,
         "emotion_detail": emotion_detail,
+        "behavior_detail": behavior_detail,
         "initiative_state": initiative_state,
         "scene_context": scene_context,
         "participant_impacts": participant_impacts,
@@ -1078,6 +1257,7 @@ async def build_channel_monitor_state(channel_id: str) -> Optional[Dict[str, Any
         dashboard_snapshot=dashboard,
     )
     presentation = _build_presentation(
+        chat=chat,
         channel_id=str(channel_id),
         domains=state.get("domains", {}),
         dashboard_snapshot=dashboard,
