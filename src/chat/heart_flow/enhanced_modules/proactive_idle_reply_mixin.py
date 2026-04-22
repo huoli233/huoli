@@ -680,10 +680,11 @@ class ProactiveIdleReplyMixin:
                 if target_user_id:
                     user_style_guide = self._get_user_style_guide(target_user_id)
             from src.chat.replyer.context_block_builder import build_shared_reply_parts
+            self_reference_parts = self._build_self_reference_parts(target_message)
 
             _shared_parts = build_shared_reply_parts(
-                self_memory=self._build_self_reply_memory(),
-                continuity_context=self._build_self_continuity_context(),
+                self_memory=self_reference_parts.get("self_memory", ""),
+                continuity_context=self_reference_parts.get("continuity_context", ""),
                 user_style_guide=user_style_guide,
                 persona_hint=self._build_persona_hint(),
                 reply_style_context=self._build_reply_style_context(relation_view),

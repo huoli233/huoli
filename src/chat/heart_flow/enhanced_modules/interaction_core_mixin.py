@@ -608,6 +608,34 @@ class EnhancedInteractionCoreMixin:
             "如果现在继续说话，优先顺着它们往下接，不要像失忆一样重开话题。\n" + "\n".join(lines)
         )
 
+    def _should_include_self_reference_context(self, target_message: Optional[Any]) -> bool:
+        if target_message is None:
+            return False
+        if bool(getattr(target_message, "is_repeated_short_input", False)):
+            return True
+        if str(getattr(target_message, "context_continuation_hint", "") or "").strip():
+            return True
+        if bool(getattr(target_message, "is_quote_reply", False)):
+            return True
+        if bool(getattr(target_message, "is_reply_to_bot", False)):
+            return True
+        if bool(getattr(target_message, "is_quote_to_bot", False)):
+            return True
+        if self._message_explicitly_replies_to_bot(target_message):
+            return True
+        return False
+
+    def _build_self_reference_parts(self, target_message: Optional[Any]) -> Dict[str, str]:
+        if not self._should_include_self_reference_context(target_message):
+            return {
+                "self_memory": "",
+                "continuity_context": "",
+            }
+        return {
+            "self_memory": self._build_self_reply_memory(),
+            "continuity_context": self._build_self_continuity_context(),
+        }
+
     def _select_preferred_reply_message(
         self, anchor_message: Optional[Any], candidate_messages: List[Any]
     ) -> Optional[Any]:

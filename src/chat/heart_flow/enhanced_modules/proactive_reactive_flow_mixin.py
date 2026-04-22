@@ -144,11 +144,12 @@ class ProactiveReactiveFlowMixin:
             if context_execution_block:
                 extra_info_parts.append(context_execution_block)
             from src.chat.replyer.context_block_builder import build_shared_reply_parts
+            self_reference_parts = self._build_self_reference_parts(target_message)
 
             extra_info_parts.extend(
                 build_shared_reply_parts(
-                    self_memory=self._build_self_reply_memory(),
-                    continuity_context=self._build_self_continuity_context(),
+                    self_memory=self_reference_parts.get("self_memory", ""),
+                    continuity_context=self_reference_parts.get("continuity_context", ""),
                     user_style_guide=user_style_guide,
                     persona_hint="",
                     reply_style_context=self._build_reply_style_context(relation_view),
