@@ -43,6 +43,7 @@ type ParticipantImpact = {
   irritation_load: number;
   trauma_load: number;
   pressure_load: number;
+  interaction_count: number;
   active_signals: string[];
   impact_rank: number;
 };
@@ -68,20 +69,67 @@ type TimelineEvent = {
 type Presentation = {
   resident_overview: Record<string, ResidentCard>;
   active_signals: ActiveSignal[];
+  resource_detail?: ResourceDetail;
+  initiative_state?: InitiativeState;
   scene_context: SceneContext;
   participant_impacts: ParticipantImpact[];
   timeline: TimelineEvent[];
+  display_policy?: DisplayPolicy;
 };
 
 type Prediction = {
   speak_probability: number;
+  probability_percent?: number;
   eta_seconds: number;
   eta_label: string;
+  decision_label?: string;
+  decision_reason?: string;
   content_direction: string;
   reply_length: string;
   tone: string;
+  drive_score?: number;
+  suppression_score?: number;
+  gate_influence?: number;
+  proactive_influence?: number;
+  relationship_influence?: number;
+  resource_influence?: number;
+  scene_influence?: number;
   driving_factors: string[];
   suppressing_factors: string[];
+};
+
+type ResourceDetail = {
+  energy_reserve_ratio: number;
+  energy_phase: string;
+  chat_reserve: number;
+  chat_capacity: number;
+  chat_percent: number;
+  thinking_reserve: number;
+  thinking_capacity: number;
+  thinking_percent: number;
+  activity_index: number;
+  irritation_load: number;
+  social_field_score: number;
+  last_recovery_source: string;
+  last_irritation_relief_source: string;
+};
+
+type InitiativeState = {
+  boredom_load: number;
+  loneliness_load: number;
+  environment_fatigue_load: number;
+  initiative_drive: number;
+  withdrawal_drive: number;
+  effect_label: string;
+  chat_timing_label: string;
+  effect_summary: string;
+};
+
+type DisplayPolicy = {
+  resident: string[];
+  active: string[];
+  detail: string[];
+  hidden: string[];
 };
 
 type MonitorPacket = {
@@ -106,6 +154,13 @@ const severityRank: Record<string, number> = {
   info: 1,
 };
 
+const fallbackDisplayPolicy: DisplayPolicy = {
+  resident: ["精力储备", "内在心情", "注意状态", "社交姿态", "安全护盾", "流转阶段", "场景热度", "发言预测"],
+  active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/群聊升温"],
+  detail: ["资源账本的聊天值和思考值", "群聊感知、话题焦点、活跃人数", "目标用户关系、好感、信任、压力", "发言预测的驱动和抑制因素"],
+  hidden: ["内部阈值", "debug reason", "缓存字段", "旧命名残留", "纯计数器原值"],
+};
+
 function formatClock(timestamp: number): string {
   return new Date(timestamp * 1000).toLocaleTimeString("zh-CN", {
     hour: "2-digit",
@@ -119,6 +174,45 @@ function wsUrl(channelId: string): string {
   const base = `${protocol}//${window.location.host}`;
   const query = channelId ? `?channel_id=${encodeURIComponent(channelId)}` : "";
   return `${base}/ws/state-monitor${query}`;
+}
+
+function percent(value: number | undefined | null): string {
+  const safe = Math.max(0, Math.min(1, Number(value ?? 0)));
+  return `${Math.round(safe * 100)}%`;
+}
+
+function fixed(value: number | undefined | null, digits = 1): string {
+  return Number(value ?? 0).toFixed(digits);
+}
+
+function humanSceneHeat(value: string | undefined): string {
+  return {
+    heated: "高热",
+    lively: "活跃",
+    normal: "正常",
+    quiet: "偏安静",
+    dead: "低活跃",
+  }[value ?? ""] ?? (value || "-");
+}
+
+function connectionLabel(value: string): string {
+  return {
+    idle: "未连接",
+    connecting: "连接中",
+    live: "实时同步",
+    reconnecting: "重连中",
+    error: "连接异常",
+  }[value] ?? value;
+}
+
+function metricTone(value: number): string {
+  if (value >= 0.7) {
+    return "high";
+  }
+  if (value >= 0.35) {
+    return "medium";
+  }
+  return "low";
 }
 
 export function EmotionDashboard() {
@@ -148,6 +242,14 @@ export function EmotionDashboard() {
   const participantImpacts = packet?.presentation?.participant_impacts ?? [];
   const timeline = packet?.presentation?.timeline ?? [];
   const prediction = packet?.prediction;
+  const resourceDetail = packet?.presentation?.resource_detail;
+  const initiativeState = packet?.presentation?.initiative_state;
+  const displayPolicy = packet?.presentation?.display_policy ?? fallbackDisplayPolicy;
+  const selectedOverview = (overview?.channels ?? []).find(
+    (channel) => channel.channel_id === selectedChannel,
+  );
+  const predictionPercent =
+    prediction?.probability_percent ?? Math.round((prediction?.speak_probability ?? 0) * 100);
 
   useEffect(() => {
     let ignore = false;
@@ -284,9 +386,9 @@ export function EmotionDashboard() {
       <header className="dashboard-header">
         <div>
           <p className="eyebrow">Huoli Telemetry</p>
-          <h1>机器人实时状态台</h1>
+          <h1>机器人实时状态栏</h1>
           <p className="subtle">
-            只显示常驻状态与当前激活状态，未激活状态不会进入主页面。
+            免登录查看。顶部显示常驻状态，卡片流只显示当前激活状态，关系、能量、群聊感知和预测依据放在详情区。
           </p>
         </div>
         <div className="header-actions">
@@ -298,17 +400,35 @@ export function EmotionDashboard() {
             >
               {(overview?.channels ?? []).map((channel) => (
                 <option key={channel.channel_id} value={channel.channel_id}>
-                  {channel.chat_type_label ?? (channel.chat_type === "group" ? "群聊" : "私聊")} · {channel.channel_id}
+                  {channel.chat_type_label ?? (channel.chat_type === "group" ? "群聊" : "私聊")} · {channel.platform || "本地"} · {channel.channel_id.slice(0, 8)}
                 </option>
               ))}
             </select>
           </label>
-          <div className={`live-pill is-${connectionState}`}>{connectionState}</div>
+          <div className={`live-pill is-${connectionState}`}>{connectionLabel(connectionState)}</div>
         </div>
       </header>
 
       {loading && <div className="status-banner">正在同步状态数据…</div>}
       {errorMessage && <div className="status-banner is-error">{errorMessage}</div>}
+
+      <section className="command-grid">
+        <article className="command-card">
+          <span>当前入口</span>
+          <strong>{selectedOverview?.chat_type_label ?? "群聊 / 私聊"}</strong>
+          <p>{selectedOverview?.platform || "本地"} · {selectedChannel ? selectedChannel.slice(0, 12) : "暂无活跃会话"}</p>
+        </article>
+        <article className="command-card is-score">
+          <span>是否该聊</span>
+          <strong>{predictionPercent}%</strong>
+          <p>{prediction?.decision_label ?? "等待状态"} · {prediction?.eta_label ?? "-"}</p>
+        </article>
+        <article className="command-card">
+          <span>最后同步</span>
+          <strong>{packet?.updated_at ? formatClock(packet.updated_at) : "-"}</strong>
+          <p>{connectionLabel(connectionState)} · 状态页无需登录凭证</p>
+        </article>
+      </section>
 
       <section className="resident-grid">
         {residentCards.map(([key, card]) => (
@@ -327,6 +447,65 @@ export function EmotionDashboard() {
       </section>
 
       <main className="dashboard-grid">
+        <section className="panel">
+          <div className="panel-header">
+            <h2>资源账本</h2>
+            <span>{resourceDetail?.energy_phase ?? "unknown"}</span>
+          </div>
+          <div className="metric-wall">
+            <div className={`metric-tile tone-${metricTone(resourceDetail?.chat_percent ?? 0)}`}>
+              <span>聊天值</span>
+              <strong>{percent(resourceDetail?.chat_percent)}</strong>
+              <p>{fixed(resourceDetail?.chat_reserve)} / {fixed(resourceDetail?.chat_capacity)}</p>
+            </div>
+            <div className={`metric-tile tone-${metricTone(resourceDetail?.thinking_percent ?? 0)}`}>
+              <span>思考值</span>
+              <strong>{percent(resourceDetail?.thinking_percent)}</strong>
+              <p>{fixed(resourceDetail?.thinking_reserve)} / {fixed(resourceDetail?.thinking_capacity)}</p>
+            </div>
+            <div className="metric-tile">
+              <span>社交场</span>
+              <strong>{fixed(resourceDetail?.social_field_score)}</strong>
+              <p>活跃度 {fixed(resourceDetail?.activity_index)}</p>
+            </div>
+            <div className="metric-tile tone-low">
+              <span>资源烦躁</span>
+              <strong>{fixed(resourceDetail?.irritation_load)}</strong>
+              <p>{resourceDetail?.last_irritation_relief_source || "暂无缓解事件"}</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <h2>主动驱动</h2>
+            <span>{initiativeState?.effect_label ?? "等待状态"}</span>
+          </div>
+          <div className="drive-radar">
+            <div>
+              <span>主动意愿</span>
+              <strong>{percent(initiativeState?.initiative_drive)}</strong>
+            </div>
+            <div>
+              <span>无聊负荷</span>
+              <strong>{percent(initiativeState?.boredom_load)}</strong>
+            </div>
+            <div>
+              <span>孤独负荷</span>
+              <strong>{percent(initiativeState?.loneliness_load)}</strong>
+            </div>
+            <div>
+              <span>环境疲劳</span>
+              <strong>{percent(initiativeState?.environment_fatigue_load)}</strong>
+            </div>
+            <div>
+              <span>撤离倾向</span>
+              <strong>{percent(initiativeState?.withdrawal_drive)}</strong>
+            </div>
+          </div>
+          <p className="panel-note">{initiativeState?.effect_summary ?? "主动驱动会进入发言预测，不再只是日志里的装饰值。"}</p>
+        </section>
+
         <section className="panel panel-signals">
           <div className="panel-header">
             <h2>当前激活状态</h2>
@@ -359,12 +538,12 @@ export function EmotionDashboard() {
         <section className="panel">
           <div className="panel-header">
             <h2>群聊情境</h2>
-            <span>{sceneContext?.scene_heat ?? "unknown"}</span>
+            <span>{humanSceneHeat(sceneContext?.scene_heat)}</span>
           </div>
           <div className="detail-grid">
             <div className="detail-row">
               <span>场景热度</span>
-              <strong>{sceneContext?.scene_heat ?? "-"}</strong>
+              <strong>{humanSceneHeat(sceneContext?.scene_heat)} · {percent(sceneContext?.scene_heat_score)}</strong>
             </div>
             <div className="detail-row">
               <span>活跃人数</span>
@@ -434,6 +613,10 @@ export function EmotionDashboard() {
                     <span>压力</span>
                     <strong>{user.pressure_load.toFixed(1)}</strong>
                   </div>
+                  <div className="detail-row">
+                    <span>互动次数</span>
+                    <strong>{user.interaction_count}</strong>
+                  </div>
                 </div>
                 <div className="topic-wrap">
                   {user.active_signals.length > 0 ? (
@@ -454,16 +637,44 @@ export function EmotionDashboard() {
         <section className="panel">
           <div className="panel-header">
             <h2>发言预测</h2>
-            <span>{prediction?.eta_label ?? "-"}</span>
+            <span>{prediction?.decision_label ?? prediction?.eta_label ?? "-"}</span>
           </div>
           <div className="prediction-hero">
-            <div className="prediction-circle">
-              <span>{Math.round((prediction?.speak_probability ?? 0) * 100)}%</span>
+            <div className="prediction-score">
+              <span>{predictionPercent}%</span>
+              <small>开口概率</small>
             </div>
             <div>
-              <p className="prediction-title">{prediction?.tone ?? "正常回应"}</p>
+              <p className="prediction-title">{prediction?.decision_label ?? "继续观察"}</p>
               <p className="prediction-subtitle">{prediction?.content_direction ?? "暂无预测方向"}</p>
-              <p className="prediction-meta">建议长度：{prediction?.reply_length ?? "-"}</p>
+              <p className="prediction-meta">语气：{prediction?.tone ?? "正常回应"} · 长度：{prediction?.reply_length ?? "-"} · ETA：{prediction?.eta_label ?? "-"}</p>
+              <p className="prediction-reason">{prediction?.decision_reason ?? "等待后端预测理由。"}</p>
+            </div>
+          </div>
+          <div className="prediction-breakdown">
+            <div>
+              <span>开口驱动</span>
+              <strong>{fixed(prediction?.drive_score, 2)}</strong>
+            </div>
+            <div>
+              <span>抑制压力</span>
+              <strong>{fixed(prediction?.suppression_score, 2)}</strong>
+            </div>
+            <div>
+              <span>主动影响</span>
+              <strong>{fixed(prediction?.proactive_influence, 2)}</strong>
+            </div>
+            <div>
+              <span>关系影响</span>
+              <strong>{fixed(prediction?.relationship_influence, 2)}</strong>
+            </div>
+            <div>
+              <span>资源影响</span>
+              <strong>{fixed(prediction?.resource_influence, 2)}</strong>
+            </div>
+            <div>
+              <span>群聊影响</span>
+              <strong>{fixed(prediction?.scene_influence, 2)}</strong>
             </div>
           </div>
           <div className="prediction-columns">
@@ -482,6 +693,31 @@ export function EmotionDashboard() {
                   <li key={item}>{item}</li>
                 ))}
               </ul>
+            </div>
+          </div>
+        </section>
+
+        <section className="panel panel-policy">
+          <div className="panel-header">
+            <h2>显示规则</h2>
+            <span>后端裁定</span>
+          </div>
+          <div className="policy-grid">
+            <div>
+              <h3>常驻</h3>
+              {(displayPolicy?.resident ?? []).map((item) => <span key={item}>{item}</span>)}
+            </div>
+            <div>
+              <h3>激活才显示</h3>
+              {(displayPolicy?.active ?? []).map((item) => <span key={item}>{item}</span>)}
+            </div>
+            <div>
+              <h3>详情区</h3>
+              {(displayPolicy?.detail ?? []).map((item) => <span key={item}>{item}</span>)}
+            </div>
+            <div>
+              <h3>不进入页面</h3>
+              {(displayPolicy?.hidden ?? []).map((item) => <span key={item}>{item}</span>)}
             </div>
           </div>
         </section>

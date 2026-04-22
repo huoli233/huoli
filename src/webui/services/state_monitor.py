@@ -33,6 +33,10 @@ def _signal_color(severity: str) -> str:
     }.get(severity, "#457b9d")
 
 
+def _format_percent(value: float) -> str:
+    return f"{int(round(max(0.0, min(1.0, value)) * 100))}%"
+
+
 def _signal_card(
     *,
     key: str,
@@ -89,6 +93,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
     surface_mask = domains.get("surface_mask", {})
     pending = domains.get("pending_response", {})
     tempo = domains.get("tempo", {})
+    group_climate = domains.get("group_climate", {})
 
     signals: list[Dict[str, Any]] = []
 
@@ -101,7 +106,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
                 family="emotion",
                 severity="medium" if boredom < 0.7 else "high",
                 value=boredom,
-                display_value=f"{boredom:.2f}",
+                display_value=_format_percent(boredom),
                 trend="rising",
                 source_domain="emergence_core",
                 icon="🥱",
@@ -117,7 +122,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
                 family="emotion",
                 severity="medium" if loneliness < 0.7 else "high",
                 value=loneliness,
-                display_value=f"{loneliness:.2f}",
+                display_value=_format_percent(loneliness),
                 trend="rising",
                 source_domain="emergence_core",
                 icon="🫥",
@@ -133,7 +138,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
                 family="emotion",
                 severity="medium" if fatigue < 0.75 else "high",
                 value=fatigue,
-                display_value=f"{fatigue:.2f}",
+                display_value=_format_percent(fatigue),
                 trend="rising",
                 source_domain="emergence_core",
                 icon="🌫️",
@@ -149,7 +154,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
                 family="emotion",
                 severity="medium" if withdrawal < 0.55 else "high",
                 value=withdrawal,
-                display_value=f"{withdrawal:.2f}",
+                display_value=_format_percent(withdrawal),
                 trend="rising",
                 source_domain="emergence_core",
                 icon="🚪",
@@ -165,7 +170,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
                 family="drive",
                 severity="high" if initiative >= 0.70 else "low",
                 value=initiative,
-                display_value=f"{initiative:.2f}",
+                display_value=_format_percent(initiative),
                 trend="rising" if initiative >= 0.70 else "falling",
                 source_domain="emergence_core",
                 icon="🗣️" if initiative >= 0.70 else "🤐",
@@ -245,7 +250,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
                 family="trauma",
                 severity="medium" if flashback < 0.45 else "high",
                 value=flashback,
-                display_value=f"{flashback:.2f}",
+                display_value=_format_percent(flashback),
                 trend="volatile",
                 source_domain="trauma_load",
                 icon="⚡",
@@ -261,7 +266,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
                 family="trauma",
                 severity="medium" if cognitive_drag < 0.45 else "high",
                 value=cognitive_drag,
-                display_value=f"{cognitive_drag:.2f}",
+                display_value=_format_percent(cognitive_drag),
                 trend="persistent",
                 source_domain="trauma_load",
                 icon="🧩",
@@ -364,6 +369,38 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
             )
         )
 
+    rapport = _safe_float(relationship.get("rapport_score", 0.0))
+    if rapport >= 30 or rapport <= -10:
+        signals.append(
+            _signal_card(
+                key="rapport_score",
+                label="好感关系",
+                family="relationship",
+                severity="info" if rapport >= 30 else "medium",
+                value=rapport,
+                display_value=f"{rapport:.1f}",
+                trend="warm" if rapport >= 30 else "cold",
+                source_domain="relationship_profile",
+                icon="🤝" if rapport >= 30 else "🧊",
+            )
+        )
+
+    trust = _safe_float(relationship.get("trust_score", 0.0))
+    if trust >= 70 or (0 < trust <= 25):
+        signals.append(
+            _signal_card(
+                key="trust_score",
+                label="信任关系",
+                family="relationship",
+                severity="info" if trust >= 70 else "high",
+                value=trust,
+                display_value=f"{trust:.1f}",
+                trend="stable" if trust >= 70 else "fragile",
+                source_domain="relationship_profile",
+                icon="🟢" if trust >= 70 else "🟠",
+            )
+        )
+
     overstep = _safe_float(relationship.get("boundary_overstep_index", 0.0))
     if overstep >= 5:
         signals.append(
@@ -392,6 +429,22 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
                 trend="holding",
                 source_domain="tempo",
                 icon="⏳",
+            )
+        )
+
+    scene_heat_score = _safe_float(group_climate.get("scene_heat_score", 0.0))
+    if scene_heat_score >= 0.55:
+        signals.append(
+            _signal_card(
+                key="scene_heat_score",
+                label="群聊升温",
+                family="scene",
+                severity="medium" if scene_heat_score < 0.78 else "high",
+                value=scene_heat_score,
+                display_value=_format_percent(scene_heat_score),
+                trend="rising",
+                source_domain="group_climate",
+                icon="🔥",
             )
         )
 
@@ -471,6 +524,90 @@ def _build_timeline(
     return generated
 
 
+def _build_resource_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
+    resource = domains.get("resource_ledger", {})
+    chat_capacity = max(1.0, _safe_float(resource.get("chat_capacity", 100.0), 100.0))
+    thinking_capacity = max(1.0, _safe_float(resource.get("thinking_capacity", 100.0), 100.0))
+    chat_reserve = _safe_float(resource.get("chat_reserve", 0.0))
+    thinking_reserve = _safe_float(resource.get("thinking_reserve", 0.0))
+    return {
+        "energy_reserve_ratio": round(_safe_float(resource.get("energy_reserve_ratio", 0.0)), 3),
+        "energy_phase": str(resource.get("energy_phase", "unknown") or "unknown"),
+        "chat_reserve": round(chat_reserve, 2),
+        "chat_capacity": round(chat_capacity, 2),
+        "chat_percent": round(chat_reserve / chat_capacity, 3),
+        "thinking_reserve": round(thinking_reserve, 2),
+        "thinking_capacity": round(thinking_capacity, 2),
+        "thinking_percent": round(thinking_reserve / thinking_capacity, 3),
+        "activity_index": round(_safe_float(resource.get("activity_index", 0.0)), 2),
+        "irritation_load": round(_safe_float(resource.get("irritation_load", 0.0)), 2),
+        "social_field_score": round(_safe_float(resource.get("social_field_score", 0.0)), 2),
+        "last_recovery_source": str(resource.get("last_recovery_source", "") or ""),
+        "last_irritation_relief_source": str(resource.get("last_irritation_relief_source", "") or ""),
+    }
+
+
+def _build_initiative_state(domains: Dict[str, Any], prediction: Dict[str, Any]) -> Dict[str, Any]:
+    emergence = domains.get("emergence_core", {})
+    boredom = _safe_float(emergence.get("boredom_load", 0.0))
+    loneliness = _safe_float(emergence.get("loneliness_load", 0.0))
+    fatigue = _safe_float(emergence.get("environment_fatigue_load", 0.0))
+    initiative = _safe_float(emergence.get("initiative_drive", 0.0))
+    withdrawal = _safe_float(emergence.get("withdrawal_drive", 0.0))
+    if initiative >= 0.7:
+        label = "主动想聊"
+    elif initiative <= 0.25:
+        label = "主动性偏低"
+    else:
+        label = "自然观望"
+    return {
+        "boredom_load": round(boredom, 3),
+        "loneliness_load": round(loneliness, 3),
+        "environment_fatigue_load": round(fatigue, 3),
+        "initiative_drive": round(initiative, 3),
+        "withdrawal_drive": round(withdrawal, 3),
+        "effect_label": label,
+        "chat_timing_label": str(prediction.get("decision_label", "继续观察") or "继续观察"),
+        "effect_summary": (
+            "无聊和孤独会推高主动开口；环境疲劳、撤离倾向、压力和低资源会压低开口。"
+        ),
+    }
+
+
+def _build_display_policy() -> Dict[str, list[str]]:
+    return {
+        "resident": [
+            "精力储备",
+            "内在心情",
+            "注意状态",
+            "社交姿态",
+            "安全护盾",
+            "流转阶段",
+            "场景热度",
+            "发言预测",
+        ],
+        "active": [
+            "无聊/孤独/环境疲劳/撤离/主动意愿",
+            "烦躁/压力/创伤/混乱/伪装",
+            "关系好感/信任显著偏高或偏低",
+            "冷却窗口/等待时长/重新接入/群聊升温",
+        ],
+        "detail": [
+            "资源账本的聊天值和思考值",
+            "群聊感知、话题焦点、活跃人数",
+            "目标用户关系、好感、信任、压力",
+            "发言预测的驱动和抑制因素",
+        ],
+        "hidden": [
+            "内部阈值",
+            "debug reason",
+            "缓存字段",
+            "旧命名残留",
+            "纯计数器原值",
+        ],
+    }
+
+
 def _build_presentation(
     *,
     channel_id: str,
@@ -490,14 +627,18 @@ def _build_presentation(
     relationship = domains.get("relationship_profile", {})
 
     active_signals = _build_active_signals(domains)
+    resource_detail = _build_resource_detail(domains)
+    initiative_state = _build_initiative_state(domains, prediction)
+    energy_ratio = _safe_float(domains.get("resource_ledger", {}).get("energy_reserve_ratio", 0.0))
+    vitality_percent = _safe_float(vitality.get("percent", energy_ratio * 100), energy_ratio * 100)
 
     resident_overview = {
         "energy_reserve": {
             "label": "精力储备",
             "icon": str(vitality.get("icon", "🔋") or "🔋"),
             "state": str(vitality.get("level", domains.get("resource_ledger", {}).get("energy_phase", "未知")) or "未知"),
-            "value": _safe_float(domains.get("resource_ledger", {}).get("energy_reserve_ratio", 0.0)),
-            "display_value": f"{int(_safe_float(vitality.get('percent', 0), 0.0))}%",
+            "value": energy_ratio,
+            "display_value": f"{int(vitality_percent)}%",
             "color": str(vitality.get("color", "#22c55e") or "#22c55e"),
         },
         "inner_mood": {
@@ -553,7 +694,7 @@ def _build_presentation(
             "icon": "🔮",
             "state": "高" if _safe_float(prediction.get("speak_probability", 0.0)) >= 0.7 else "中" if _safe_float(prediction.get("speak_probability", 0.0)) >= 0.45 else "低",
             "value": _safe_float(prediction.get("speak_probability", 0.0)),
-            "display_value": prediction.get("eta_label", "未知"),
+            "display_value": f"{int(_safe_float(prediction.get('probability_percent', 0), 0.0))}%",
             "color": "#8d99ae",
         },
     }
@@ -570,7 +711,7 @@ def _build_presentation(
     }
 
     participant_impacts = []
-    if relationship.get("user_id"):
+    if relationship.get("user_id") or relationship.get("display_name"):
         active_labels = [
             signal["label"]
             for signal in active_signals
@@ -589,6 +730,7 @@ def _build_presentation(
                 "irritation_load": relationship.get("irritation_load", 0.0),
                 "trauma_load": relationship.get("trauma_load", 0.0),
                 "pressure_load": relationship.get("pressure_load", 0.0),
+                "interaction_count": relationship.get("interaction_count", 0),
                 "active_signals": active_labels,
                 "impact_rank": round(impact_rank, 3),
             }
@@ -599,9 +741,12 @@ def _build_presentation(
     return {
         "resident_overview": resident_overview,
         "active_signals": active_signals,
+        "resource_detail": resource_detail,
+        "initiative_state": initiative_state,
         "scene_context": scene_context,
         "participant_impacts": participant_impacts,
         "timeline": timeline,
+        "display_policy": _build_display_policy(),
     }
 
 
