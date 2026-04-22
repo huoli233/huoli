@@ -50,6 +50,7 @@ class SpeakPredictionEngine:
         counterparty = domains.get("counterparty_intent", {}) if isinstance(domains, dict) else {}
         boundary = domains.get("boundary_guard", {}) if isinstance(domains, dict) else {}
         tempo = domains.get("tempo", {}) if isinstance(domains, dict) else {}
+        circadian = domains.get("circadian_rhythm", {}) if isinstance(domains, dict) else {}
         pending = domains.get("pending_response", {}) if isinstance(domains, dict) else {}
         flow_runtime = domains.get("flow_runtime", {}) if isinstance(domains, dict) else {}
 
@@ -92,6 +93,16 @@ class SpeakPredictionEngine:
             counterparty.get("hostility_detected", False)
         )
         cooling_down = bool(tempo.get("cooling_down", False))
+        night_phase = str(circadian.get("phase", "awake") or "awake")
+        night_phase_label = str(circadian.get("phase_label", "清醒") or "清醒")
+        is_sleeping = bool(circadian.get("is_sleeping", False))
+        is_burnthrough = bool(circadian.get("is_burnthrough", False))
+        drowsiness_value = _safe_float(circadian.get("drowsiness_value", 0.0))
+        sleep_debt = _safe_float(circadian.get("sleep_debt", 0.0))
+        overnight_pressure = _safe_float(circadian.get("overnight_pressure", 0.0))
+        sleep_reserve = _safe_float(circadian.get("sleep_reserve", 100.0), 100.0)
+        response_suppression = _safe_float(circadian.get("response_suppression", 0.0))
+        remaining_sleep_replies = _safe_float(circadian.get("remaining_sleep_replies", 1.0), 1.0)
 
         pending_active = bool(pending.get("pending_active", False))
         pending_seconds = _safe_float(pending.get("pending_seconds", 0.0))
@@ -130,6 +141,29 @@ class SpeakPredictionEngine:
         resource_influence = energy_ratio * 0.15 + process_ratio * 0.05
         scene_influence = min(1.0, scene_heat_score) * 0.08 + min(1.0, active_user_count / 8.0) * 0.04
         gate_influence = urgency_score * 0.22
+        circadian_influence = 0.0
+        if night_phase in {"night_active", "social_night", "midnight_reflect"}:
+            circadian_influence += 0.04
+        if night_phase == "dawn_recover":
+            circadian_influence += 0.03
+        if is_burnthrough:
+            circadian_influence -= 0.20
+        if night_phase == "light_sleep":
+            circadian_influence -= 0.28
+        if night_phase == "deep_sleep":
+            circadian_influence -= 0.45
+        elif is_sleeping:
+            circadian_influence -= 0.30
+        if drowsiness_value >= 60:
+            circadian_influence -= min(0.12, (drowsiness_value - 60.0) / 100.0)
+        if sleep_debt >= 0.45:
+            circadian_influence -= min(0.10, (sleep_debt - 0.45) * 0.18)
+        if overnight_pressure >= 55:
+            circadian_influence -= min(0.08, (overnight_pressure - 55.0) / 100.0)
+        if sleep_reserve <= 30:
+            circadian_influence -= min(0.10, (30.0 - sleep_reserve) / 100.0)
+        if remaining_sleep_replies <= 0 and is_sleeping:
+            circadian_influence -= 0.10
 
         drive_score = (
             gate_influence
@@ -139,6 +173,8 @@ class SpeakPredictionEngine:
             + scene_influence
             + max(-0.18, relationship_influence)
         )
+        if circadian_influence > 0:
+            drive_score += circadian_influence
         if should_reengage:
             drive_score += 0.08
         if pending_active and pending_seconds > 0:
@@ -155,6 +191,10 @@ class SpeakPredictionEngine:
         )
         if cooling_down:
             suppression_score += 0.08
+        if circadian_influence < 0:
+            suppression_score += abs(circadian_influence)
+        if response_suppression > 0:
+            suppression_score += min(0.16, response_suppression * 0.16)
         if hostility_detected:
             suppression_score += 0.12
         if blocked:
@@ -201,7 +241,8 @@ class SpeakPredictionEngine:
             decision_label = "暂时不聊"
         decision_reason = (
             f"开口驱动 {drive_score:.2f} / 抑制压力 {suppression_score:.2f}，"
-            f"主动意愿 {initiative_drive:.2f}，关系就绪 {readiness_score:.2f}。"
+            f"主动意愿 {initiative_drive:.2f}，关系就绪 {readiness_score:.2f}，"
+            f"昼夜状态 {night_phase_label}。"
         )
 
         driving_factors: List[str] = []
@@ -223,6 +264,8 @@ class SpeakPredictionEngine:
             driving_factors.append(f"当前用户好感较高({rapport_score:.1f})")
         if trust_score >= 65:
             driving_factors.append(f"信任基础较强({trust_score:.1f})")
+        if circadian_influence > 0:
+            driving_factors.append(f"昼夜状态有利于开口({night_phase_label})")
 
         if environment_fatigue_load >= 0.35:
             suppressing_factors.append(f"环境疲劳较高({environment_fatigue_load:.2f})")
@@ -240,6 +283,16 @@ class SpeakPredictionEngine:
             suppressing_factors.append("关系或边界信号检测到敌意")
         if cooling_down:
             suppressing_factors.append("当前处于冷却窗口")
+        if is_sleeping:
+            suppressing_factors.append(f"当前处于{night_phase_label}，优先保持睡眠")
+        elif is_burnthrough:
+            suppressing_factors.append("当前处于熬穿状态，回复质量和稳定性下降")
+        elif drowsiness_value >= 60:
+            suppressing_factors.append(f"困意较高({drowsiness_value:.0f})")
+        if sleep_debt >= 0.45:
+            suppressing_factors.append(f"睡眠债偏高({_ratio(sleep_debt):.0%})")
+        if sleep_reserve <= 30:
+            suppressing_factors.append(f"睡眠储备偏低({sleep_reserve:.0f})")
         if blocked:
             suppressing_factors.append("安全防护阻断了发言倾向")
         if not driving_factors:
@@ -266,6 +319,7 @@ class SpeakPredictionEngine:
             "relationship_influence": round(relationship_influence, 3),
             "resource_influence": round(resource_influence, 3),
             "scene_influence": round(scene_influence, 3),
+            "circadian_influence": round(circadian_influence, 3),
             "driving_factors": driving_factors,
             "suppressing_factors": suppressing_factors,
         }

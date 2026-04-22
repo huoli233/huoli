@@ -96,6 +96,72 @@ def _derive_scene_heat(active_users: int, vexation: float, weariness: float) -> 
     return "dead", heat_score
 
 
+def _normalize_night_phase(value: Any) -> str:
+    raw = str(value or "").strip().lower()
+    return {
+        "daytime": "awake",
+        "active_twilight": "active_twilight",
+        "drowsy": "drowsy",
+        "deep_valley": "deep_sleep",
+        "dawn_recovery": "dawn_recover",
+        "dawn_recover": "dawn_recover",
+        "burned_out": "burnthrough",
+        "burnthrough": "burnthrough",
+        "light_sleep": "light_sleep",
+        "deep_sleep": "deep_sleep",
+        "night_active": "night_active",
+        "midnight_reflect": "midnight_reflect",
+        "social_night": "social_night",
+        "quiet_contemplate": "quiet_contemplate",
+        "awake": "awake",
+    }.get(raw, raw or "awake")
+
+
+def _night_phase_label(value: Any) -> str:
+    phase = _normalize_night_phase(value)
+    return {
+        "awake": "清醒",
+        "active_twilight": "黄昏微倦",
+        "drowsy": "犯困",
+        "light_sleep": "浅睡",
+        "deep_sleep": "深睡",
+        "deep_valley": "深睡沉寂",
+        "burnthrough": "熬穿",
+        "dawn_recover": "黎明恢复",
+        "night_active": "夜间活跃",
+        "midnight_reflect": "午夜反思",
+        "social_night": "社交夜",
+        "quiet_contemplate": "安静沉思",
+    }.get(phase, "清醒")
+
+
+def _body_state_label(value: Any) -> str:
+    return {
+        "deep_half_asleep": "半梦半醒很深",
+        "light_half_asleep": "半梦半醒",
+        "irritated_woken": "被吵醒有点恼",
+        "slightly_grumpy": "醒来有点烦",
+        "stubborn_lazy": "赖床抗拒",
+        "reluctant_wake": "不太想醒",
+        "frequently_yawning": "频繁打哈欠",
+        "occasionally_yawning": "偶尔打哈欠",
+        "on_verge_collapse": "快撑不住",
+        "heavily_strained": "明显疲惫",
+        "noticeably_tired": "有点累",
+        "normal": "正常",
+    }.get(str(value or "").strip(), str(value or "") or "正常")
+
+
+def _expression_style_label(value: Any) -> str:
+    return {
+        "normal": "正常",
+        "drowsy": "困倦短句",
+        "stubborn": "硬撑克制",
+        "arousal": "短时亢奋",
+        "burnthrough": "熬穿失衡",
+    }.get(str(value or "").strip().lower(), str(value or "") or "正常")
+
+
 def _extract_world_snapshot(chat: Any) -> Dict[str, Any]:
     snapshot = getattr(chat, "_tick_world_snapshot", None)
     if snapshot is None:
@@ -119,7 +185,10 @@ def _extract_runtime_snapshot(chat: Any) -> Dict[str, Any]:
         "last_behavior_governor": "_last_behavior_governor_verdict",
         "last_model_governor": "_last_model_governor_verdict",
         "cached_night_phase": "_cached_night_phase",
+        "cached_night_summary": "_cached_night_summary",
         "cached_metabolism_constraints": "_cached_metabolism_constraints",
+        "cached_emotion_state": "_cached_emotion_state",
+        "cached_emotion_feedback_report": "_cached_emotion_feedback_report",
         "last_relation_snapshot": "_last_relation_snapshot",
         "participant_summary": "_cached_participant_summary",
         "last_user_id": "_last_user_id",
@@ -184,6 +253,107 @@ def _extract_emergence_state(channel_id: str) -> Dict[str, Any]:
         "silence_seconds": round(_safe_float(getattr(state, "silence_duration", 0.0)), 2),
         "unanswered_count": _safe_int(getattr(state, "unanswered_count", 0)),
         "feeling_text": str(getattr(state, "feeling_description", "") or ""),
+    }
+
+
+def _extract_circadian_rhythm(
+    channel_id: str,
+    runtime: Dict[str, Any],
+    subject: Dict[str, Any],
+) -> Dict[str, Any]:
+    summary = runtime.get("cached_night_summary", {})
+    if not isinstance(summary, dict):
+        summary = {}
+
+    phase = _normalize_night_phase(
+        summary.get("phase")
+        or subject.get("night_phase")
+        or runtime.get("cached_night_phase")
+        or "awake"
+    )
+    phase_label = str(summary.get("phase_label") or _night_phase_label(phase))
+    can_reply = bool(summary.get("can_reply", True))
+    remaining_replies = _safe_int(summary.get("remaining_replies", 0), 0)
+    sleep_reply_used = _safe_int(summary.get("sleep_reply_used", 0), 0)
+    sleep_reply_cap = _safe_int(summary.get("night_reply_cap", 0), 0)
+    peek_window = bool(summary.get("is_peek_window", summary.get("peek_window_open", False)))
+    sleep_debt = _safe_float(summary.get("sleep_debt", 0.0))
+    drowsiness = _safe_float(summary.get("drowsiness", summary.get("drowsiness_value", 0.0)))
+    overnight_pressure = _safe_float(summary.get("overnight_pressure", 0.0))
+    sleep_reserve = _safe_float(summary.get("sleep_reserve", 100.0), 100.0)
+    dawn_progress = _safe_float(summary.get("dawn_recovery_progress", 0.0))
+    response_suppression = _safe_float(summary.get("response_suppression", 0.0))
+    body_state_tag = str(summary.get("body_state_tag", "") or "")
+    mood_hint = str(summary.get("monologue_mood_hint", "") or "")
+    expression_style = str(summary.get("expression_style", "normal") or "normal")
+    is_burnthrough = bool(summary.get("is_burnthrough", False)) or phase == "burnthrough"
+    is_sleeping = bool(summary.get("is_sleeping", subject.get("is_sleeping", False))) or phase in {
+        "light_sleep",
+        "deep_sleep",
+    }
+    is_night = bool(summary.get("is_night", False)) or phase not in {"awake"}
+
+    try:
+        import src.core.night_cycle_system as night_module
+
+        instances = getattr(night_module, "_night_system_instances", {}) or {}
+        night_cycle = instances.get(channel_id) or instances.get(str(channel_id))
+        if night_cycle is not None:
+            behavior = night_cycle.night_behavior_summary()
+            state = night_cycle.state_snapshot
+            phase = _normalize_night_phase(behavior.get("phase", phase))
+            phase_label = str(behavior.get("phase_label") or _night_phase_label(phase))
+            can_reply = bool(behavior.get("can_reply", can_reply))
+            remaining_replies = _safe_int(behavior.get("remaining_replies", remaining_replies))
+            sleep_debt = _safe_float(behavior.get("sleep_debt", sleep_debt))
+            drowsiness = _safe_float(behavior.get("drowsiness_value", drowsiness))
+            overnight_pressure = _safe_float(behavior.get("overnight_pressure", overnight_pressure))
+            sleep_reserve = _safe_float(behavior.get("sleep_reserve", sleep_reserve))
+            response_suppression = _safe_float(behavior.get("response_suppression", response_suppression))
+            body_state_tag = str(behavior.get("body_state_tag", body_state_tag) or "")
+            mood_hint = str(behavior.get("monologue_mood_hint", mood_hint) or "")
+            peek_window = bool(behavior.get("is_peek_window", peek_window))
+            is_burnthrough = bool(behavior.get("burned_out", is_burnthrough)) or phase == "burnthrough"
+            is_sleeping = bool(behavior.get("is_sleeping", is_sleeping)) or phase in {"light_sleep", "deep_sleep"}
+            is_night = phase not in {"awake"}
+            dawn_progress = _safe_float(getattr(state, "dawn_recovery_progress", dawn_progress))
+            sleep_reply_used = _safe_int(getattr(state, "sleep_reply_used", sleep_reply_used))
+            sleep_reply_cap = _safe_int(getattr(state, "night_reply_cap", sleep_reply_cap))
+            try:
+                style = night_cycle.get_expression_deformation()
+                expression_style = str(style.get("active_template", expression_style) or expression_style)
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.debug(f"昼夜节律导出失败: {exc}")
+
+    if sleep_reply_cap <= 0:
+        sleep_reply_cap = max(remaining_replies, 0)
+    if remaining_replies <= 0 and sleep_reply_cap > 0:
+        remaining_replies = max(0, sleep_reply_cap - sleep_reply_used)
+
+    return {
+        "phase": phase,
+        "phase_label": phase_label or _night_phase_label(phase),
+        "is_night": is_night,
+        "is_sleeping": is_sleeping,
+        "is_burnthrough": is_burnthrough,
+        "can_reply": can_reply,
+        "drowsiness_value": round(drowsiness, 3),
+        "sleep_debt": round(sleep_debt, 3),
+        "overnight_pressure": round(overnight_pressure, 3),
+        "sleep_reserve": round(sleep_reserve, 3),
+        "dawn_recovery_progress": round(dawn_progress, 3),
+        "peek_window_open": peek_window,
+        "sleep_reply_used": sleep_reply_used,
+        "sleep_reply_cap": sleep_reply_cap,
+        "remaining_sleep_replies": remaining_replies,
+        "response_suppression": round(response_suppression, 3),
+        "body_state_tag": body_state_tag,
+        "body_state_label": _body_state_label(body_state_tag),
+        "mood_hint": mood_hint,
+        "expression_style": expression_style,
+        "expression_style_label": _expression_style_label(expression_style),
     }
 
 
@@ -273,6 +443,7 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
     scene = world_state.get("scene", {}) if isinstance(world_state, dict) else {}
     behavior = world_state.get("behavior", {}) if isinstance(world_state, dict) else {}
     meta = world_state.get("meta", {}) if isinstance(world_state, dict) else {}
+    circadian = _extract_circadian_rhythm(channel_id, runtime, subject)
     participant_summary = runtime.get("participant_summary", {}) if isinstance(runtime.get("participant_summary"), dict) else {}
     active_users = scene.get("active_users", []) if isinstance(scene.get("active_users", []), list) else []
     topic_focus = list(scene.get("current_topics", []) or [])
@@ -404,13 +575,15 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
         },
         "relationship_profile": relation,
         "emergence_core": emergence,
+        "circadian_rhythm": circadian,
         "flow_runtime": {
             "phase": str(subject.get("phase", "standby") or "standby"),
             "phase_label": str(subject.get("phase_label", "待命") or "待命"),
             "watch_state": str(subject.get("watch_level", "peek") or "peek"),
-            "night_phase": str(subject.get("night_phase", "") or runtime.get("cached_night_phase", "")),
-            "sleeping": bool(subject.get("is_sleeping", False)),
-            "reply_allowed": bool(subject.get("can_reply", True)),
+            "night_phase": circadian.get("phase", "awake"),
+            "night_phase_label": circadian.get("phase_label", "清醒"),
+            "sleeping": bool(circadian.get("is_sleeping", False)),
+            "reply_allowed": bool(subject.get("can_reply", True)) and bool(circadian.get("can_reply", True)),
             "pending_active": pending_active,
             "last_target_user_id": relation.get("user_id", ""),
             "topic_focus": topic_focus,

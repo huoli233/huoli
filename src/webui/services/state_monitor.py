@@ -37,6 +37,71 @@ def _format_percent(value: float) -> str:
     return f"{int(round(max(0.0, min(1.0, value)) * 100))}%"
 
 
+def _label_energy_phase(value: Any) -> str:
+    return {
+        "full": "精力充沛",
+        "adequate": "储备充足",
+        "low": "储备偏低",
+        "critical": "接近见底",
+        "depleted": "已经耗尽",
+        "unknown": "未知",
+    }.get(str(value or "").strip().lower(), "未知")
+
+
+def _label_scene_heat(value: Any) -> str:
+    return {
+        "heated": "高热",
+        "lively": "活跃",
+        "normal": "正常",
+        "quiet": "偏安静",
+        "dead": "低活跃",
+    }.get(str(value or "").strip().lower(), str(value or "") or "-")
+
+
+def _label_family(value: Any) -> str:
+    return {
+        "emotion": "情绪",
+        "drive": "主动性",
+        "relationship": "关系",
+        "trauma": "创伤",
+        "mask": "伪装",
+        "conditioning": "调教",
+        "runtime": "运行",
+        "scene": "群聊",
+        "circadian": "昼夜",
+    }.get(str(value or "").strip().lower(), str(value or "") or "状态")
+
+
+def _label_trend(value: Any) -> str:
+    return {
+        "rising": "上升",
+        "falling": "下降",
+        "persistent": "持续",
+        "volatile": "波动",
+        "holding": "保持",
+        "ready": "已就绪",
+        "warm": "升温",
+        "cold": "降温",
+        "stable": "稳定",
+        "fragile": "脆弱",
+        "active": "激活",
+        "recovering": "恢复中",
+    }.get(str(value or "").strip().lower(), str(value or "") or "稳定")
+
+
+def _label_source(value: Any) -> str:
+    return {
+        "emergence_core": "涌现核心",
+        "relationship_profile": "关系档案",
+        "trauma_load": "创伤负荷",
+        "surface_mask": "表层伪装",
+        "tempo": "节奏控制",
+        "group_climate": "群聊气候",
+        "pending_response": "待回应状态",
+        "circadian_rhythm": "昼夜节律",
+    }.get(str(value or "").strip(), str(value or "") or "状态源")
+
+
 def _signal_card(
     *,
     key: str,
@@ -53,11 +118,14 @@ def _signal_card(
         "key": key,
         "label": label,
         "family": family,
+        "family_label": _label_family(family),
         "severity": severity,
         "value": round(value, 3),
         "display_value": display_value,
         "trend": trend,
+        "trend_label": _label_trend(trend),
         "source_domain": source_domain,
+        "source_domain_label": _label_source(source_domain),
         "icon": icon,
         "color": _signal_color(severity),
     }
@@ -94,6 +162,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
     pending = domains.get("pending_response", {})
     tempo = domains.get("tempo", {})
     group_climate = domains.get("group_climate", {})
+    circadian = domains.get("circadian_rhythm", {})
 
     signals: list[Dict[str, Any]] = []
 
@@ -479,6 +548,174 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
             )
         )
 
+    if bool(circadian.get("is_burnthrough", False)):
+        signals.append(
+            _signal_card(
+                key="burnthrough",
+                label="熬穿状态",
+                family="circadian",
+                severity="critical",
+                value=1.0,
+                display_value="已熬穿",
+                trend="volatile",
+                source_domain="circadian_rhythm",
+                icon="🔥",
+            )
+        )
+    elif str(circadian.get("phase", "")) == "deep_sleep":
+        signals.append(
+            _signal_card(
+                key="deep_sleep",
+                label="深睡中",
+                family="circadian",
+                severity="high",
+                value=1.0,
+                display_value="深睡",
+                trend="holding",
+                source_domain="circadian_rhythm",
+                icon="💤",
+            )
+        )
+    elif str(circadian.get("phase", "")) == "light_sleep":
+        signals.append(
+            _signal_card(
+                key="light_sleep",
+                label="浅睡中",
+                family="circadian",
+                severity="medium",
+                value=1.0,
+                display_value="浅睡",
+                trend="holding",
+                source_domain="circadian_rhythm",
+                icon="😴",
+            )
+        )
+    elif str(circadian.get("phase", "")) == "dawn_recover":
+        signals.append(
+            _signal_card(
+                key="dawn_recovery",
+                label="黎明恢复",
+                family="circadian",
+                severity="info",
+                value=_safe_float(circadian.get("dawn_recovery_progress", 0.0)),
+                display_value=_format_percent(_safe_float(circadian.get("dawn_recovery_progress", 0.0))),
+                trend="recovering",
+                source_domain="circadian_rhythm",
+                icon="🌅",
+            )
+        )
+
+    drowsiness = _safe_float(circadian.get("drowsiness_value", 0.0))
+    if drowsiness >= 60:
+        signals.append(
+            _signal_card(
+                key="drowsiness_value",
+                label="困意过高",
+                family="circadian",
+                severity="medium" if drowsiness < 80 else "high",
+                value=drowsiness,
+                display_value=f"{drowsiness:.0f}",
+                trend="rising",
+                source_domain="circadian_rhythm",
+                icon="🌙",
+            )
+        )
+
+    sleep_debt = _safe_float(circadian.get("sleep_debt", 0.0))
+    if sleep_debt >= 0.45:
+        signals.append(
+            _signal_card(
+                key="sleep_debt",
+                label="睡眠债偏高",
+                family="circadian",
+                severity="medium" if sleep_debt < 0.75 else "high",
+                value=sleep_debt,
+                display_value=_format_percent(sleep_debt),
+                trend="rising",
+                source_domain="circadian_rhythm",
+                icon="🛌",
+            )
+        )
+
+    sleep_reserve = _safe_float(circadian.get("sleep_reserve", 100.0), 100.0)
+    if sleep_reserve <= 25:
+        signals.append(
+            _signal_card(
+                key="sleep_reserve",
+                label="睡眠储备偏低",
+                family="circadian",
+                severity="high",
+                value=sleep_reserve,
+                display_value=f"{sleep_reserve:.0f}",
+                trend="falling",
+                source_domain="circadian_rhythm",
+                icon="🔋",
+            )
+        )
+
+    if bool(circadian.get("peek_window_open", False)):
+        signals.append(
+            _signal_card(
+                key="peek_window_open",
+                label="浅睡窥屏窗口",
+                family="circadian",
+                severity="info",
+                value=1.0,
+                display_value="打开",
+                trend="active",
+                source_domain="circadian_rhythm",
+                icon="🫣",
+            )
+        )
+
+    mood_bias = _safe_float(emergence.get("mood_bias", 0.5), 0.5)
+    if mood_bias <= 0.25:
+        signals.append(
+            _signal_card(
+                key="mood_bias",
+                label="情绪低落",
+                family="emotion",
+                severity="medium",
+                value=mood_bias,
+                display_value=_format_percent(mood_bias),
+                trend="falling",
+                source_domain="emergence_core",
+                icon="🌧️",
+            )
+        )
+
+    curiosity = _safe_float(emergence.get("curiosity_drive", 0.0))
+    if curiosity >= 0.65:
+        signals.append(
+            _signal_card(
+                key="curiosity_drive",
+                label="好奇心升高",
+                family="emotion",
+                severity="info",
+                value=curiosity,
+                display_value=_format_percent(curiosity),
+                trend="rising",
+                source_domain="emergence_core",
+                icon="✨",
+            )
+        )
+
+    social_desire = _safe_float(emergence.get("social_desire", 0.0))
+    if social_desire >= 0.75 or social_desire <= 0.25:
+        signals.append(
+            _signal_card(
+                key="social_desire",
+                label="社交欲",
+                family="emotion",
+                severity="info" if social_desire >= 0.75 else "low",
+                value=social_desire,
+                display_value=_format_percent(social_desire),
+                trend="rising" if social_desire >= 0.75 else "falling",
+                source_domain="emergence_core",
+                icon="💬" if social_desire >= 0.75 else "🤫",
+            )
+        )
+
     return signals
 
 
@@ -508,17 +745,17 @@ def _build_timeline(
                 "at": time.time(),
                 "label": signal["label"],
                 "detail": f"{signal['label']} 当前处于 {signal['display_value']}",
-                "family": signal["family"],
+                "family": signal.get("family_label", signal["family"]),
             }
         )
     if not generated:
-        scene_heat = domains.get("group_climate", {}).get("scene_heat", "normal")
+        scene_heat = _label_scene_heat(domains.get("group_climate", {}).get("scene_heat", "normal"))
         generated.append(
             {
                 "at": time.time(),
-                "label": "scene_heat",
+                "label": "场景热度",
                 "detail": f"当前群聊热度为 {scene_heat}",
-                "family": "scene",
+                "family": "群聊",
             }
         )
     return generated
@@ -533,6 +770,7 @@ def _build_resource_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "energy_reserve_ratio": round(_safe_float(resource.get("energy_reserve_ratio", 0.0)), 3),
         "energy_phase": str(resource.get("energy_phase", "unknown") or "unknown"),
+        "energy_phase_label": _label_energy_phase(resource.get("energy_phase", "unknown")),
         "chat_reserve": round(chat_reserve, 2),
         "chat_capacity": round(chat_capacity, 2),
         "chat_percent": round(chat_reserve / chat_capacity, 3),
@@ -544,6 +782,66 @@ def _build_resource_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
         "social_field_score": round(_safe_float(resource.get("social_field_score", 0.0)), 2),
         "last_recovery_source": str(resource.get("last_recovery_source", "") or ""),
         "last_irritation_relief_source": str(resource.get("last_irritation_relief_source", "") or ""),
+    }
+
+
+def _build_circadian_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
+    circadian = domains.get("circadian_rhythm", {})
+    sleep_used = int(_safe_float(circadian.get("sleep_reply_used", 0), 0))
+    sleep_cap = int(_safe_float(circadian.get("sleep_reply_cap", 0), 0))
+    remaining = int(_safe_float(circadian.get("remaining_sleep_replies", 0), 0))
+    return {
+        "phase": str(circadian.get("phase", "awake") or "awake"),
+        "phase_label": str(circadian.get("phase_label", "清醒") or "清醒"),
+        "is_night": bool(circadian.get("is_night", False)),
+        "is_sleeping": bool(circadian.get("is_sleeping", False)),
+        "is_burnthrough": bool(circadian.get("is_burnthrough", False)),
+        "can_reply": bool(circadian.get("can_reply", True)),
+        "drowsiness_value": round(_safe_float(circadian.get("drowsiness_value", 0.0)), 2),
+        "sleep_debt": round(_safe_float(circadian.get("sleep_debt", 0.0)), 3),
+        "overnight_pressure": round(_safe_float(circadian.get("overnight_pressure", 0.0)), 2),
+        "sleep_reserve": round(_safe_float(circadian.get("sleep_reserve", 100.0), 100.0), 2),
+        "dawn_recovery_progress": round(_safe_float(circadian.get("dawn_recovery_progress", 0.0)), 3),
+        "peek_window_open": bool(circadian.get("peek_window_open", False)),
+        "sleep_reply_used": sleep_used,
+        "sleep_reply_cap": sleep_cap,
+        "remaining_sleep_replies": remaining,
+        "reply_quota_label": f"{remaining}/{sleep_cap}" if sleep_cap > 0 else "不限",
+        "response_suppression": round(_safe_float(circadian.get("response_suppression", 0.0)), 3),
+        "body_state_label": str(circadian.get("body_state_label", "正常") or "正常"),
+        "mood_hint": str(circadian.get("mood_hint", "") or "状态平稳"),
+        "expression_style_label": str(circadian.get("expression_style_label", "正常") or "正常"),
+    }
+
+
+def _build_emotion_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
+    emergence = domains.get("emergence_core", {})
+    mood = _safe_float(emergence.get("mood_bias", 0.5), 0.5)
+    if mood >= 0.72:
+        mood_label = "愉快"
+    elif mood >= 0.55:
+        mood_label = "平稳偏好"
+    elif mood >= 0.40:
+        mood_label = "平静"
+    elif mood >= 0.25:
+        mood_label = "低落"
+    else:
+        mood_label = "明显低落"
+    feeling = str(emergence.get("feeling_text", "") or "").strip()
+    return {
+        "mood_bias": round(mood, 3),
+        "mood_label": mood_label,
+        "curiosity_drive": round(_safe_float(emergence.get("curiosity_drive", 0.0)), 3),
+        "social_desire": round(_safe_float(emergence.get("social_desire", 0.0)), 3),
+        "boredom_load": round(_safe_float(emergence.get("boredom_load", 0.0)), 3),
+        "loneliness_load": round(_safe_float(emergence.get("loneliness_load", 0.0)), 3),
+        "environment_fatigue_load": round(_safe_float(emergence.get("environment_fatigue_load", 0.0)), 3),
+        "initiative_drive": round(_safe_float(emergence.get("initiative_drive", 0.0)), 3),
+        "withdrawal_drive": round(_safe_float(emergence.get("withdrawal_drive", 0.0)), 3),
+        "energy_ratio": round(_safe_float(emergence.get("energy_ratio", 0.5), 0.5), 3),
+        "silence_seconds": round(_safe_float(emergence.get("silence_seconds", 0.0)), 2),
+        "unanswered_count": int(_safe_float(emergence.get("unanswered_count", 0), 0)),
+        "feeling_text": feeling or "当前没有明显情绪波动",
     }
 
 
@@ -588,12 +886,16 @@ def _build_display_policy() -> Dict[str, list[str]]:
         ],
         "active": [
             "无聊/孤独/环境疲劳/撤离/主动意愿",
+            "情绪低落/好奇心/社交欲显著变化",
+            "浅睡/深睡/熬穿/黎明恢复/睡眠债",
             "烦躁/压力/创伤/混乱/伪装",
             "关系好感/信任显著偏高或偏低",
             "冷却窗口/等待时长/重新接入/群聊升温",
         ],
         "detail": [
             "资源账本的聊天值和思考值",
+            "昼夜节律、睡眠债、困意和熬夜压力",
+            "情绪账本、主动驱动和当前感受",
             "群聊感知、话题焦点、活跃人数",
             "目标用户关系、好感、信任、压力",
             "发言预测的驱动和抑制因素",
@@ -625,6 +927,8 @@ def _build_presentation(
     flow_runtime = domains.get("flow_runtime", {})
     group_climate = domains.get("group_climate", {})
     relationship = domains.get("relationship_profile", {})
+    circadian_detail = _build_circadian_detail(domains)
+    emotion_detail = _build_emotion_detail(domains)
 
     active_signals = _build_active_signals(domains)
     resource_detail = _build_resource_detail(domains)
@@ -636,7 +940,7 @@ def _build_presentation(
         "energy_reserve": {
             "label": "精力储备",
             "icon": str(vitality.get("icon", "🔋") or "🔋"),
-            "state": str(vitality.get("level", domains.get("resource_ledger", {}).get("energy_phase", "未知")) or "未知"),
+            "state": str(vitality.get("level") or _label_energy_phase(domains.get("resource_ledger", {}).get("energy_phase"))),
             "value": energy_ratio,
             "display_value": f"{int(vitality_percent)}%",
             "color": str(vitality.get("color", "#22c55e") or "#22c55e"),
@@ -684,9 +988,9 @@ def _build_presentation(
         "scene_heat": {
             "label": "场景热度",
             "icon": "🔥" if group_climate.get("scene_heat") == "heated" else "🌡️",
-            "state": str(group_climate.get("scene_heat", "normal") or "normal"),
+            "state": _label_scene_heat(group_climate.get("scene_heat", "normal")),
             "value": _safe_float(group_climate.get("scene_heat_score", 0.0)),
-            "display_value": str(group_climate.get("scene_heat", "normal") or "normal"),
+            "display_value": _label_scene_heat(group_climate.get("scene_heat", "normal")),
             "color": "#f4a261",
         },
         "prediction_readiness": {
@@ -702,6 +1006,7 @@ def _build_presentation(
     scene_context = {
         "channel_id": channel_id,
         "scene_heat": str(group_climate.get("scene_heat", "normal") or "normal"),
+        "scene_heat_label": _label_scene_heat(group_climate.get("scene_heat", "normal")),
         "scene_heat_score": round(_safe_float(group_climate.get("scene_heat_score", 0.0)), 3),
         "topic_focus": list(group_climate.get("topic_focus", []) or []),
         "active_user_count": int(_safe_float(group_climate.get("active_user_count", 0), 0)),
@@ -742,6 +1047,8 @@ def _build_presentation(
         "resident_overview": resident_overview,
         "active_signals": active_signals,
         "resource_detail": resource_detail,
+        "circadian_detail": circadian_detail,
+        "emotion_detail": emotion_detail,
         "initiative_state": initiative_state,
         "scene_context": scene_context,
         "participant_impacts": participant_impacts,
