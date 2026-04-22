@@ -2,22 +2,13 @@ import asyncio
 import time
 from typing import Optional
 
-from fastapi import APIRouter, Cookie, Depends, Header, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from src.common.logger import get_logger
-from src.webui.core.auth import verify_auth_token_from_cookie_or_header
-from src.webui.core.security import get_token_manager
 from src.webui.services.state_monitor import build_channel_monitor_state, build_monitor_overview
 
 logger = get_logger("WS状态监控")
 router = APIRouter(tags=["websocket"])
-
-
-def require_auth(
-    huoli_session: Optional[str] = Cookie(None),
-    authorization: Optional[str] = Header(None),
-) -> bool:
-    return verify_auth_token_from_cookie_or_header(huoli_session, authorization)
 
 
 @router.websocket("/ws/state-monitor")
@@ -27,13 +18,6 @@ async def websocket_state_monitor_endpoint(
     channel_id: Optional[str] = Query(default=None),
     interval: float = Query(default=1.0, ge=0.5, le=10.0),
 ):
-    token_manager = get_token_manager()
-    cookie_token = websocket.cookies.get("huoli_session")
-    active_token = cookie_token or token
-    if not active_token or not token_manager.verify_token(active_token):
-        await websocket.close(code=4002, reason="无效的认证令牌")
-        return
-
     session_id = f"state_{int(time.time() * 1000)}_{id(websocket)}"
     await websocket.accept()
     logger.info(f"状态监控 WebSocket 已建立: {session_id}, 会话={channel_id or '全部群聊/私聊'}")
@@ -82,5 +66,5 @@ async def websocket_state_monitor_endpoint(
 
 
 @router.get("/ws/state-monitor/status")
-async def get_state_monitor_status(_auth: bool = Depends(require_auth)):
+async def get_state_monitor_status():
     return {"success": True, "message": "state monitor websocket router ready"}

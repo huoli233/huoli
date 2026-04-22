@@ -117,6 +117,8 @@ def run_http_smoke(client: TestClient, token: str) -> dict[str, Any]:
             override = SAFE_HTTP_OVERRIDES.get((method, route.path))
             if override:
                 kwargs.update(override)
+            if route.path.startswith("/api/heartflow/") or route.path == "/dashboard":
+                kwargs["headers"] = {}
             if (method, route.path) == ("POST", "/api/webui/auth/verify"):
                 kwargs["json"] = {"token": token}
 
@@ -180,7 +182,7 @@ def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
         pong = _expect_message(websocket, "pong")
         results.append({"path": "/ws/plugin-progress", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
 
-    with client.websocket_connect(f"/ws/state-monitor?token={token}") as websocket:
+    with client.websocket_connect("/ws/state-monitor") as websocket:
         first = websocket.receive_json()
         if first.get("type") not in {"state_overview", "state_snapshot"}:
             raise AssertionError(f"Unexpected state-monitor init message: {first}")

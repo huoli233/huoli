@@ -122,7 +122,6 @@ function wsUrl(channelId: string): string {
 }
 
 export function EmotionDashboard() {
-  const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [selectedChannel, setSelectedChannel] = useState("");
   const [packet, setPacket] = useState<MonitorPacket | null>(null);
@@ -155,22 +154,8 @@ export function EmotionDashboard() {
 
     async function bootstrap() {
       try {
-        const authResponse = await fetch("/api/webui/auth/check", {
-          credentials: "include",
-        });
-        const authData = await authResponse.json();
-        if (ignore) {
-          return;
-        }
-        const ok = Boolean(authData?.authenticated);
-        setAuthenticated(ok);
-        if (!ok) {
-          setErrorMessage("当前状态页需要先通过 WebUI 登录，才能读取实时状态。");
-          return;
-        }
-
         const monitorResponse = await fetch("/api/heartflow/monitor", {
-          credentials: "include",
+          credentials: "same-origin",
         });
         const monitorData = await monitorResponse.json();
         if (ignore) {
@@ -182,7 +167,6 @@ export function EmotionDashboard() {
         setSelectedChannel(initialChannel);
       } catch (error) {
         if (!ignore) {
-          setAuthenticated(false);
           setErrorMessage(`初始化状态页失败: ${String(error)}`);
         }
       }
@@ -196,7 +180,7 @@ export function EmotionDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!authenticated || !selectedChannel) {
+    if (!selectedChannel) {
       return;
     }
 
@@ -207,7 +191,7 @@ export function EmotionDashboard() {
       setErrorMessage("");
       try {
         const response = await fetch(`/api/heartflow/monitor/${encodeURIComponent(selectedChannel)}`, {
-          credentials: "include",
+          credentials: "same-origin",
         });
         const data = await response.json();
         if (!cancelled) {
@@ -229,10 +213,10 @@ export function EmotionDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [authenticated, selectedChannel]);
+  }, [selectedChannel]);
 
   useEffect(() => {
-    if (!authenticated || !selectedChannel) {
+    if (!selectedChannel) {
       return;
     }
 
@@ -293,26 +277,7 @@ export function EmotionDashboard() {
         socketRef.current.close();
       }
     };
-  }, [authenticated, selectedChannel]);
-
-  if (authenticated === null) {
-    return <div className="dashboard-shell">状态台正在初始化…</div>;
-  }
-
-  if (!authenticated) {
-    return (
-      <div className="dashboard-shell">
-        <div className="dashboard-auth-card">
-          <p className="eyebrow">状态台不可用</p>
-          <h1>当前还没有登录 WebUI</h1>
-          <p>{errorMessage || "请先在主 WebUI 页面完成登录，状态台会自动复用同源认证 Cookie。"}</p>
-          <a className="primary-link" href="/">
-            返回 WebUI 登录
-          </a>
-        </div>
-      </div>
-    );
-  }
+  }, [selectedChannel]);
 
   return (
     <div className="dashboard-shell">
