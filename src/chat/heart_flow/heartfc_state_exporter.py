@@ -190,6 +190,8 @@ def _extract_runtime_snapshot(chat: Any) -> Dict[str, Any]:
         "cached_metabolism_constraints": "_cached_metabolism_constraints",
         "cached_emotion_state": "_cached_emotion_state",
         "cached_emotion_feedback_report": "_cached_emotion_feedback_report",
+        "cached_awareness": "_cached_awareness",
+        "cached_presence_verdict": "_cached_presence_verdict",
         "last_relation_snapshot": "_last_relation_snapshot",
         "participant_summary": "_cached_participant_summary",
         "last_user_id": "_last_user_id",
@@ -505,6 +507,75 @@ def _extract_autonomy_runtime(chat: Any, channel_id: str) -> Dict[str, Any]:
     return payload
 
 
+def _extract_context_awareness(
+    chat: Any,
+    runtime: Dict[str, Any],
+    subject: Dict[str, Any],
+    relation: Dict[str, Any],
+    memory_stack: Dict[str, Any],
+    autonomy_runtime: Dict[str, Any],
+) -> Dict[str, Any]:
+    behavior = runtime.get("last_behavior_governor", {})
+    if not isinstance(behavior, dict):
+        behavior = {}
+    rest = runtime.get("last_rest_governor", {})
+    if not isinstance(rest, dict):
+        rest = {}
+    awareness = runtime.get("cached_awareness", {})
+    if not isinstance(awareness, dict):
+        awareness = _plain(awareness) if awareness else {}
+        if not isinstance(awareness, dict):
+            awareness = {}
+    presence = runtime.get("cached_presence_verdict", {})
+    if not isinstance(presence, dict):
+        presence = {}
+    behavior_reasons = [str(code) for code in list(behavior.get("reason_codes", []) or []) if str(code).strip()]
+    rest_reasons = [str(code) for code in list(rest.get("reason_codes", []) or []) if str(code).strip()]
+    direct_target = bool(
+        "direct_relevance" in behavior_reasons
+        or "direct_target_override" in rest_reasons
+        or str(behavior.get("interrupt_level", "")) == "engage"
+    )
+    quote_anchor = bool(any("quote" in code or "anchor" in code for code in behavior_reasons))
+    recent_human_activity = bool(
+        "recent_human_activity" in behavior_reasons
+        or "ambient_human_signal" in behavior_reasons
+        or "weak_human_signal" in behavior_reasons
+    )
+    watch_state = str(subject.get("watch_level", "") or "")
+    watch_label = str(subject.get("watch_level_label", "") or "")
+    attention_rank = {
+        "blackout": 0,
+        "peek": 1,
+        "skim_window": 2,
+        "active_watch": 3,
+        "engaged": 4,
+    }.get(watch_state, 1)
+    scene_suitable = str(behavior.get("reply_mode", "observe") or "observe") not in {"rest", "defer"}
+    return {
+        "direct_target": direct_target,
+        "quote_anchor": quote_anchor,
+        "recent_human_activity": recent_human_activity,
+        "scene_suitable": scene_suitable,
+        "watch_state": watch_state,
+        "watch_state_label": watch_label or "瞥一眼",
+        "attention_level": attention_rank,
+        "perception_engagement_pull": round(_safe_float(awareness.get("engagement_pull", 0.0)), 3),
+        "self_recent_messages_count": _safe_int(autonomy_runtime.get("self_recent_messages_count", 0)),
+        "self_recent_actions_count": _safe_int(autonomy_runtime.get("self_recent_actions_count", 0)),
+        "self_recent_events_count": _safe_int(autonomy_runtime.get("self_recent_events_count", 0)),
+        "memoir_phase": str(memory_stack.get("memoir_phase", "open") or "open"),
+        "memoir_consecutive_timeouts": _safe_int(memory_stack.get("memoir_consecutive_timeouts", 0)),
+        "current_target_user_id": str(relation.get("user_id", "") or ""),
+        "behavior_reason_codes": behavior_reasons,
+        "rest_reason_codes": rest_reasons,
+        "reply_mode": str(behavior.get("reply_mode", "observe") or "observe"),
+        "interrupt_level": str(behavior.get("interrupt_level", "ignore") or "ignore"),
+        "silence_policy": str(behavior.get("silence_policy", "silent") or "silent"),
+        "presence_summary": presence,
+    }
+
+
 def _extract_relationship_profile(chat: Any, world_state: Dict[str, Any]) -> Dict[str, Any]:
     world_target = world_state.get("target", {}) if isinstance(world_state, dict) else {}
     runtime = _extract_runtime_snapshot(chat)
@@ -594,6 +665,14 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
     behavior = world_state.get("behavior", {}) if isinstance(world_state, dict) else {}
     meta = world_state.get("meta", {}) if isinstance(world_state, dict) else {}
     circadian = _extract_circadian_rhythm(channel_id, runtime, subject)
+    context_awareness = _extract_context_awareness(
+        chat,
+        runtime,
+        subject,
+        relation,
+        memory_stack,
+        autonomy_runtime,
+    )
     participant_summary = runtime.get("participant_summary", {}) if isinstance(runtime.get("participant_summary"), dict) else {}
     active_users = scene.get("active_users", []) if isinstance(scene.get("active_users", []), list) else []
     topic_focus = list(scene.get("current_topics", []) or [])
@@ -726,6 +805,7 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
         },
         "memory_stack": memory_stack,
         "autonomy_runtime": autonomy_runtime,
+        "context_awareness": context_awareness,
         "relationship_profile": relation,
         "emergence_core": emergence,
         "circadian_rhythm": circadian,

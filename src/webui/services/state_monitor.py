@@ -101,6 +101,7 @@ def _label_source(value: Any) -> str:
         "circadian_rhythm": "昼夜节律",
         "memory_stack": "记忆栈",
         "autonomy_runtime": "自主运行",
+        "context_awareness": "上下文感知",
     }.get(str(value or "").strip(), str(value or "") or "状态源")
 
 
@@ -1177,6 +1178,37 @@ def _build_autonomy_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _build_context_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
+    context = domains.get("context_awareness", {})
+    if not isinstance(context, dict):
+        context = {}
+    return {
+        "direct_target": bool(context.get("direct_target", False)),
+        "quote_anchor": bool(context.get("quote_anchor", False)),
+        "recent_human_activity": bool(context.get("recent_human_activity", False)),
+        "scene_suitable": bool(context.get("scene_suitable", True)),
+        "watch_state": str(context.get("watch_state", "") or ""),
+        "watch_state_label": str(context.get("watch_state_label", "瞥一眼") or "瞥一眼"),
+        "attention_level": int(_safe_float(context.get("attention_level", 0), 0)),
+        "perception_engagement_pull": round(_safe_float(context.get("perception_engagement_pull", 0.0)), 3),
+        "self_recent_messages_count": int(_safe_float(context.get("self_recent_messages_count", 0), 0)),
+        "self_recent_actions_count": int(_safe_float(context.get("self_recent_actions_count", 0), 0)),
+        "self_recent_events_count": int(_safe_float(context.get("self_recent_events_count", 0), 0)),
+        "memoir_phase": str(context.get("memoir_phase", "open") or "open"),
+        "memoir_phase_label": _label_memoir_phase(context.get("memoir_phase", "open")),
+        "memoir_consecutive_timeouts": int(_safe_float(context.get("memoir_consecutive_timeouts", 0), 0)),
+        "current_target_user_id": str(context.get("current_target_user_id", "") or ""),
+        "reply_mode": str(context.get("reply_mode", "observe") or "observe"),
+        "reply_mode_label": _label_reply_mode(context.get("reply_mode", "observe")),
+        "interrupt_level": str(context.get("interrupt_level", "ignore") or "ignore"),
+        "interrupt_level_label": _label_interrupt_level(context.get("interrupt_level", "ignore")),
+        "silence_policy": str(context.get("silence_policy", "silent") or "silent"),
+        "silence_policy_label": _label_silence_policy(context.get("silence_policy", "silent")),
+        "behavior_reason_labels": [_label_behavior_reason(code) for code in list(context.get("behavior_reason_codes", []) or [])],
+        "rest_reason_labels": [_label_behavior_reason(code) for code in list(context.get("rest_reason_codes", []) or [])],
+    }
+
+
 def _build_initiative_state(domains: Dict[str, Any], prediction: Dict[str, Any]) -> Dict[str, Any]:
     emergence = domains.get("emergence_core", {})
     boredom = _safe_float(emergence.get("boredom_load", 0.0))
@@ -1267,6 +1299,7 @@ def _build_presentation(
     behavior_detail = _build_behavior_detail(chat, domains, dashboard_snapshot)
     memory_detail = _build_memory_detail(domains)
     autonomy_detail = _build_autonomy_detail(domains)
+    context_detail = _build_context_detail(domains)
 
     active_signals = _build_active_signals(domains)
     resource_detail = _build_resource_detail(domains)
@@ -1388,6 +1421,7 @@ def _build_presentation(
         "circadian_detail": circadian_detail,
         "emotion_detail": emotion_detail,
         "behavior_detail": behavior_detail,
+        "context_detail": context_detail,
         "memory_detail": memory_detail,
         "autonomy_detail": autonomy_detail,
         "initiative_state": initiative_state,
