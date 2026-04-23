@@ -96,6 +96,9 @@ sticker_dispatch_cooldown_seconds = 150.0
 max_learning_items = 210
 unknown_term_min_count = 4
 vocabulary_limit = 18
+expression_learn_temperature = 0.25
+jargon_infer_thresholds = [2, 5, 10]
+message_extract_min_messages = 12
 
 [profile_mapping.scenario_profiles.image_high_risk.vision]
 reply_suppressed = true
@@ -191,6 +194,8 @@ def main() -> None:
         assert hub.resolve_module_view("frequency_control").values["skip_limit"] == 7
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
+        assert hub.resolve_module_view("adaptive_learning").values["expression_learn_temperature"] == 0.25
+        assert hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"] == [2, 5, 10]
 
         sleep(1.1)
         _write(config_path, _config(0.35))
@@ -211,6 +216,7 @@ def main() -> None:
             "frequency_skip_limit": hub.resolve_module_view("frequency_control").values["skip_limit"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
+            "jargon_thresholds": hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"],
             "trace_layers": sorted({item.layer for item in vision.trace}),
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))

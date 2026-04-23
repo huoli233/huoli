@@ -10,6 +10,9 @@ from src.common.task_utils import safe_create_task
 from src.config.config import global_config, model_config
 from src.llm_models.utils_model import LLMRequest
 from src.manager.async_task_manager import AsyncTask
+import src.chat.prompts.catalog  # noqa: F401
+from src.chat.utils.prompt_builder import global_prompt_manager
+from src.bw_learner.learning_config import adaptive_float
 
 logger = get_logger("表达自动检查")
 
@@ -46,22 +49,14 @@ def create_evaluation_prompt(situation: str, style: str) -> str:
     criteria_list = "\n".join(
         [f"{i + 1}. {criterion}" for i, criterion in enumerate(all_criteria)]
     )
-    prompt = f"""请评估以下表达方式或语言风格以及使用条件或使用情景是否合适：
-使用条件或使用情景：{situation}
-表达方式或言语风格：{style}
-
-请从以下方面进行评估：
-{criteria_list}
-
-请以JSON格式输出评估结果：
-{{
-    "suitable": true/false,
-    "reason": "评估理由（如果不合适，请说明原因）"
-
-}}
-如果合适，suitable设为true；如果不合适，suitable设为false，并在reason中说明原因。
-请严格按照JSON格式输出，不要包含其他内容。"""
-    return prompt
+    template = global_prompt_manager.get_prompt("expression_auto_check")
+    if template is None:
+        raise RuntimeError("expression_auto_check prompt 未注册")
+    return template.render(
+        situation=situation,
+        style=style,
+        criteria_list=criteria_list,
+    )
 
 
 async def single_expression_check(
@@ -78,7 +73,7 @@ async def single_expression_check(
         response, (reasoning, model_name, _) = (
             await judge_llm.generate_response_async(
                 prompt=prompt,
-                temperature=0.6,
+                temperature=adaptive_float("expression_auto_check_temperature", 0.6),
             )
         )
         logger.debug(f"LLM响应: {response}")

@@ -11,8 +11,10 @@ from src.config.config import model_config, global_config
 from src.chat.utils.chat_message_builder import (
     build_anonymous_messages,
 )
-from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
+import src.chat.prompts.catalog  # noqa: F401
+from src.chat.utils.prompt_builder import global_prompt_manager
 from src.chat.message_receive.chat_stream import get_chat_manager
+from src.bw_learner.learning_config import adaptive_float, adaptive_int
 from src.bw_learner.learner_utils import (
     filter_message_content,
     is_bot_message,
@@ -27,63 +29,7 @@ from src.bw_learner.expression_auto_check_task import (
 )
 
 
-# MAX_EXPRESSION_COUNT = 300
-
 logger = get_logger("表达学习")
-
-
-def init_prompt() -> None:
-    learn_style_prompt = """{chat_str}
-你的名字是{bot_name},现在请你完成两个提取任务
-任务1：请从上面这段群聊中用户的语言风格和说话方式
-1. 只考虑文字，不要考虑表情包和图片
-2. 不要总结SELF的发言，因为这是你自己的发言，不要重复学习你自己的发言
-3. 不要涉及具体的人名，也不要涉及具体名词
-4. 思考有没有特殊的梗，一并总结成语言风格
-5. 例子仅供参考，请严格根据群聊内容总结!!!
-注意：总结成如下格式的规律，总结的内容要详细，但具有概括性：
-例如：当"AAAAA"时，可以"BBBBB", AAAAA代表某个场景，不超过20个字。BBBBB代表对应的语言风格，特定句式或表达方式，不超过20个字。
-表达方式在3-5个左右，不要超过10个
-
-
-任务2：请从上面这段聊天内容中提取"可能是黑话"的候选项（黑话/俚语/网络缩写/口头禅）。
-- 必须为对话中真实出现过的短词或短语
-- 必须是你无法理解含义的词语，没有明确含义的词语，请不要选择有明确含义，或者含义清晰的词语
-- 排除：人名、@、表情包/图片中的内容、纯标点、常规功能词（如的、了、呢、啊等）
-- 每个词条长度建议 2-8 个字符（不强制），尽量短小
-- 请你提取出可能的黑话，最多30个黑话，请尽量提取所有
-
-黑话必须为以下几种类型：
-- 由字母构成的，汉语拼音首字母的简写词，例如：nb、yyds、xswl
-- 英文词语的缩写，用英文字母概括一个词汇或含义，例如：CPU、GPU、API
-- 中文词语的缩写，用几个汉字概括一个词汇或含义，例如：社死、内卷
-
-输出要求：
-将表达方式，语言风格和黑话以 JSON 数组输出，每个元素为一个对象，结构如下（注意字段名）：
-注意请不要输出重复内容，请对表达方式和黑话进行去重。
-
-[
-  {{"situation": "AAAAA", "style": "BBBBB", "source_id": "3"}},
-  {{"situation": "CCCC", "style": "DDDD", "source_id": "7"}}
-  {{"situation": "对某件事表示十分惊叹", "style": "使用 我嘞个xxxx", "source_id": "[消息编号]"}},
-  {{"situation": "表示讽刺的赞同，不讲道理", "style": "对对对", "source_id": "[消息编号]"}},
-  {{"situation": "当涉及游戏相关时，夸赞，略带戏谑意味", "style": "使用 这么强！", "source_id": "[消息编号]"}},
-  {{"content": "词条", "source_id": "12"}},
-  {{"content": "词条2", "source_id": "5"}}
-]
-
-其中：
-表达方式条目：
-- situation：表示“在什么情境下”的简短概括（不超过20个字）
-- style：表示对应的语言风格或常用表达（不超过20个字）
-- source_id：该表达方式对应的“来源行编号”，即上方聊天记录中方括号里的数字（例如 [3]），请只输出数字本身，不要包含方括号
-黑话jargon条目：
-- content:表示黑话的内容
-- source_id：该黑话对应的“来源行编号”，即上方聊天记录中方括号里的数字（例如 [3]），请只输出数字本身，不要包含方括号
-
-现在请你输出 JSON：
-"""
-    Prompt(learn_style_prompt, "learn_style_prompt")
 
 
 class ExpressionLearner:
@@ -141,9 +87,10 @@ class ExpressionLearner:
             response, _ = (
                 await asyncio.wait_for(
                     self.express_learn_model.generate_response_async(
-                        prompt, temperature=0.3
+                        prompt,
+                        temperature=adaptive_float("expression_learn_temperature", 0.3),
                     ),
-                    timeout=20.0,
+                    timeout=adaptive_float("expression_learn_timeout_seconds", 20.0),
                 )
             )
         except Exception as e:
@@ -169,16 +116,18 @@ class ExpressionLearner:
                     logger.info(f"从缓存中检查到黑话: {content}")
 
         # 检查表达方式数量，如果超过20个则放弃本次表达学习
-        if len(expressions) > 20:
+        max_expressions = adaptive_int("expression_max_extract_count", 20)
+        if len(expressions) > max_expressions:
             logger.info(
-                f"表达方式提取数量超过20个（实际{len(expressions)}个），放弃本次表达学习"
+                f"表达方式提取数量超过{max_expressions}个（实际{len(expressions)}个），放弃本次表达学习"
             )
             expressions = []
 
         # 检查黑话数量，如果超过30个则放弃本次黑话学习
-        if len(jargon_entries) > 30:
+        max_jargons = adaptive_int("jargon_max_extract_count", 30)
+        if len(jargon_entries) > max_jargons:
             logger.info(
-                f"黑话提取数量超过30个（实际{len(jargon_entries)}个），放弃本次黑话学习"
+                f"黑话提取数量超过{max_jargons}个（实际{len(jargon_entries)}个），放弃本次黑话学习"
             )
             jargon_entries = []
 
@@ -345,7 +294,7 @@ class ExpressionLearner:
         if expr_obj:
             # 根据相似度决定是否使用 LLM 总结
             # 完全匹配（相似度 == 1.0）时不总结，相似匹配时总结
-            use_llm_summary = similarity < 1.0
+            use_llm_summary = similarity < adaptive_float("expression_exact_similarity", 1.0)
             await self._update_existing_expression(
                 expr_obj=expr_obj,
                 situation=situation,
@@ -432,7 +381,7 @@ class ExpressionLearner:
         )
 
     async def _find_similar_situation_expression(
-        self, situation: str, similarity_threshold: float = 0.75
+        self, situation: str, similarity_threshold: float | None = None
     ) -> Tuple[Optional[Expression], float]:
         """
         查找具有相似 situation 的 Expression 记录
@@ -447,6 +396,8 @@ class ExpressionLearner:
                 - 找到的最相似的 Expression 对象，如果没有找到则返回 None
                 - 相似度值（如果找到匹配，范围在 similarity_threshold 到 1.0 之间）
         """
+        if similarity_threshold is None:
+            similarity_threshold = adaptive_float("expression_similarity_threshold", 0.75)
         # 查询同一 chat_id 的所有记录
         all_expressions = Expression.select().where(
             Expression.chat_id == self.chat_id
@@ -493,8 +444,11 @@ class ExpressionLearner:
 
         try:
             summary, _ = await asyncio.wait_for(
-                self.summary_model.generate_response_async(prompt, temperature=0.2),
-                timeout=15.0,
+                self.summary_model.generate_response_async(
+                    prompt,
+                    temperature=adaptive_float("expression_summary_temperature", 0.2),
+                ),
+                timeout=adaptive_float("expression_summary_timeout_seconds", 15.0),
             )
             summary = summary.strip()
             if summary:
@@ -706,9 +660,6 @@ class ExpressionLearner:
 
         # 调用 jargon_miner 处理这些条目
         await jargon_miner.process_extracted_entries(entries)
-
-
-init_prompt()
 
 
 class ExpressionLearnerManager:

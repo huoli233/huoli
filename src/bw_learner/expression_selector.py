@@ -7,35 +7,14 @@ from src.common.logger import get_logger
 from src.common.database.database_model import Expression
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import global_config, model_config
+import src.chat.prompts.catalog  # noqa: F401
+from src.chat.utils.prompt_builder import global_prompt_manager
+from src.bw_learner.learning_config import adaptive_int
 from src.bw_learner.learner_utils import (
     weighted_sample,
-    parse_platform_accounts,
 )
 
 logger = get_logger("表达选择")
-
-EXPRESSION_EVALUATION_PROMPT = """{chat_observe_info}
-
-你的名字是{bot_name}{target_message}
-{reply_reason_block}
-
-以下是可选的表达情境：
-{all_situations}
-
-请你分析聊天内容的语境、情绪、话题类型，从上述情境中选择最适合当前聊天情境的，最多{max_num}个情境。
-考虑因素包括：
-1.聊天的情绪氛围（轻松、严肃、幽默等）
-2.话题类型（日常、技术、游戏、情感等）
-3.情境与当前语境的匹配度
-{target_message_extra_block}
-
-请以JSON格式输出，只需要输出选中的情境编号：
-例如：
-{{
-    "selected_situations": [2, 3, 5, 7, 19]
-}}
-
-请严格按照JSON格式输出，不要包含其他内容："""
 
 
 class ExpressionSelector:
@@ -148,13 +127,14 @@ class ExpressionSelector:
                 }
                 for expr in style_query
             ]
-            min_required = 8
+            min_required = adaptive_int("expression_simple_min_required", 8)
             if len(style_exprs) < min_required:
                 if not style_exprs:
                     logger.info(
                         f"聊天流 {chat_id} 没有满足 count > 1 且未被拒绝的表达方式"
                     )
-                    fallback_num = min(3, max_num) if max_num > 0 else 3
+                    fallback_default = adaptive_int("expression_fallback_select_count", 3)
+                    fallback_num = min(fallback_default, max_num) if max_num > 0 else fallback_default
                     fallback_selected = self._random_expressions(
                         chat_id, fallback_num
                     )
@@ -170,9 +150,9 @@ class ExpressionSelector:
                 logger.info(
                     f"聊天流 {chat_id} count > 1 的表达方式不足 {min_required} 个"
                 )
-                select_count = min(3, len(style_exprs))
+                select_count = min(adaptive_int("expression_fallback_select_count", 3), len(style_exprs))
             else:
-                select_count = 5
+                select_count = adaptive_int("expression_simple_select_count", 5)
             selected_style = random.sample(style_exprs, select_count)
             if selected_style:
                 self.update_expressions_last_active_time(selected_style)
@@ -317,10 +297,10 @@ class ExpressionSelector:
                 for expr in all_style_exprs
                 if (expr.get("count", 1) or 1) > 1
             ]
-            min_high_count = 10
-            min_total_count = 10
-            select_high_count = 5
-            select_random_count = 5
+            min_high_count = adaptive_int("expression_classic_min_high_count", 10)
+            min_total_count = adaptive_int("expression_classic_min_total_count", 10)
+            select_high_count = adaptive_int("expression_classic_select_high_count", 5)
+            select_random_count = adaptive_int("expression_classic_select_random_count", 5)
             if len(high_count_exprs) < min_high_count:
                 logger.info(
                     f"聊天流 {chat_id} count > 1 的表达方式不足 {min_high_count} 个"
@@ -377,7 +357,10 @@ class ExpressionSelector:
                 chat_context = ""
             else:
                 reply_reason_block = ""
-            prompt = EXPRESSION_EVALUATION_PROMPT.format(
+            template = global_prompt_manager.get_prompt("expression_evaluation")
+            if template is None:
+                raise RuntimeError("expression_evaluation prompt 未注册")
+            prompt = template.render(
                 bot_name=global_config.bot.nickname,
                 chat_observe_info=chat_context,
                 all_situations=all_situations_str,

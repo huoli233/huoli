@@ -7,6 +7,9 @@ from src.common.logger import get_logger
 from src.common.database.database_model import Jargon
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config, global_config
+import src.chat.prompts.catalog  # noqa: F401
+from src.chat.utils.prompt_builder import global_prompt_manager
+from src.bw_learner.learning_config import adaptive_float, adaptive_int
 from src.bw_learner.jargon_miner import search_jargon
 from src.bw_learner.learner_utils import (
     is_bot_message,
@@ -16,18 +19,6 @@ from src.bw_learner.learner_utils import (
 )
 
 logger = get_logger("jargon")
-
-JARGON_SUMMARIZE_PROMPT = """上下文聊天内容:
-{chat_context}
-
-在上下文中提取到的黑话及其含义:
-{jargon_explanations}
-
-请根据上述信息，对黑话解释进行概括和整理。
-- 如果上下文中有黑话出现，请简要说明这些黑话在上下文中的使用情况
-- 将所有黑话解释整理成简洁、易读的一段话
-- 输出格式要自然，适合作为回复参考信息
-请输出概括后的黑话解释（直接输出一段平文本，不要标题，无特殊格式或markdown格式，不要使用JSON格式）："""
 
 
 class JargonExplainer:
@@ -39,10 +30,10 @@ class JargonExplainer:
             model_set=model_config.model_task_config.tool_use,
             request_type="jargon.explain",
         )
-        self._auto_learn_min_count = 3
-        self._auto_learn_cooldown = 300.0
-        self._unknown_term_min_length = 2
-        self._unknown_term_max_length = 15
+        self._auto_learn_min_count = adaptive_int("unknown_term_min_count", 3)
+        self._auto_learn_cooldown = adaptive_float("unknown_term_cooldown_seconds", 300.0)
+        self._unknown_term_min_length = adaptive_int("unknown_term_min_length", 2)
+        self._unknown_term_max_length = adaptive_int("unknown_term_max_length", 15)
         try:
             from src.config.core_config_engine import get_core_config
 
@@ -191,13 +182,19 @@ class JargonExplainer:
             logger.info("没有找到任何黑话的含义，跳过解释")
             return None
         explanations_text = "\n".join(jargon_explanations)
-        summarize_prompt = JARGON_SUMMARIZE_PROMPT.format(
+        template = global_prompt_manager.get_prompt("jargon_summarize")
+        if template is None:
+            raise RuntimeError("jargon_summarize prompt 未注册")
+        summarize_prompt = template.render(
             chat_context=chat_context,
             jargon_explanations=explanations_text,
         )
         summary, _ = await asyncio.wait_for(
-            self.llm.generate_response_async(summarize_prompt, temperature=0.3),
-            timeout=20.0,
+            self.llm.generate_response_async(
+                summarize_prompt,
+                temperature=adaptive_float("jargon_infer_temperature", 0.3),
+            ),
+            timeout=adaptive_float("jargon_infer_timeout_seconds", 20.0),
         )
         if not summary:
             return f"上下文中的黑话解释：\n{explanations_text}"

@@ -8,6 +8,7 @@ from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.utils.chat_message_builder import (
     get_raw_msg_by_timestamp_with_chat_inclusive,
 )
+from src.bw_learner.learning_config import adaptive_float, adaptive_int
 from src.bw_learner.expression_learner import expression_learner_manager
 from src.bw_learner.jargon_miner import miner_manager
 
@@ -47,8 +48,8 @@ class MessageRecorder:
                 self.chat_id
             )
         )
-        self.min_messages_for_extraction = 30
-        self.min_extraction_interval = 60
+        self.min_messages_for_extraction = adaptive_int("message_extract_min_messages", 30)
+        self.min_extraction_interval = adaptive_float("message_extract_min_interval_seconds", 60.0)
 
         logger.debug(
             f"MessageRecorder 初始化: chat_id={self.chat_id}, "

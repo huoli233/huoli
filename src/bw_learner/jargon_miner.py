@@ -12,7 +12,9 @@ from src.common.database.database_model import Jargon
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import model_config, global_config
 from src.chat.message_receive.chat_stream import get_chat_manager
-from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
+import src.chat.prompts.catalog  # noqa: F401
+from src.chat.utils.prompt_builder import global_prompt_manager
+from src.bw_learner.learning_config import adaptive_float, adaptive_int, adaptive_learning_view, adaptive_list
 from src.bw_learner.learner_utils import (
     parse_chat_id_list,
     chat_id_list_contains,
@@ -45,72 +47,6 @@ def _is_single_char_jargon(content: str) -> bool:
         or "0" <= char <= "9"  # 数字
     )
 
-def _init_inference_prompts() -> None:
-    """初始化含义推断相关的prompt"""
-    # Prompt 1: 基于raw_content和content推断
-    prompt1_str = """
-**词条内容**
-{content}
-**词条出现的上下文。其中的{bot_name}的发言内容是你自己的发言**
-{raw_content_list}
-{previous_meaning_section}
-
-请根据上下文，推断"{content}"这个词条的含义。
-- 如果这是一个黑话、俚语或网络用语，请推断其含义
-- 如果含义明确（常规词汇），也请说明
-- {bot_name} 的发言内容可能包含错误，请不要参考其发言内容
-- 如果上下文信息不足，无法推断含义，请设置 no_info 为 true
-{previous_meaning_instruction}
-
-以 JSON 格式输出：
-{{
-  "meaning": "详细含义说明（包含使用场景、来源、具体解释等）",
-  "no_info": false
-}}
-注意：如果信息不足无法推断，请设置 "no_info": true，此时 meaning 可以为空字符串
-"""
-    Prompt(prompt1_str, "jargon_inference_with_context_prompt")
-
-    # Prompt 2: 仅基于content推断
-    prompt2_str = """
-**词条内容**
-{content}
-
-请仅根据这个词条本身，推断其含义。
-- 如果这是一个黑话、俚语或网络用语，请推断其含义
-- 如果含义明确（常规词汇），也请说明
-
-以 JSON 格式输出：
-{{
-  "meaning": "详细含义说明（包含使用场景、来源、具体解释等）"
-}}
-"""
-    Prompt(prompt2_str, "jargon_inference_content_only_prompt")
-
-    # Prompt 3: 比较两个推断结果
-    prompt3_str = """
-**推断结果1（基于上下文）**
-{inference1}
-
-**推断结果2（仅基于词条）**
-{inference2}
-
-请比较这两个推断结果，判断它们是否相同或类似。
-- 如果两个推断结果的"含义"相同或类似，说明这个词条不是黑话（含义明确）
-- 如果两个推断结果有差异，说明这个词条可能是黑话（需要上下文才能理解）
-
-以 JSON 格式输出：
-{{
-  "is_similar": true/false,
-  "reason": "判断理由"
-}}
-"""
-    Prompt(prompt3_str, "jargon_compare_inference_prompt")
-
-
-_init_inference_prompts()
-
-
 def _should_infer_meaning(jargon_obj: Jargon) -> bool:
     """
     判断是否需要进行含义推断
@@ -125,8 +61,7 @@ def _should_infer_meaning(jargon_obj: Jargon) -> bool:
     count = jargon_obj.count or 0
     last_inference = jargon_obj.last_inference_count or 0
 
-    # 阈值列表：2, 4, 8, 12, 24, 60, 100
-    thresholds = [2, 4, 8, 12, 24, 60, 100]
+    thresholds = adaptive_list("jargon_infer_thresholds", [2, 4, 8, 12, 24, 60, 100])
 
     if count < thresholds[0]:
         return False
@@ -168,7 +103,7 @@ class JargonMiner:
         chat_manager = get_chat_manager()
         stream_name = chat_manager.get_stream_name(self.chat_id)
         self.stream_name = stream_name if stream_name else self.chat_id
-        self.cache_limit = 50
+        self.cache_limit = adaptive_int("jargon_cache_limit", 50)
         self.cache: OrderedDict[str, None] = OrderedDict()
 
         # 黑话提取锁，防止并发执行
@@ -246,8 +181,10 @@ class JargonMiner:
             current_count = jargon_obj.count or 0
             previous_meaning = jargon_obj.meaning or ""
 
-            # 当count为24, 60时，随机移除一半的raw_content项目
-            if current_count in [24, 60] and len(raw_content_list) > 1:
+            context_sample_counts = adaptive_list("jargon_context_sample_counts", [24, 60])
+            previous_meaning_counts = adaptive_list("jargon_previous_meaning_counts", [24, 60, 100])
+            # 当配置指定的 count 命中时，随机移除一半的 raw_content 项目
+            if current_count in context_sample_counts and len(raw_content_list) > 1:
                 # 计算要保留的数量（至少保留1个）
                 keep_count = max(1, len(raw_content_list) // 2)
                 raw_content_list = random.sample(raw_content_list, keep_count)
@@ -259,15 +196,19 @@ class JargonMiner:
             # 步骤1: 基于raw_content和content推断
             raw_content_text = "\n".join(raw_content_list)
 
-            # 当count为24, 60, 100时，在prompt中放入上一次推断出的meaning作为参考
+            # 当配置指定的 count 命中时，在 prompt 中放入上一次推断出的 meaning 作为参考
             previous_meaning_section = ""
-            previous_meaning_instruction = ""
-            if current_count in [24, 60, 100] and previous_meaning:
+            previous_meaning_instruction = str(
+                adaptive_learning_view().get("jargon_empty_instruction", "")
+            )
+            if current_count in previous_meaning_counts and previous_meaning:
                 previous_meaning_section = f"""
 **上一次推断的含义（仅供参考）**
 {previous_meaning}
 """
-                previous_meaning_instruction = "- 请参考上一次推断的含义，结合新的上下文信息，给出更准确或更新的推断结果"
+                previous_meaning_instruction = str(
+                    adaptive_learning_view().get("jargon_previous_meaning_instruction", "")
+                )
 
             prompt1 = await global_prompt_manager.format_prompt(
                 "jargon_inference_with_context_prompt",
@@ -279,8 +220,11 @@ class JargonMiner:
             )
 
             response1, _ = await asyncio.wait_for(
-                self.llm_inference.generate_response_async(prompt1, temperature=0.3),
-                timeout=20.0,
+                self.llm_inference.generate_response_async(
+                    prompt1,
+                    temperature=adaptive_float("jargon_infer_temperature", 0.3),
+                ),
+                timeout=adaptive_float("jargon_infer_timeout_seconds", 20.0),
             )
             if not response1:
                 logger.warning(f"jargon {content} 推断1失败：无响应")
@@ -325,8 +269,11 @@ class JargonMiner:
             )
 
             response2, _ = await asyncio.wait_for(
-                self.llm_inference.generate_response_async(prompt2, temperature=0.3),
-                timeout=20.0,
+                self.llm_inference.generate_response_async(
+                    prompt2,
+                    temperature=adaptive_float("jargon_infer_temperature", 0.3),
+                ),
+                timeout=adaptive_float("jargon_infer_timeout_seconds", 20.0),
             )
             if not response2:
                 logger.warning(f"jargon {content} 推断2失败：无响应")
@@ -379,8 +326,11 @@ class JargonMiner:
                 logger.info(f"jargon {content} 比较提示词: {prompt3}")
 
             response3, _ = await asyncio.wait_for(
-                self.llm_inference.generate_response_async(prompt3, temperature=0.3),
-                timeout=20.0,
+                self.llm_inference.generate_response_async(
+                    prompt3,
+                    temperature=adaptive_float("jargon_infer_temperature", 0.3),
+                ),
+                timeout=adaptive_float("jargon_infer_timeout_seconds", 20.0),
             )
             if not response3:
                 logger.warning(f"jargon {content} 比较失败：无响应")
