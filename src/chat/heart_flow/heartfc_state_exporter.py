@@ -96,6 +96,42 @@ def _derive_scene_heat(active_users: int, vexation: float, weariness: float) -> 
     return "dead", heat_score
 
 
+def _scene_heat_label(heat_score: float) -> str:
+    if heat_score >= 0.78:
+        return "heated"
+    if heat_score >= 0.55:
+        return "lively"
+    if heat_score >= 0.28:
+        return "normal"
+    if heat_score >= 0.12:
+        return "quiet"
+    return "dead"
+
+
+def _derive_scene_heat_from_snapshot(snapshot: Dict[str, Any], vexation: float, weariness: float) -> tuple[str, float]:
+    msg_rate = _clamp(_safe_float(snapshot.get("messages_per_minute", 0.0)) / 8.0, 0.0, 1.0)
+    active_users = _clamp(_safe_float(snapshot.get("unique_speakers_5min", 0.0)) / 6.0, 0.0, 1.0)
+    interaction_quality = _clamp(_safe_float(snapshot.get("interaction_quality", 0.0)), 0.0, 1.0)
+    social_density = _clamp(_safe_float(snapshot.get("social_density", 0.0)), 0.0, 1.0)
+    complexity_level = _clamp(_safe_float(snapshot.get("complexity_level", 0.0)), 0.0, 1.0)
+    score = (
+        msg_rate * 0.28
+        + active_users * 0.22
+        + interaction_quality * 0.18
+        + social_density * 0.12
+        + complexity_level * 0.10
+        + _clamp(vexation / 100.0, 0.0, 1.0) * 0.12
+        - _clamp(weariness / 100.0, 0.0, 1.0) * 0.08
+    )
+    atmosphere = str(snapshot.get("atmosphere", "") or "").strip().lower()
+    if atmosphere in {"heated_discussion", "argument", "celebration", "social_gaming"}:
+        score += 0.08
+    elif atmosphere in {"quiet", "mourning"}:
+        score -= 0.06
+    score = _clamp(score, 0.0, 1.0)
+    return _scene_heat_label(score), score
+
+
 def _normalize_night_phase(value: Any) -> str:
     raw = str(value or "").strip().lower()
     return {
@@ -256,6 +292,108 @@ def _extract_emergence_state(channel_id: str) -> Dict[str, Any]:
         "silence_seconds": round(_safe_float(getattr(state, "silence_duration", 0.0)), 2),
         "unanswered_count": _safe_int(getattr(state, "unanswered_count", 0)),
         "feeling_text": str(getattr(state, "feeling_description", "") or ""),
+    }
+
+
+def _extract_group_climate(
+    channel_id: str,
+    world_scene: Dict[str, Any],
+    runtime: Dict[str, Any],
+) -> Dict[str, Any]:
+    participant_summary = runtime.get("participant_summary", {})
+    if not isinstance(participant_summary, dict):
+        participant_summary = {}
+    topic_focus = list(world_scene.get("current_topics", []) or [])
+    session_phase = str(world_scene.get("session_phase", "") or "")
+    vexation = _safe_float(world_scene.get("vexation", 0.0))
+    weariness = _safe_float(world_scene.get("weariness", 0.0))
+    active_user_count = 0
+    messages_per_minute = 0.0
+    participant_diversity = 0.0
+    interaction_quality = 0.0
+    complexity_level = 0.0
+    social_density = 0.0
+    suitable_to_join = True
+    join_unsuitable_reason = ""
+    dominant_speaker = ""
+    active_topic_count = 0
+    thread_count = 0
+    atmosphere = ""
+    atmosphere_label = ""
+    vitality = 100.0
+    mood_category = "calm"
+
+    try:
+        from src.core.group_scene_state import get_group_scene
+
+        scene_engine = get_group_scene(channel_id)
+        scene_snapshot = getattr(scene_engine, "current_scene_snapshot", None) or scene_engine.snapshot()
+        if scene_snapshot is not None and hasattr(scene_snapshot, "to_dict"):
+            scene_dict = scene_snapshot.to_dict()
+            active_user_count = _safe_int(scene_dict.get("unique_speakers_5min", 0))
+            messages_per_minute = _safe_float(scene_dict.get("messages_per_minute", 0.0))
+            participant_diversity = _safe_float(scene_dict.get("participant_diversity", 0.0))
+            interaction_quality = _safe_float(scene_dict.get("interaction_quality", 0.0))
+            complexity_level = _safe_float(scene_dict.get("complexity_level", 0.0))
+            social_density = _safe_float(scene_dict.get("social_density", 0.0))
+            suitable_to_join = bool(scene_dict.get("suitable_to_join", True))
+            join_unsuitable_reason = str(scene_dict.get("join_unsuitable_reason", "") or "")
+            dominant_speaker = str(scene_dict.get("dominant_speaker", "") or "")
+            active_topic_count = _safe_int(scene_dict.get("active_topic_count", 0))
+            thread_count = _safe_int(scene_dict.get("thread_count", 0))
+            atmosphere = str(scene_dict.get("atmosphere", "") or "")
+            atmosphere_label = str(scene_dict.get("atmosphere_label", "") or "")
+            try:
+                topic_focus = scene_engine.active_topics(limit=5) or topic_focus
+            except Exception:
+                pass
+            scene_heat, heat_score = _derive_scene_heat_from_snapshot(scene_dict, vexation, weariness)
+        else:
+            raise RuntimeError("scene_snapshot_unavailable")
+    except Exception as exc:
+        logger.debug(f"群场景快照导出失败，回退世界快照: {exc}")
+        active_users = world_scene.get("active_users", []) if isinstance(world_scene.get("active_users", []), list) else []
+        active_user_count = len(active_users)
+        scene_heat, heat_score = _derive_scene_heat(active_user_count, vexation, weariness)
+
+    try:
+        from src.chat.heart_flow.emotion_stream import get_channel_mood_tracker
+
+        mood_snapshot = get_channel_mood_tracker().dump_snapshot().get(channel_id, {})
+        if isinstance(mood_snapshot, dict):
+            vexation = _safe_float(mood_snapshot.get("vexation", vexation), vexation)
+            weariness = _safe_float(mood_snapshot.get("weariness", weariness), weariness)
+            vitality = _safe_float(mood_snapshot.get("vitality", vitality), vitality)
+            mood_category = str(mood_snapshot.get("category", mood_category) or mood_category)
+            if messages_per_minute <= 0 and active_user_count <= 0:
+                scene_heat, heat_score = _derive_scene_heat(active_user_count, vexation, weariness)
+    except Exception as exc:
+        logger.debug(f"频道氛围账本导出失败: {exc}")
+
+    return {
+        "scene_heat": scene_heat,
+        "scene_heat_score": round(_clamp(_safe_float(heat_score), 0.0, 1.0), 3),
+        "messages_per_minute": round(messages_per_minute, 3),
+        "active_user_count": int(active_user_count),
+        "participant_diversity": round(participant_diversity, 3),
+        "interaction_quality": round(interaction_quality, 3),
+        "complexity_level": round(complexity_level, 3),
+        "social_density": round(social_density, 3),
+        "suitable_to_join": suitable_to_join,
+        "join_unsuitable_reason": join_unsuitable_reason,
+        "dominant_speaker": dominant_speaker,
+        "active_topic_count": int(active_topic_count),
+        "topic_focus": topic_focus,
+        "thread_count": int(thread_count),
+        "session_phase": session_phase,
+        "vexation": round(vexation, 3),
+        "weariness": round(weariness, 3),
+        "vitality": round(vitality, 3),
+        "mood_category": mood_category,
+        "atmosphere": atmosphere,
+        "atmosphere_label": atmosphere_label,
+        "hot_count": _safe_int(participant_summary.get("hot_count", 0)),
+        "warm_count": _safe_int(participant_summary.get("warm_count", 0)),
     }
 
 
@@ -665,6 +803,7 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
     behavior = world_state.get("behavior", {}) if isinstance(world_state, dict) else {}
     meta = world_state.get("meta", {}) if isinstance(world_state, dict) else {}
     circadian = _extract_circadian_rhythm(channel_id, runtime, subject)
+    group_climate = _extract_group_climate(channel_id, scene, runtime)
     context_awareness = _extract_context_awareness(
         chat,
         runtime,
@@ -672,14 +811,6 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
         relation,
         memory_stack,
         autonomy_runtime,
-    )
-    participant_summary = runtime.get("participant_summary", {}) if isinstance(runtime.get("participant_summary"), dict) else {}
-    active_users = scene.get("active_users", []) if isinstance(scene.get("active_users", []), list) else []
-    topic_focus = list(scene.get("current_topics", []) or [])
-    scene_heat, heat_score = _derive_scene_heat(
-        len(active_users),
-        _safe_float(scene.get("vexation", 0.0)),
-        _safe_float(scene.get("weariness", 0.0)),
     )
     readiness_score = _clamp(
         0.5
@@ -760,17 +891,7 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
             "intent_label": str(meta.get("last_user_intent", "") or behavior.get("category", "neutral")),
             "hostility_detected": hostility_detected,
         },
-        "group_climate": {
-            "scene_heat": scene_heat,
-            "scene_heat_score": round(heat_score, 3),
-            "active_user_count": len(active_users),
-            "topic_focus": topic_focus,
-            "session_phase": str(scene.get("session_phase", "") or ""),
-            "vexation": round(_safe_float(scene.get("vexation", 0.0)), 3),
-            "weariness": round(_safe_float(scene.get("weariness", 0.0)), 3),
-            "hot_count": _safe_int(participant_summary.get("hot_count", 0)),
-            "warm_count": _safe_int(participant_summary.get("warm_count", 0)),
-        },
+        "group_climate": group_climate,
         "resource_ledger": energy,
         "social_field": {
             "social_field_score": round(_safe_float(energy.get("social_field_score", 0.0)), 2),
@@ -820,7 +941,7 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
             "reply_allowed": bool(subject.get("can_reply", True)) and bool(circadian.get("can_reply", True)),
             "pending_active": pending_active,
             "last_target_user_id": relation.get("user_id", ""),
-            "topic_focus": topic_focus,
+            "topic_focus": list(group_climate.get("topic_focus", []) or []),
             "last_reactive_plan": runtime.get("last_reactive_plan") or {},
         },
     }

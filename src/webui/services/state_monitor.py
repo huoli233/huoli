@@ -1209,6 +1209,71 @@ def _build_context_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _derive_current_user_mood_hint(relationship: Dict[str, Any]) -> str:
+    irritation = _safe_float(relationship.get("irritation_load", 0.0))
+    pressure = _safe_float(relationship.get("pressure_load", 0.0))
+    trauma = _safe_float(relationship.get("trauma_load", 0.0))
+    rapport = _safe_float(relationship.get("rapport_score", 0.0))
+    trust = _safe_float(relationship.get("trust_score", 0.0))
+    if irritation >= 60:
+        return "明显不耐烦"
+    if pressure >= 45 or trauma >= 1.2:
+        return "防御绷紧"
+    if rapport >= 35 and trust >= 35:
+        return "放松熟络"
+    if rapport >= 15 or trust >= 20:
+        return "平稳接触"
+    return "谨慎观察"
+
+
+def _build_group_state_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
+    group_climate = domains.get("group_climate", {})
+    return {
+        "scene_heat": str(group_climate.get("scene_heat", "normal") or "normal"),
+        "scene_heat_label": _label_scene_heat(group_climate.get("scene_heat", "normal")),
+        "scene_heat_score": round(_safe_float(group_climate.get("scene_heat_score", 0.0)), 3),
+        "messages_per_minute": round(_safe_float(group_climate.get("messages_per_minute", 0.0)), 3),
+        "active_user_count": int(_safe_float(group_climate.get("active_user_count", 0), 0)),
+        "participant_diversity": round(_safe_float(group_climate.get("participant_diversity", 0.0)), 3),
+        "interaction_quality": round(_safe_float(group_climate.get("interaction_quality", 0.0)), 3),
+        "complexity_level": round(_safe_float(group_climate.get("complexity_level", 0.0)), 3),
+        "social_density": round(_safe_float(group_climate.get("social_density", 0.0)), 3),
+        "suitable_to_join": bool(group_climate.get("suitable_to_join", True)),
+        "join_unsuitable_reason": str(group_climate.get("join_unsuitable_reason", "") or ""),
+        "dominant_speaker": str(group_climate.get("dominant_speaker", "") or ""),
+        "active_topic_count": int(_safe_float(group_climate.get("active_topic_count", 0), 0)),
+        "topic_focus": list(group_climate.get("topic_focus", []) or []),
+        "thread_count": int(_safe_float(group_climate.get("thread_count", 0), 0)),
+        "session_phase": str(group_climate.get("session_phase", "") or ""),
+        "vexation": round(_safe_float(group_climate.get("vexation", 0.0)), 3),
+        "weariness": round(_safe_float(group_climate.get("weariness", 0.0)), 3),
+        "vitality": round(_safe_float(group_climate.get("vitality", 100.0), 100.0), 3),
+        "mood_category": str(group_climate.get("mood_category", "") or ""),
+        "atmosphere": str(group_climate.get("atmosphere", "") or ""),
+        "atmosphere_label": str(group_climate.get("atmosphere_label", "") or ""),
+        "hot_count": int(_safe_float(group_climate.get("hot_count", 0), 0)),
+        "warm_count": int(_safe_float(group_climate.get("warm_count", 0), 0)),
+    }
+
+
+def _build_current_user_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
+    relationship = domains.get("relationship_profile", {})
+    return {
+        "user_id": str(relationship.get("user_id", "") or ""),
+        "display_name": str(relationship.get("display_name", "当前目标") or "当前目标"),
+        "relationship_label": str(relationship.get("relationship_label", "陌生人") or "陌生人"),
+        "rapport_score": round(_safe_float(relationship.get("rapport_score", 0.0)), 2),
+        "trust_score": round(_safe_float(relationship.get("trust_score", 0.0)), 2),
+        "irritation_load": round(_safe_float(relationship.get("irritation_load", 0.0)), 2),
+        "pressure_load": round(_safe_float(relationship.get("pressure_load", 0.0)), 2),
+        "trauma_load": round(_safe_float(relationship.get("trauma_load", 0.0)), 2),
+        "chaos_load": round(_safe_float(relationship.get("chaos_load", 0.0)), 2),
+        "mask_load": round(_safe_float(relationship.get("mask_load", 0.0)), 2),
+        "interaction_count": int(_safe_float(relationship.get("interaction_count", 0), 0)),
+        "current_mood_hint": _derive_current_user_mood_hint(relationship),
+    }
+
+
 def _build_initiative_state(domains: Dict[str, Any], prediction: Dict[str, Any]) -> Dict[str, Any]:
     emergence = domains.get("emergence_core", {})
     boredom = _safe_float(emergence.get("boredom_load", 0.0))
@@ -1300,6 +1365,8 @@ def _build_presentation(
     memory_detail = _build_memory_detail(domains)
     autonomy_detail = _build_autonomy_detail(domains)
     context_detail = _build_context_detail(domains)
+    group_state_detail = _build_group_state_detail(domains)
+    current_user_detail = _build_current_user_detail(domains)
 
     active_signals = _build_active_signals(domains)
     resource_detail = _build_resource_detail(domains)
@@ -1379,9 +1446,14 @@ def _build_presentation(
         "scene_heat": str(group_climate.get("scene_heat", "normal") or "normal"),
         "scene_heat_label": _label_scene_heat(group_climate.get("scene_heat", "normal")),
         "scene_heat_score": round(_safe_float(group_climate.get("scene_heat_score", 0.0)), 3),
+        "messages_per_minute": round(_safe_float(group_climate.get("messages_per_minute", 0.0)), 3),
         "topic_focus": list(group_climate.get("topic_focus", []) or []),
         "active_user_count": int(_safe_float(group_climate.get("active_user_count", 0), 0)),
         "session_phase": str(group_climate.get("session_phase", "") or ""),
+        "dominant_speaker": str(group_climate.get("dominant_speaker", "") or ""),
+        "suitable_to_join": bool(group_climate.get("suitable_to_join", True)),
+        "join_unsuitable_reason": str(group_climate.get("join_unsuitable_reason", "") or ""),
+        "thread_count": int(_safe_float(group_climate.get("thread_count", 0), 0)),
         "hot_count": int(_safe_float(group_climate.get("hot_count", 0), 0)),
         "warm_count": int(_safe_float(group_climate.get("warm_count", 0), 0)),
     }
@@ -1422,6 +1494,8 @@ def _build_presentation(
         "emotion_detail": emotion_detail,
         "behavior_detail": behavior_detail,
         "context_detail": context_detail,
+        "group_state_detail": group_state_detail,
+        "current_user_detail": current_user_detail,
         "memory_detail": memory_detail,
         "autonomy_detail": autonomy_detail,
         "initiative_state": initiative_state,
