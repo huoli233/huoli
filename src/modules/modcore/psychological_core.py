@@ -3,8 +3,8 @@ import random
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.trauma.runtime_config import trauma_module_view
 
 logger = get_logger("心理核心")
 
@@ -57,7 +57,6 @@ class PsychologicalCore:
     def __init__(self):
         if self._initialized:
             return
-        self._config = ConfigEngine.get_instance()
         self._trust_ledger: Dict[str, float] = {}
         self._emotion_trackers: Dict[str, Any] = {}
         self._trauma_systems: Dict[str, Any] = {}
@@ -70,7 +69,7 @@ class PsychologicalCore:
         logger.info("心理核心初始化完成")
 
     def _load_config(self):
-        core_cfg = self._config.get("psychological_core", {})
+        core_cfg = trauma_module_view("psychological_core")
         self._max_pressure = core_cfg.get("max_pressure", 100.0)
         self._recovery_rate = core_cfg.get("recovery_rate", 0.1)
         self._harassment_block_high = core_cfg.get("harassment_block_high", 120.0)
@@ -78,6 +77,51 @@ class PsychologicalCore:
         self._harassment_block_low = core_cfg.get("harassment_block_low", 30.0)
         self._annoyance_per_harass = core_cfg.get("annoyance_per_harass", 8.0)
         self._persona_switch_duration = core_cfg.get("persona_switch_duration", 600.0)
+        self._harassment_intensity_high = core_cfg.get("harassment_intensity_high", 10.0)
+        self._harassment_intensity_mid = core_cfg.get("harassment_intensity_mid", 5.0)
+        self._harassment_emotion_divisor = core_cfg.get("harassment_emotion_divisor", 5.0)
+        self._harassment_emotion_min = core_cfg.get("harassment_emotion_min", 0.5)
+        self._harassment_emotion_max = core_cfg.get("harassment_emotion_max", 2.5)
+        self._persona_switch_severe = core_cfg.get("persona_switch_severe", 9.0)
+        self._persona_switch_medium = core_cfg.get("persona_switch_medium", 7.0)
+        self._persona_switch_light = core_cfg.get("persona_switch_light", 5.0)
+        self._positive_interaction_min = core_cfg.get("positive_interaction_min", 0.5)
+        self._positive_interaction_multiplier = core_cfg.get("positive_interaction_multiplier", 4.0)
+        self._negative_interaction_min = core_cfg.get("negative_interaction_min", 0.5)
+        self._recovery_intensity = core_cfg.get("recovery_intensity", 1.0)
+        self._stamina_default = core_cfg.get("stamina_default", 100.0)
+        self._stamina_trauma_scale = core_cfg.get("stamina_trauma_scale", 0.5)
+        self._stamina_annoyance_scale = core_cfg.get("stamina_annoyance_scale", 0.3)
+        self._stamina_affection_bonus_scale = core_cfg.get("stamina_affection_bonus_scale", 0.1)
+        self._response_severe_trauma_threshold = core_cfg.get("response_severe_trauma_threshold", 8.0)
+        self._response_trauma_defense_threshold = core_cfg.get("response_trauma_defense_threshold", 5.0)
+        self._response_cold_rejection_annoyance = core_cfg.get("response_cold_rejection_annoyance", 80.0)
+        self._response_irritated_annoyance = core_cfg.get("response_irritated_annoyance", 50.0)
+        self._response_intimate_affection = core_cfg.get("response_intimate_affection", 80.0)
+        self._response_friendly_affection = core_cfg.get("response_friendly_affection", 50.0)
+        self._response_hostile_affection = core_cfg.get("response_hostile_affection", -50.0)
+        self._hint_high_affection = core_cfg.get("hint_high_affection", 50.0)
+        self._hint_low_affection = core_cfg.get("hint_low_affection", -30.0)
+        self._hint_high_annoyance = core_cfg.get("hint_high_annoyance", 40.0)
+        self._hint_high_trauma = core_cfg.get("hint_high_trauma", 5.0)
+        self._surface_shock_cap = core_cfg.get("surface_shock_cap", 10.0)
+        self._surface_fear_cap = core_cfg.get("surface_fear_cap", 8.0)
+        self._deep_violation_cap = core_cfg.get("deep_violation_cap", 10.0)
+        self._deep_helplessness_cap = core_cfg.get("deep_helplessness_cap", 9.0)
+        self._surface_shock_scale = core_cfg.get("surface_shock_scale", 0.8)
+        self._surface_fear_scale = core_cfg.get("surface_fear_scale", 0.6)
+        self._deep_violation_scale = core_cfg.get("deep_violation_scale", 0.9)
+        self._deep_helplessness_scale = core_cfg.get("deep_helplessness_scale", 0.7)
+        self._flashback_content_chars = int(core_cfg.get("flashback_content_chars", 100))
+        self._flashback_intensity_min = core_cfg.get("flashback_intensity_min", 0.5)
+        self._flashback_intensity_max = core_cfg.get("flashback_intensity_max", 1.0)
+        self._trust_min = core_cfg.get("trust_min", -50.0)
+        self._trust_max = core_cfg.get("trust_max", 100.0)
+        self._computed_trust_min = core_cfg.get("computed_trust_min", 0.0)
+        self._computed_trust_max = core_cfg.get("computed_trust_max", 100.0)
+        self._trust_affection_weight = core_cfg.get("trust_affection_weight", 0.4)
+        self._trust_interaction_weight = core_cfg.get("trust_interaction_weight", 0.5)
+        self._trust_interaction_cap = core_cfg.get("trust_interaction_cap", 30.0)
 
     def _load_subsystems(self):
         try:
@@ -168,7 +212,13 @@ class PsychologicalCore:
                 old_trauma = getattr(state, "trauma_score", 0) if state else 0
                 result = tracker.apply_harassment(
                     user_id,
-                    intensity=max(0.5, min(2.5, harassment_intensity / 5.0)),
+                    intensity=max(
+                        self._harassment_emotion_min,
+                        min(
+                            self._harassment_emotion_max,
+                            harassment_intensity / self._harassment_emotion_divisor,
+                        ),
+                    ),
                     reason=f"{harassment_type}: {content[:40]}",
                     content=content,
                 )
@@ -178,10 +228,10 @@ class PsychologicalCore:
                     "annoyance": result.get("annoyance", old_annoyance),
                     "trauma_score": result.get("trauma_score", old_trauma),
                 }
-        if harassment_intensity >= 10:
+        if harassment_intensity >= self._harassment_intensity_high:
             block_duration = self._harassment_block_high
             block_reason = f"严重性骚扰/攻击: {harassment_type}"
-        elif harassment_intensity >= 5:
+        elif harassment_intensity >= self._harassment_intensity_mid:
             block_duration = self._harassment_block_mid
             block_reason = f"持续骚扰: {harassment_type}"
         else:
@@ -207,13 +257,13 @@ class PsychologicalCore:
             response.actions.append({"type": "trauma_layers_generated", "layers": trauma_layers})
         should_switch_persona = False
         target_state = ""
-        if harassment_intensity >= 9:
+        if harassment_intensity >= self._persona_switch_severe:
             should_switch_persona = True
             target_state = "应激爆发状态"
-        elif harassment_intensity >= 7:
+        elif harassment_intensity >= self._persona_switch_medium:
             should_switch_persona = True
             target_state = "伪装动摇状态"
-        elif harassment_intensity >= 5:
+        elif harassment_intensity >= self._persona_switch_light:
             should_switch_persona = True
             target_state = "勉强伪装状态"
         if should_switch_persona and self._persona_generator:
@@ -290,7 +340,10 @@ class PsychologicalCore:
                 old_affection = getattr(state, "affection", 0) if state else 0
                 result = tracker.apply_positive_interaction(
                     user_id,
-                    intensity=max(0.5, intensity * 4.0),
+                    intensity=max(
+                        self._positive_interaction_min,
+                        intensity * self._positive_interaction_multiplier,
+                    ),
                     reason=event.content[:40] or "心理核心正向交互",
                 )
                 response.emotion_changes = {
@@ -318,7 +371,7 @@ class PsychologicalCore:
                 old_annoyance = getattr(state, "annoyance", 0) if state else 0
                 result = tracker.apply_negative_interaction(
                     user_id,
-                    intensity=max(0.5, intensity),
+                    intensity=max(self._negative_interaction_min, intensity),
                     reason=event.content[:40] or "心理核心负向交互",
                     content=event.content,
                 )
@@ -369,7 +422,7 @@ class PsychologicalCore:
             if state and hasattr(tracker, "apply_apology_repair"):
                 tracker.apply_apology_repair(
                     user_id,
-                    intensity=1.0,
+                    intensity=self._recovery_intensity,
                     reason=event.content[:40] or "心理核心恢复事件",
                 )
                 updated = tracker.get_user_state(user_id, create_if_missing=False)
@@ -393,7 +446,7 @@ class PsychologicalCore:
             "trust_value": 0.0,
             "annoyance": 0.0,
             "trauma": 0.0,
-            "stamina": 100.0,
+            "stamina": self._stamina_default,
             "is_blocked": False,
             "is_protected": False,
             "relationship": "陌生人",
@@ -433,14 +486,18 @@ class PsychologicalCore:
         """更新思考值消耗"""
         tracker = self._get_emotion_tracker(stream_id)
         if not tracker:
-            return {"stamina": 100.0, "cost": 0.0}
+            return {"stamina": self._stamina_default, "cost": 0.0}
         state = tracker.get_user_state(user_id, create_if_missing=True) if hasattr(tracker, "get_user_state") else None
         if not state:
-            return {"stamina": 100.0, "cost": 0.0}
-        current_stamina = getattr(state, "stamina", 100.0)
-        trauma_weight = 1.0 + (getattr(state, "trauma_score", 0) / 10.0) * 0.5
-        annoyance_weight = 1.0 + (getattr(state, "annoyance", 0) / 100.0) * 0.3
-        affection_bonus = (getattr(state, "affection", 0) / 100.0) * 0.1 if getattr(state, "affection", 0) > 0 else 0.0
+            return {"stamina": self._stamina_default, "cost": 0.0}
+        current_stamina = getattr(state, "stamina", self._stamina_default)
+        trauma_weight = 1.0 + (getattr(state, "trauma_score", 0) / 10.0) * self._stamina_trauma_scale
+        annoyance_weight = 1.0 + (getattr(state, "annoyance", 0) / 100.0) * self._stamina_annoyance_scale
+        affection_bonus = (
+            (getattr(state, "affection", 0) / 100.0) * self._stamina_affection_bonus_scale
+            if getattr(state, "affection", 0) > 0
+            else 0.0
+        )
         final_cost = cost * trauma_weight * annoyance_weight * (1.0 - affection_bonus)
         stamina = max(0.0, current_stamina - final_cost)
         if hasattr(state, "stamina"):
@@ -456,13 +513,13 @@ class PsychologicalCore:
         """恢复思考值"""
         tracker = self._get_emotion_tracker(stream_id)
         if not tracker:
-            return {"stamina": 100.0, "recovered": 0.0}
+            return {"stamina": self._stamina_default, "recovered": 0.0}
         state = tracker.get_user_state(user_id, create_if_missing=False) if hasattr(tracker, "get_user_state") else None
         if not state:
-            return {"stamina": 100.0, "recovered": 0.0}
-        current_stamina = getattr(state, "stamina", 100.0)
+            return {"stamina": self._stamina_default, "recovered": 0.0}
+        current_stamina = getattr(state, "stamina", self._stamina_default)
         actual_recovered = max(0.0, amount)
-        stamina = min(100.0, current_stamina + actual_recovered)
+        stamina = min(self._stamina_default, current_stamina + actual_recovered)
         if hasattr(state, "stamina"):
             state.stamina = stamina
         if actual_recovered > 0:
@@ -480,19 +537,19 @@ class PsychologicalCore:
                 trauma_score = getattr(state, "trauma_score", 0)
                 annoyance = getattr(state, "annoyance", 0)
                 affection = getattr(state, "affection", 0)
-                if trauma_score >= 8:
+                if trauma_score >= self._response_severe_trauma_threshold:
                     return "severe_trauma"
-                elif trauma_score >= 5:
+                elif trauma_score >= self._response_trauma_defense_threshold:
                     return "trauma_defense"
-                elif annoyance >= 80:
+                elif annoyance >= self._response_cold_rejection_annoyance:
                     return "cold_rejection"
-                elif annoyance >= 50:
+                elif annoyance >= self._response_irritated_annoyance:
                     return "irritated"
-                elif affection >= 80:
+                elif affection >= self._response_intimate_affection:
                     return "intimate"
-                elif affection >= 50:
+                elif affection >= self._response_friendly_affection:
                     return "friendly"
-                elif affection <= -50:
+                elif affection <= self._response_hostile_affection:
                     return "hostile"
         return "normal"
 
@@ -557,13 +614,13 @@ class PsychologicalCore:
         affection = getattr(state, "affection", 0)
         annoyance = getattr(state, "annoyance", 0)
         trauma_score = getattr(state, "trauma_score", 0)
-        if affection >= 50:
+        if affection >= self._hint_high_affection:
             parts.append(f"好感度很高({affection:.0f})，态度温暖亲切")
-        elif affection <= -30:
+        elif affection <= self._hint_low_affection:
             parts.append(f"好感度较低({affection:.0f})，态度冷淡")
-        if annoyance > 40:
+        if annoyance > self._hint_high_annoyance:
             parts.append(f"烦躁度较高({annoyance:.0f})，可能不耐烦")
-        if trauma_score > 5:
+        if trauma_score > self._hint_high_trauma:
             parts.append(f"创伤分数较高({trauma_score:.1f})，回避敏感话题")
         return "；".join(parts) if parts else ""
 
@@ -579,12 +636,12 @@ class PsychologicalCore:
         """生成骚扰创伤层"""
         return {
             "surface": {
-                "shock": min(10, intensity * 0.8),
-                "fear": min(8, intensity * 0.6),
+                "shock": min(self._surface_shock_cap, intensity * self._surface_shock_scale),
+                "fear": min(self._surface_fear_cap, intensity * self._surface_fear_scale),
             },
             "deep": {
-                "violation": min(10, intensity * 0.9),
-                "helplessness": min(9, intensity * 0.7),
+                "violation": min(self._deep_violation_cap, intensity * self._deep_violation_scale),
+                "helplessness": min(self._deep_helplessness_cap, intensity * self._deep_helplessness_scale),
             },
             "count": count,
             "timestamp": time.time(),
@@ -594,8 +651,8 @@ class PsychologicalCore:
         """触发闪回"""
         return {
             "triggered": True,
-            "trigger_content": trigger_content[:100],
-            "intensity": random.uniform(0.5, 1.0),
+            "trigger_content": trigger_content[: self._flashback_content_chars],
+            "intensity": random.uniform(self._flashback_intensity_min, self._flashback_intensity_max),
             "timestamp": time.time(),
         }
 
@@ -614,7 +671,7 @@ class PsychologicalCore:
     def record_trust_delta(self, user_id: str, delta: float) -> None:
         """记录信任变化"""
         current = self._trust_ledger.get(user_id, 0.0)
-        self._trust_ledger[user_id] = max(-50.0, min(100.0, current + delta))
+        self._trust_ledger[user_id] = max(self._trust_min, min(self._trust_max, current + delta))
 
     def inject_emotion_event(
         self,
@@ -665,10 +722,10 @@ class PsychologicalCore:
     def _compute_trust(self, user_id: str, affection: float, interactions: int) -> float:
         """计算信任值"""
         base_trust = self._trust_ledger.get(user_id, 0.0)
-        affection_part = max(0.0, affection) * 0.4
-        interaction_part = min(30.0, interactions * 0.5)
+        affection_part = max(0.0, affection) * self._trust_affection_weight
+        interaction_part = min(self._trust_interaction_cap, interactions * self._trust_interaction_weight)
         combined = base_trust + affection_part + interaction_part
-        return max(0.0, min(100.0, combined))
+        return max(self._computed_trust_min, min(self._computed_trust_max, combined))
 
 
 _psychological_core: Optional[PsychologicalCore] = None

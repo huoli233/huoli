@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.trauma.runtime_config import trauma_module_view
 
 logger = get_logger("complex_psychology")
 
@@ -56,8 +56,7 @@ class ComplexTraumaPsychology:
     - 表面伪装系统: 管理对外表现
     """
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self):
         self._prompt_manager: Any = None
         self._llm_client: Any = None
 
@@ -84,11 +83,42 @@ class ComplexTraumaPsychology:
 
     def _load_config(self):
         """加载配置"""
-        trauma_cfg = self._config.get("trauma", {})
+        trauma_cfg = trauma_module_view("trauma_complex")
         self._max_chaos_level = trauma_cfg.get("max_chaos_level", 10.0)
         self._max_mask_strength = trauma_cfg.get("max_mask_strength", 10.0)
         self._mask_strain_rate = trauma_cfg.get("mask_strain_rate", 0.3)
         self._mask_recovery_rate = trauma_cfg.get("mask_recovery_rate", 0.05)
+        self._negative_trauma_scale = trauma_cfg.get("negative_trauma_scale", 1.2)
+        self._negative_intensity_scale = trauma_cfg.get("negative_intensity_scale", 2.0)
+        self._neutral_trauma_scale = trauma_cfg.get("neutral_trauma_scale", 0.8)
+        self._worldview_meaning_bonus_scale = trauma_cfg.get("worldview_meaning_bonus_scale", 0.3)
+        self._social_pressure_cap = trauma_cfg.get("social_pressure_cap", 10.0)
+        self._fallback_social_pressure_scale = trauma_cfg.get("fallback_social_pressure_scale", 0.5)
+        self._negative_intensity_strain_scale = trauma_cfg.get("negative_intensity_strain_scale", 0.5)
+        self._negative_social_strain_scale = trauma_cfg.get("negative_social_strain_scale", 0.2)
+        self._social_strain_scale = trauma_cfg.get("social_strain_scale", 0.1)
+        self._strain_recovery_per_minute = trauma_cfg.get("strain_recovery_per_minute", 0.02)
+        self._strain_cap = trauma_cfg.get("strain_cap", 10.0)
+        self._energy_cap = trauma_cfg.get("energy_cap", 10.0)
+        self._energy_drain_scale = trauma_cfg.get("energy_drain_scale", 0.1)
+        self._strain_penalty_scale = trauma_cfg.get("strain_penalty_scale", 0.5)
+        self._detection_chaos_scale = trauma_cfg.get("detection_chaos_scale", 0.3)
+        self._detection_strain_scale = trauma_cfg.get("detection_strain_scale", 0.2)
+        self._detection_penalty_scale = trauma_cfg.get("detection_penalty_scale", 0.3)
+        self._energy_baseline = trauma_cfg.get("energy_baseline", 5.0)
+        self._energy_bonus_scale = trauma_cfg.get("energy_bonus_scale", 0.2)
+        self._combined_chaos_weight = trauma_cfg.get("combined_chaos_weight", 0.6)
+        self._combined_mask_weight = trauma_cfg.get("combined_mask_weight", 0.4)
+        self._chaos_low_threshold = trauma_cfg.get("chaos_low_threshold", 4.0)
+        self._chaos_high_threshold = trauma_cfg.get("chaos_high_threshold", 7.0)
+        self._mask_high_threshold = trauma_cfg.get("mask_high_threshold", 8.0)
+        self._mask_mid_threshold = trauma_cfg.get("mask_mid_threshold", 4.0)
+        self._layer_high_chaos_threshold = trauma_cfg.get("layer_high_chaos_threshold", 7.0)
+        self._layer_mid_chaos_threshold = trauma_cfg.get("layer_mid_chaos_threshold", 4.0)
+        self._negative_intensity_threshold = trauma_cfg.get("negative_intensity_threshold", 0.6)
+        self._worldview_damage_threshold = trauma_cfg.get("worldview_damage_threshold", 2.0)
+        self._escape_chaos_threshold = trauma_cfg.get("escape_chaos_threshold", 5.0)
+        self._trigger_max_chars = int(trauma_cfg.get("trigger_max_chars", 80))
 
     def set_prompt_manager(self, manager: Any):
         """设置提示词管理器"""
@@ -135,16 +165,17 @@ class ComplexTraumaPsychology:
 
         if sentiment == "negative":
             self.chaos_base_level = min(
-                self._max_chaos_level, trauma_score * 1.2 + intensity * 2.0
+                self._max_chaos_level,
+                trauma_score * self._negative_trauma_scale + intensity * self._negative_intensity_scale,
             )
         elif trauma_score > 0:
             self.chaos_base_level = min(
-                self._max_chaos_level, trauma_score * 0.8
+                self._max_chaos_level, trauma_score * self._neutral_trauma_scale
             )
         else:
             self.chaos_base_level = max(0.0, self.chaos_base_level - 0.0)
 
-        self.chaos_worldview_bonus = self.worldview.meaning_collapse * 0.3
+        self.chaos_worldview_bonus = self.worldview.meaning_collapse * self._worldview_meaning_bonus_scale
 
         self.inner_chaos_level = min(
             self._max_chaos_level,
@@ -163,36 +194,43 @@ class ComplexTraumaPsychology:
 
         self.mask_social_pressure = context.get("social_pressure", 0.0)
         if self.mask_social_pressure == 0.0:
-            self.mask_social_pressure = min(10.0, self.inner_chaos_level * 0.5)
+            self.mask_social_pressure = min(
+                self._social_pressure_cap,
+                self.inner_chaos_level * self._fallback_social_pressure_scale,
+            )
 
         if sentiment == "negative":
             strain_increase = self._mask_strain_rate * (
-                1 + intensity * 0.5 + self.mask_social_pressure * 0.2
+                1 + intensity * self._negative_intensity_strain_scale + self.mask_social_pressure * self._negative_social_strain_scale
             )
         else:
             strain_increase = self._mask_strain_rate * (
-                1 + self.mask_social_pressure * 0.1
+                1 + self.mask_social_pressure * self._social_strain_scale
             )
 
-        strain_recovery = time_elapsed_minutes * 0.02
+        strain_recovery = time_elapsed_minutes * self._strain_recovery_per_minute
         self.mask_strain = max(
             0.0,
-            min(10.0, self.mask_strain + strain_increase - strain_recovery),
+            min(self._strain_cap, self.mask_strain + strain_increase - strain_recovery),
         )
 
-        energy_drain = self.mask_strain * 0.1
+        energy_drain = self.mask_strain * self._energy_drain_scale
         energy_recovery = time_elapsed_minutes * self._mask_recovery_rate
         self.mask_energy_level = max(
             0.0,
-            min(10.0, self.mask_energy_level - energy_drain + energy_recovery),
+            min(self._energy_cap, self.mask_energy_level - energy_drain + energy_recovery),
         )
 
-        strain_penalty = self.mask_strain * 0.5
+        strain_penalty = self.mask_strain * self._strain_penalty_scale
         detection_penalty = (
-            min(10.0, self.inner_chaos_level * 0.3 + self.mask_strain * 0.2)
-            * 0.3
+            min(
+                self._energy_cap,
+                self.inner_chaos_level * self._detection_chaos_scale
+                + self.mask_strain * self._detection_strain_scale,
+            )
+            * self._detection_penalty_scale
         )
-        energy_bonus = (self.mask_energy_level - 5.0) * 0.2
+        energy_bonus = (self.mask_energy_level - self._energy_baseline) * self._energy_bonus_scale
 
         self.surface_mask_strength = max(
             0.0,
@@ -212,26 +250,28 @@ class ComplexTraumaPsychology:
         chaos = self.inner_chaos_level
         mask = self.surface_mask_strength
 
-        self.combined_severity = chaos * 0.6 + (10 - mask) * 0.4
+        self.combined_severity = chaos * self._combined_chaos_weight + (
+            self._max_mask_strength - mask
+        ) * self._combined_mask_weight
 
-        if chaos < 4:
-            if mask >= 8:
+        if chaos < self._chaos_low_threshold:
+            if mask >= self._mask_high_threshold:
                 return TraumaState.SURFACE_NORMAL
-            elif mask >= 4:
+            elif mask >= self._mask_mid_threshold:
                 return TraumaState.SLIGHT_ABNORMAL
             else:
                 return TraumaState.MASK_SLIP
-        elif chaos < 7:
-            if mask >= 8:
+        elif chaos < self._chaos_high_threshold:
+            if mask >= self._mask_high_threshold:
                 return TraumaState.FORCED_NORMAL
-            elif mask >= 4:
+            elif mask >= self._mask_mid_threshold:
                 return TraumaState.MASK_WAVERING
             else:
                 return TraumaState.HALF_BREAKDOWN
         else:
-            if mask >= 8:
+            if mask >= self._mask_high_threshold:
                 return TraumaState.BARELY_HOLDING
-            elif mask >= 4:
+            elif mask >= self._mask_mid_threshold:
                 return TraumaState.IMMINENT_COLLAPSE
             else:
                 return TraumaState.TOTAL_BREAKDOWN
@@ -244,27 +284,27 @@ class ComplexTraumaPsychology:
         intensity = max(
             0.0, min(1.0, float(context.get("intensity", 0.0) or 0.0))
         )
-        trigger = (content or "").strip()[:80]
+        trigger = (content or "").strip()[: self._trigger_max_chars]
 
-        if self.inner_chaos_level >= 7.0:
+        if self.inner_chaos_level >= self._layer_high_chaos_threshold:
             inner = "脑海像被拧紧了一样，很多念头同时拉扯着注意力。"
             body = "呼吸发浅，动作会先变僵，再努力维持镇定. "
-        elif self.inner_chaos_level >= 4.0:
+        elif self.inner_chaos_level >= self._layer_mid_chaos_threshold:
             inner = "表面还维持得住，但心里已经明显开始不适. "
             body = "肩颈和手指会先一步绷紧. "
         else:
             inner = "情绪有波动，但还在可控范围内. "
             body = "身体只是轻微紧张. "
 
-        if sentiment == "negative" and intensity >= 0.6:
+        if sentiment == "negative" and intensity >= self._negative_intensity_threshold:
             conscious = "理智层优先考虑拉开距离、缩短互动或降低暴露. "
         else:
             conscious = "理智层仍试图维持礼貌与表面秩序. "
 
         worldview = "对外界可信度的判断略有下滑. "
         if (
-            self.worldview.reality_distortion >= 2.0
-            or self.worldview.meaning_collapse >= 2.0
+            self.worldview.reality_distortion >= self._worldview_damage_threshold
+            or self.worldview.meaning_collapse >= self._worldview_damage_threshold
         ):
             worldview = (
                 "世界观开始出现裂缝，对他人意图和现实稳定性的信任正在下降. "
@@ -281,7 +321,7 @@ class ComplexTraumaPsychology:
             "worldview_distortion": worldview,
             "escape_urge": (
                 "想先拉开一点距离再继续判断. "
-                if self.inner_chaos_level >= 5.0
+                if self.inner_chaos_level >= self._escape_chaos_threshold
                 else "暂时还能继续应对. "
             ),
         }
@@ -352,11 +392,9 @@ class ComplexTraumaPsychology:
 _complex_psychology: Optional[ComplexTraumaPsychology] = None
 
 
-def get_complex_psychology(
-    config_engine: Optional[ConfigEngine] = None,
-) -> ComplexTraumaPsychology:
+def get_complex_psychology() -> ComplexTraumaPsychology:
     """获取复杂心理系统单例"""
     global _complex_psychology
     if _complex_psychology is None:
-        _complex_psychology = ComplexTraumaPsychology(config_engine)
+        _complex_psychology = ComplexTraumaPsychology()
     return _complex_psychology

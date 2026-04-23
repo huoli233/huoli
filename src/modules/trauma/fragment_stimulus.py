@@ -4,8 +4,9 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from src.common.config.config_engine import ConfigEngine
+from src.chat.utils.prompt_builder import global_prompt_manager
 from src.common.logger import get_logger
+from src.modules.trauma.runtime_config import trauma_module_view
 from src.modules.trauma.trauma_system import (
     TraumaFragment,
     TraumaSystem,
@@ -48,11 +49,9 @@ class FragmentStimulusEvaluator:
 
     def __init__(
         self,
-        config_engine: Optional[ConfigEngine] = None,
         trauma_system: Optional[TraumaSystem] = None,
         model_client: Any = None,
     ):
-        self._config = config_engine or ConfigEngine.get_instance()
         self._trauma = trauma_system or get_trauma_system()
         self._model_client = model_client
         self._last_eval_at: Dict[str, float] = {}
@@ -60,13 +59,26 @@ class FragmentStimulusEvaluator:
 
     def _load_config(self):
         """加载配置"""
-        trauma_cfg = self._config.get("trauma", {})
+        trauma_cfg = trauma_module_view("trauma_fragment")
         self._enabled = trauma_cfg.get("enabled", True)
         self._min_interval = float(
             trauma_cfg.get("fragment_eval_min_interval", 120.0)
         )
         self._max_content_len = int(trauma_cfg.get("max_content_length", 4000))
         self._max_context_len = int(trauma_cfg.get("max_context_length", 2000))
+        self._prompt_key = str(trauma_cfg.get("prompt_key", "trauma_shard_stimulus"))
+        self._fallback_negative_keywords = trauma_cfg.get(
+            "fallback_negative_keywords",
+            ["伤害", "痛苦", "恐惧", "绝望", "崩溃", "创伤", "阴影"],
+        )
+        self._fallback_keyword_weight = float(trauma_cfg.get("fallback_keyword_weight", 1.0))
+        self._fallback_record_threshold = float(trauma_cfg.get("fallback_record_threshold", 2.0))
+        self._fallback_distortion_scale = float(trauma_cfg.get("fallback_distortion_scale", 0.5))
+        self._fallback_memory_clarity = float(trauma_cfg.get("fallback_memory_clarity", 5.0))
+        self._fallback_confidence = float(trauma_cfg.get("fallback_confidence", 0.7))
+        self._score_cap = float(trauma_cfg.get("score_cap", 10.0))
+        self._confidence_cap = float(trauma_cfg.get("confidence_cap", 1.0))
+        self._fragment_id_chars = int(trauma_cfg.get("fragment_id_chars", 16))
 
     def set_model_client(self, client: Any):
         """设置模型客户端"""
@@ -115,20 +127,22 @@ class FragmentStimulusEvaluator:
         return None
 
     def _build_evaluation_prompt(self, content: str, context: str) -> str:
-        prompt = f"""请评估以下内容是否构成创伤刺激。
+        template = global_prompt_manager.get_prompt(self._prompt_key)
+        if template is None:
+            try:
+                import src.chat.prompts.catalog  # noqa: F401
 
-内容: {content}
-上下文: {context}
-请以JSON格式返回结果:
-{{
-    "should_record": true/false,
-    "semantic_context": "触发语义描述",
-    "emotional_charge": 0.0-10.0,
-    "distortion_level": 0.0-10.0,
-    "memory_clarity": 0.0-10.0,
-    "confidence": 0.0-1.0
-}}"""
-        return prompt
+                template = global_prompt_manager.get_prompt(self._prompt_key)
+            except Exception as exc:
+                logger.debug(f"碎片刺激提示词注册表加载失败: {exc}")
+        if template is not None:
+            return template.render(content=content, context=context)
+        return (
+            "[碎片刺激评估]\n"
+            f"输入内容：{content}\n"
+            f"上下文：{context}\n\n"
+            "请判断此内容是否构成可记录的创伤刺激。输出 JSON。"
+        )
 
     async def _call_model(self, prompt: str) -> str:
         try:
@@ -157,10 +171,10 @@ class FragmentStimulusEvaluator:
             confidence = float(data.get("confidence", 0.0))
             fragment_id = str(data.get("fragment_id", ""))
 
-            emotional_charge = max(0.0, min(10.0, emotional_charge))
-            distortion_level = max(0.0, min(10.0, distortion_level))
-            memory_clarity = max(0.0, min(10.0, memory_clarity))
-            confidence = max(0.0, min(1.0, confidence))
+            emotional_charge = max(0.0, min(self._score_cap, emotional_charge))
+            distortion_level = max(0.0, min(self._score_cap, distortion_level))
+            memory_clarity = max(0.0, min(self._score_cap, memory_clarity))
+            confidence = max(0.0, min(self._confidence_cap, confidence))
 
             return StimulusEvaluationResult(
                 should_record=should_record,
@@ -181,33 +195,24 @@ class FragmentStimulusEvaluator:
         context: Optional[Dict[str, Any]] = None,
     ) -> Optional[StimulusEvaluationResult]:
         """备用评估逻辑（无模型时使用规则）"""
-        negative_keywords = [
-            "伤害",
-            "痛苦",
-            "恐惧",
-            "绝望",
-            "崩溃",
-            "创伤",
-            "阴影",
-        ]
         intensity = 0.0
-        for kw in negative_keywords:
+        for kw in self._fallback_negative_keywords:
             if kw in content:
-                intensity += 1.0
-        should_record = intensity >= 2.0
+                intensity += self._fallback_keyword_weight
+        should_record = intensity >= self._fallback_record_threshold
 
         if not should_record:
             return None
-        charge = min(10.0, intensity)
-        distortion = min(10.0, intensity * 0.5)
-        clarity = 5.0
+        charge = min(self._score_cap, intensity)
+        distortion = min(self._score_cap, intensity * self._fallback_distortion_scale)
+        clarity = self._fallback_memory_clarity
         return StimulusEvaluationResult(
             should_record=True,
             semantic_context=f"检测到负面关键词: intensity={intensity}",
             emotional_charge=charge,
             distortion_level=distortion,
             memory_clarity=clarity,
-            confidence=0.7,
+            confidence=self._fallback_confidence,
         )
 
     def _create_fragment(
@@ -217,7 +222,7 @@ class FragmentStimulusEvaluator:
         if not result.should_record:
             return None
         fragment = TraumaFragment(
-            fragment_id=result.fragment_id or uuid.uuid4().hex[:16],
+            fragment_id=result.fragment_id or uuid.uuid4().hex[: self._fragment_id_chars],
             trigger_context=result.semantic_context,
             emotional_charge=result.emotional_charge,
             distortion_level=result.distortion_level,
@@ -239,13 +244,12 @@ _fragment_stimulus_evaluator: Optional[FragmentStimulusEvaluator] = None
 
 
 def get_fragment_stimulus_evaluator(
-    config_engine: Optional[ConfigEngine] = None,
     trauma_system: Optional[TraumaSystem] = None,
     model_client: Any = None,
 ) -> FragmentStimulusEvaluator:
     global _fragment_stimulus_evaluator
     if _fragment_stimulus_evaluator is None:
         _fragment_stimulus_evaluator = FragmentStimulusEvaluator(
-            config_engine, trauma_system, model_client
+            trauma_system, model_client
         )
     return _fragment_stimulus_evaluator

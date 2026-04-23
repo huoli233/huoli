@@ -935,6 +935,264 @@ max_severity_history = 10
 escalation_factor = 1.5
 max_escalation_count = 5
 
+[profile_mapping.semantic_domains.psychological_core]
+max_pressure = 100.0
+recovery_rate = 0.1
+harassment_block_high = 120.0
+harassment_block_mid = 60.0
+harassment_block_low = 30.0
+annoyance_per_harass = 8.0
+persona_switch_duration = 600.0
+harassment_intensity_high = 10.0
+harassment_intensity_mid = 5.0
+harassment_emotion_divisor = 5.0
+harassment_emotion_min = 0.5
+harassment_emotion_max = 2.5
+persona_switch_severe = 9.0
+persona_switch_medium = 7.0
+persona_switch_light = 5.0
+positive_interaction_min = 0.5
+positive_interaction_multiplier = 4.0
+negative_interaction_min = 0.5
+recovery_intensity = 1.0
+stamina_default = 100.0
+stamina_trauma_scale = 0.5
+stamina_annoyance_scale = 0.3
+stamina_affection_bonus_scale = 0.1
+response_severe_trauma_threshold = 8.0
+response_trauma_defense_threshold = 5.0
+response_cold_rejection_annoyance = 80.0
+response_irritated_annoyance = 50.0
+response_intimate_affection = 80.0
+response_friendly_affection = 50.0
+response_hostile_affection = -50.0
+hint_high_affection = 50.0
+hint_low_affection = -30.0
+hint_high_annoyance = 40.0
+hint_high_trauma = 5.0
+surface_shock_cap = 10.0
+surface_fear_cap = 8.0
+deep_violation_cap = 10.0
+deep_helplessness_cap = 9.0
+surface_shock_scale = 0.8
+surface_fear_scale = 0.6
+deep_violation_scale = 0.9
+deep_helplessness_scale = 0.7
+flashback_content_chars = 100
+flashback_intensity_min = 0.5
+flashback_intensity_max = 1.0
+trust_min = -50.0
+trust_max = 100.0
+computed_trust_min = 0.0
+computed_trust_max = 100.0
+trust_affection_weight = 0.4
+trust_interaction_weight = 0.5
+trust_interaction_cap = 30.0
+
+[profile_mapping.semantic_domains.trauma_complex]
+max_chaos_level = 10.0
+max_mask_strength = 10.0
+mask_strain_rate = 0.3
+mask_recovery_rate = 0.05
+negative_trauma_scale = 1.2
+negative_intensity_scale = 2.0
+neutral_trauma_scale = 0.8
+worldview_meaning_bonus_scale = 0.3
+social_pressure_cap = 10.0
+fallback_social_pressure_scale = 0.5
+negative_intensity_strain_scale = 0.5
+negative_social_strain_scale = 0.2
+social_strain_scale = 0.1
+strain_recovery_per_minute = 0.02
+strain_cap = 10.0
+energy_cap = 10.0
+energy_drain_scale = 0.1
+strain_penalty_scale = 0.5
+detection_chaos_scale = 0.3
+detection_strain_scale = 0.2
+detection_penalty_scale = 0.3
+energy_baseline = 5.0
+energy_bonus_scale = 0.2
+combined_chaos_weight = 0.6
+combined_mask_weight = 0.4
+chaos_low_threshold = 4.0
+chaos_high_threshold = 7.0
+mask_high_threshold = 8.0
+mask_mid_threshold = 4.0
+layer_high_chaos_threshold = 7.0
+layer_mid_chaos_threshold = 4.0
+negative_intensity_threshold = 0.6
+worldview_damage_threshold = 2.0
+escape_chaos_threshold = 5.0
+trigger_max_chars = 80
+
+[profile_mapping.semantic_domains.trauma_fragment]
+enabled = true
+fragment_eval_min_interval = 120.0
+max_content_length = 4000
+max_context_length = 2000
+prompt_key = "trauma_shard_stimulus"
+fallback_negative_keywords = ["伤害", "痛苦", "恐惧", "绝望", "崩溃", "创伤", "阴影"]
+fallback_keyword_weight = 1.0
+fallback_record_threshold = 2.0
+fallback_distortion_scale = 0.5
+fallback_memory_clarity = 5.0
+fallback_confidence = 0.7
+score_cap = 10.0
+confidence_cap = 1.0
+fragment_id_chars = 16
+
+[profile_mapping.semantic_domains.trauma_layers]
+max_severity = 10.0
+healing_rate = 0.01
+activation_decay = 0.1
+cross_layer_influence = 0.3
+max_triggers_per_layer = 20
+max_symptoms_per_layer = 15
+decay_window_seconds = 3600.0
+
+[profile_mapping.semantic_domains.trauma_layers.severity_weights]
+surface = 0.1
+shallow = 0.2
+medium = 0.25
+deep = 0.25
+core = 0.2
+
+[profile_mapping.semantic_domains.trauma_layers.layer_influence_matrix.core]
+deep = 0.8
+medium = 0.5
+shallow = 0.3
+surface = 0.1
+
+[profile_mapping.semantic_domains.trauma_layers.layer_influence_matrix.deep]
+core = 0.2
+medium = 0.6
+shallow = 0.4
+surface = 0.2
+
+[profile_mapping.semantic_domains.trauma_layers.layer_influence_matrix.medium]
+core = 0.1
+deep = 0.3
+shallow = 0.5
+surface = 0.3
+
+[profile_mapping.semantic_domains.trauma_layers.layer_influence_matrix.shallow]
+core = 0.05
+deep = 0.1
+medium = 0.3
+surface = 0.4
+
+[profile_mapping.semantic_domains.trauma_layers.layer_influence_matrix.surface]
+core = 0.02
+deep = 0.05
+medium = 0.1
+shallow = 0.2
+
+[profile_mapping.semantic_domains.trauma_system]
+max_fragments = 50
+fragment_decay_rate = 0.01
+chaos_decay_rate = 0.05
+mask_recovery_rate = 0.02
+stress_threshold = 8.0
+max_chaos_level = 10.0
+max_mask_strength = 10.0
+fragment_id_chars = 16
+fragment_bonus_scale = 0.1
+negative_trauma_scale = 1.2
+negative_intensity_scale = 2.0
+neutral_trauma_scale = 0.8
+worldview_meaning_bonus_scale = 0.3
+mask_base_strength = 8.0
+mask_energy_level = 10.0
+social_pressure_cap = 10.0
+fallback_social_pressure_scale = 0.5
+mask_strain_rate = 0.3
+negative_intensity_strain_scale = 0.5
+negative_social_strain_scale = 0.2
+social_strain_scale = 0.1
+strain_recovery_per_minute = 0.02
+strain_cap = 10.0
+energy_cap = 10.0
+energy_drain_scale = 0.1
+strain_penalty_scale = 0.5
+detection_chaos_scale = 0.3
+detection_strain_scale = 0.2
+detection_penalty_scale = 0.3
+energy_baseline = 5.0
+energy_bonus_scale = 0.2
+chaos_low_threshold = 4.0
+chaos_high_threshold = 7.0
+mask_high_threshold = 8.0
+mask_mid_threshold = 4.0
+worldview_cap = 10.0
+stress_cap = 10.0
+worldview_heal_scale = 0.5
+
+[profile_mapping.semantic_domains.trauma_timeline]
+max_timeline_events = 500
+pattern_window_hours = 168
+min_pattern_occurrences = 3
+default_query_limit = 50
+recent_hours = 24.0
+recent_limit = 20
+pattern_min_frequency = 2
+frequent_trigger_limit = 10
+severity_trend_days = 7
+clear_old_days = 30
+
+[profile_mapping.semantic_domains.trauma_triggers]
+default_trigger_severity = 1.0
+max_trigger_history = 100
+trigger_cooldown_seconds = 60.0
+trigger_sensitivity = 0.7
+keyword_confidence = 0.8
+regex_confidence = 0.9
+history_content_chars = 50
+recent_trigger_limit = 10
+frequency_window_hours = 24
+default_patterns = [
+    { pattern_id = "rejection", keywords = ["不要你", "讨厌你", "滚", "离开", "不想理你"], severity = 3.0, layer_type = "中层", response_type = "withdrawal", description = "拒绝类触发" },
+    { pattern_id = "abandonment", keywords = ["抛弃", "丢下", "不管你", "没人要"], severity = 4.0, layer_type = "深层", response_type = "panic", description = "遗弃类触发" },
+    { pattern_id = "humiliation", keywords = ["蠢", "笨", "废物", "没用", "丢人"], severity = 3.5, layer_type = "中层", response_type = "shame", description = "羞辱类触发" },
+    { pattern_id = "threat", keywords = ["打死", "伤害", "报复", "让你后悔"], severity = 5.0, layer_type = "核心", response_type = "fear", description = "威胁类触发" },
+    { pattern_id = "invalidation", keywords = ["你想多了", "太敏感", "无理取闹", "矫情"], severity = 2.5, layer_type = "浅层", response_type = "numbness", description = "否定类触发" },
+]
+
+[profile_mapping.semantic_domains.trauma_worldview]
+assessment_cooldown_seconds = 30.0
+max_beliefs_tracked = 10
+max_delta_per_assessment = 2.0
+healing_threshold = 0.3
+impact_history_limit = 100
+trust_negative_scale = 0.5
+trust_positive_scale = 0.3
+reality_severity_scale = 0.3
+reality_keyword_bonus = 0.2
+meaning_severity_scale = 0.4
+meaning_keyword_bonus = 0.3
+cognition_severity_scale = 0.2
+cognition_keyword_bonus = 0.2
+damaged_belief_min_severity = 0.5
+damaged_belief_limit = 3
+healing_min_keywords = 2
+worldview_cap = 10.0
+severe_trust_threshold = 3.0
+severe_reality_threshold = 7.0
+severe_meaning_threshold = 7.0
+medium_trust_threshold = 5.0
+medium_reality_threshold = 4.0
+medium_meaning_threshold = 4.0
+reality_keywords = ["假的", "不真实", "欺骗", "谎言", "虚伪"]
+meaning_keywords = ["没意义", "无所谓", "没用", "徒劳"]
+confusion_keywords = ["不明白", "搞不懂", "混乱", "矛盾"]
+healing_keywords = ["理解", "支持", "关心", "爱", "温暖", "感谢"]
+belief_patterns = [
+    { belief = "信任他人", triggers = ["不可信", "不能信", "骗我"] },
+    { belief = "世界是安全的", triggers = ["危险", "不安全", "威胁"] },
+    { belief = "人是善良的", triggers = ["恶意", "坏人", "伤害"] },
+    { belief = "未来有希望", triggers = ["绝望", "没希望", "完蛋"] },
+]
+
 [profile_mapping.semantic_domains.heartflow_runtime]
 focus_channels = []
 initiative_interval_sec = 300.0
@@ -1113,3 +1371,43 @@ profile_name = "injection_detection_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["user_protection"]
 profile_name = "user_protection_view"
+
+[profile_mapping.module_views.psychological_core]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["psychological_core"]
+profile_name = "psychological_core_view"
+
+[profile_mapping.module_views.trauma_complex]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["trauma_complex"]
+profile_name = "trauma_complex_view"
+
+[profile_mapping.module_views.trauma_fragment]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["trauma_fragment"]
+profile_name = "trauma_fragment_view"
+
+[profile_mapping.module_views.trauma_layers]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["trauma_layers"]
+profile_name = "trauma_layers_view"
+
+[profile_mapping.module_views.trauma_system]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["trauma_system"]
+profile_name = "trauma_system_view"
+
+[profile_mapping.module_views.trauma_timeline]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["trauma_timeline"]
+profile_name = "trauma_timeline_view"
+
+[profile_mapping.module_views.trauma_triggers]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["trauma_triggers"]
+profile_name = "trauma_triggers_view"
+
+[profile_mapping.module_views.trauma_worldview]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["trauma_worldview"]
+profile_name = "trauma_worldview_view"

@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.trauma.runtime_config import trauma_module_view
 
 logger = get_logger("创伤时间线")
 
@@ -95,8 +95,7 @@ class TraumaTimeline:
     记录创伤事件的时间序列，支持回溯分析和模式识别
     """
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self):
         self._events: List[TraumaEvent] = []
         self._patterns: Dict[str, TraumaPattern] = {}
         self._max_events = 500
@@ -104,7 +103,7 @@ class TraumaTimeline:
 
     def _load_config(self):
         """加载配置"""
-        trauma_cfg = self._config.get("trauma", {})
+        trauma_cfg = trauma_module_view("trauma_timeline")
         self._max_events = trauma_cfg.get("max_timeline_events", 500)
         self._pattern_window_hours = trauma_cfg.get(
             "pattern_window_hours", 168
@@ -112,6 +111,13 @@ class TraumaTimeline:
         self._min_pattern_occurrences = trauma_cfg.get(
             "min_pattern_occurrences", 3
         )
+        self._default_query_limit = int(trauma_cfg.get("default_query_limit", 50))
+        self._recent_hours = float(trauma_cfg.get("recent_hours", 24.0))
+        self._recent_limit = int(trauma_cfg.get("recent_limit", 20))
+        self._pattern_min_frequency = int(trauma_cfg.get("pattern_min_frequency", 2))
+        self._frequent_trigger_limit = int(trauma_cfg.get("frequent_trigger_limit", 10))
+        self._severity_trend_days = int(trauma_cfg.get("severity_trend_days", 7))
+        self._clear_old_days = int(trauma_cfg.get("clear_old_days", 30))
 
     def record_event(
         self,
@@ -176,9 +182,10 @@ class TraumaTimeline:
         start_time: Optional[float] = None,
         end_time: Optional[float] = None,
         min_severity: Optional[float] = None,
-        limit: int = 50,
+        limit: Optional[int] = None,
     ) -> List[TraumaEvent]:
         """获取事件列表"""
+        limit = self._default_query_limit if limit is None else limit
         filtered = self._events
 
         if event_type:
@@ -193,9 +200,11 @@ class TraumaTimeline:
         return filtered[-limit:]
 
     def get_recent_events(
-        self, hours: float = 24.0, limit: int = 20
+        self, hours: Optional[float] = None, limit: Optional[int] = None
     ) -> List[TraumaEvent]:
         """获取最近事件"""
+        hours = self._recent_hours if hours is None else hours
+        limit = self._recent_limit if limit is None else limit
         cutoff = time.time() - (hours * 3600)
         return [e for e in self._events if e.timestamp >= cutoff][-limit:]
 
@@ -216,14 +225,16 @@ class TraumaTimeline:
             return True
         return False
 
-    def get_patterns(self, min_frequency: int = 2) -> List[TraumaPattern]:
+    def get_patterns(self, min_frequency: Optional[int] = None) -> List[TraumaPattern]:
         """获取识别的模式"""
+        min_frequency = self._pattern_min_frequency if min_frequency is None else min_frequency
         return [
             p for p in self._patterns.values() if p.frequency >= min_frequency
         ]
 
-    def get_frequent_triggers(self, limit: int = 10) -> List[Tuple[str, int]]:
+    def get_frequent_triggers(self, limit: Optional[int] = None) -> List[Tuple[str, int]]:
         """获取高频触发"""
+        limit = self._frequent_trigger_limit if limit is None else limit
         trigger_counts: Dict[str, int] = {}
         for event in self._events:
             for trigger in event.triggers:
@@ -234,8 +245,9 @@ class TraumaTimeline:
         )
         return sorted_triggers[:limit]
 
-    def get_severity_trend(self, days: int = 7) -> List[Tuple[float, float]]:
+    def get_severity_trend(self, days: Optional[int] = None) -> List[Tuple[float, float]]:
         """获取严重度趋势"""
+        days = self._severity_trend_days if days is None else days
         cutoff = time.time() - (days * 86400)
         daily_severity: Dict[str, List[float]] = {}
 
@@ -312,8 +324,9 @@ class TraumaTimeline:
 
         return " | ".join(parts)
 
-    def clear_old_events(self, days: int = 30) -> int:
+    def clear_old_events(self, days: Optional[int] = None) -> int:
         """清除旧事件"""
+        days = self._clear_old_days if days is None else days
         cutoff = time.time() - (days * 86400)
         original_count = len(self._events)
         self._events = [e for e in self._events if e.timestamp >= cutoff]
@@ -356,11 +369,9 @@ class TraumaTimeline:
 _trauma_timeline: Optional[TraumaTimeline] = None
 
 
-def get_trauma_timeline(
-    config_engine: Optional[ConfigEngine] = None,
-) -> TraumaTimeline:
+def get_trauma_timeline() -> TraumaTimeline:
     """获取创伤时间线单例"""
     global _trauma_timeline
     if _trauma_timeline is None:
-        _trauma_timeline = TraumaTimeline(config_engine)
+        _trauma_timeline = TraumaTimeline()
     return _trauma_timeline

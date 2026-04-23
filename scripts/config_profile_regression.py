@@ -114,6 +114,42 @@ cache_max_entries = 123
 [profile_mapping.semantic_domains.user_protection]
 max_escalation_count = 7
 
+[profile_mapping.semantic_domains.psychological_core]
+response_irritated_annoyance = 66.0
+stamina_trauma_scale = 0.55
+flashback_intensity_max = 0.95
+
+[profile_mapping.semantic_domains.trauma_complex]
+escape_chaos_threshold = 6.0
+negative_intensity_threshold = 0.75
+
+[profile_mapping.semantic_domains.trauma_fragment]
+prompt_key = "trauma_shard_stimulus"
+fallback_negative_keywords = ["阴影", "恐惧"]
+
+[profile_mapping.semantic_domains.trauma_layers]
+max_triggers_per_layer = 11
+
+[profile_mapping.semantic_domains.trauma_layers.severity_weights]
+medium = 0.33
+
+[profile_mapping.semantic_domains.trauma_system]
+stress_threshold = 6.5
+fragment_bonus_scale = 0.15
+
+[profile_mapping.semantic_domains.trauma_timeline]
+default_query_limit = 77
+
+[profile_mapping.semantic_domains.trauma_triggers]
+keyword_confidence = 0.81
+default_patterns = [
+    {{ pattern_id = "echo", keywords = ["回声"], severity = 2.2, layer_type = "浅层", response_type = "freeze", description = "回声类触发" }},
+]
+
+[profile_mapping.semantic_domains.trauma_worldview]
+max_beliefs_tracked = 12
+reality_keywords = ["虚假", "欺骗"]
+
 [profile_mapping.semantic_domains.skill]
 trial_to_active_invocations = 6
 runtime_skill_cost = 0.4
@@ -191,6 +227,30 @@ semantic_domains = ["injection_detection"]
 [profile_mapping.module_views.user_protection]
 semantic_domains = ["user_protection"]
 
+[profile_mapping.module_views.psychological_core]
+semantic_domains = ["psychological_core"]
+
+[profile_mapping.module_views.trauma_complex]
+semantic_domains = ["trauma_complex"]
+
+[profile_mapping.module_views.trauma_fragment]
+semantic_domains = ["trauma_fragment"]
+
+[profile_mapping.module_views.trauma_layers]
+semantic_domains = ["trauma_layers"]
+
+[profile_mapping.module_views.trauma_system]
+semantic_domains = ["trauma_system"]
+
+[profile_mapping.module_views.trauma_timeline]
+semantic_domains = ["trauma_timeline"]
+
+[profile_mapping.module_views.trauma_triggers]
+semantic_domains = ["trauma_triggers"]
+
+[profile_mapping.module_views.trauma_worldview]
+semantic_domains = ["trauma_worldview"]
+
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
 
@@ -252,6 +312,17 @@ def main() -> None:
         assert hub.resolve_module_view("harassment_detection").values["block_threshold"] == 0.66
         assert hub.resolve_module_view("injection_detection").values["cache_max_entries"] == 123
         assert hub.resolve_module_view("user_protection").values["max_escalation_count"] == 7
+        assert hub.resolve_module_view("psychological_core").values["response_irritated_annoyance"] == 66.0
+        assert hub.resolve_module_view("psychological_core").values["flashback_intensity_max"] == 0.95
+        assert hub.resolve_module_view("trauma_complex").values["escape_chaos_threshold"] == 6.0
+        assert hub.resolve_module_view("trauma_fragment").values["prompt_key"] == "trauma_shard_stimulus"
+        assert hub.resolve_module_view("trauma_fragment").values["fallback_negative_keywords"] == ["阴影", "恐惧"]
+        assert hub.resolve_module_view("trauma_layers").values["severity_weights"]["medium"] == 0.33
+        assert hub.resolve_module_view("trauma_system").values["stress_threshold"] == 6.5
+        assert hub.resolve_module_view("trauma_timeline").values["default_query_limit"] == 77
+        assert hub.resolve_module_view("trauma_triggers").values["keyword_confidence"] == 0.81
+        assert hub.resolve_module_view("trauma_triggers").values["default_patterns"][0]["pattern_id"] == "echo"
+        assert hub.resolve_module_view("trauma_worldview").values["max_beliefs_tracked"] == 12
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
         assert hub.resolve_module_view("adaptive_learning").values["expression_learn_temperature"] == 0.25
@@ -276,6 +347,8 @@ def main() -> None:
             "inner_voice_mention_floor": hub.resolve_module_view("inner_voice").values["mention_min_desire"],
             "frequency_skip_limit": hub.resolve_module_view("frequency_control").values["skip_limit"],
             "harassment_block_threshold": hub.resolve_module_view("harassment_detection").values["block_threshold"],
+            "psych_irritated_threshold": hub.resolve_module_view("psychological_core").values["response_irritated_annoyance"],
+            "trauma_query_limit": hub.resolve_module_view("trauma_timeline").values["default_query_limit"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "jargon_thresholds": hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"],

@@ -1,10 +1,10 @@
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.trauma.runtime_config import trauma_module_view
 
 logger = get_logger("创伤触发")
 
@@ -56,8 +56,7 @@ class TraumaTriggerEvaluator:
     评估文本是否触发创伤响应
     """
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self):
         self._patterns: Dict[str, TriggerPattern] = {}
         self._compiled_patterns: Dict[str, re.Pattern] = {}
         self._hit_history: List[Tuple[str, float, str]] = []
@@ -65,7 +64,7 @@ class TraumaTriggerEvaluator:
 
     def _load_config(self):
         """加载配置"""
-        trauma_cfg = self._config.get("trauma", {})
+        trauma_cfg = trauma_module_view("trauma_triggers")
 
         self._default_severity = trauma_cfg.get(
             "default_trigger_severity", 1.0
@@ -75,56 +74,73 @@ class TraumaTriggerEvaluator:
             "trigger_cooldown_seconds", 60.0
         )
         self._sensitivity = trauma_cfg.get("trigger_sensitivity", 0.7)
+        self._keyword_confidence = trauma_cfg.get("keyword_confidence", 0.8)
+        self._regex_confidence = trauma_cfg.get("regex_confidence", 0.9)
+        self._history_content_chars = int(trauma_cfg.get("history_content_chars", 50))
+        self._recent_trigger_limit = int(trauma_cfg.get("recent_trigger_limit", 10))
+        self._frequency_window_hours = int(trauma_cfg.get("frequency_window_hours", 24))
+        self._default_patterns = trauma_cfg.get("default_patterns", [])
 
         self._initialize_default_patterns()
 
     def _initialize_default_patterns(self):
         """初始化默认触发模式"""
-        default_patterns = [
-            TriggerPattern(
-                pattern_id="rejection",
-                keywords=["不要你", "讨厌你", "滚", "离开", "不想理你"],
-                severity=3.0,
-                layer_type="中层",
-                response_type="withdrawal",
-                description="拒绝类触发",
-            ),
-            TriggerPattern(
-                pattern_id="abandonment",
-                keywords=["抛弃", "丢下", "不管你", "没人要"],
-                severity=4.0,
-                layer_type="深层",
-                response_type="panic",
-                description="遗弃类触发",
-            ),
-            TriggerPattern(
-                pattern_id="humiliation",
-                keywords=["蠢", "笨", "废物", "没用", "丢人"],
-                severity=3.5,
-                layer_type="中层",
-                response_type="shame",
-                description="羞辱类触发",
-            ),
-            TriggerPattern(
-                pattern_id="threat",
-                keywords=["打死", "伤害", "报复", "让你后悔"],
-                severity=5.0,
-                layer_type="核心",
-                response_type="fear",
-                description="威胁类触发",
-            ),
-            TriggerPattern(
-                pattern_id="invalidation",
-                keywords=["你想多了", "太敏感", "无理取闹", "矫情"],
-                severity=2.5,
-                layer_type="浅层",
-                response_type="numbness",
-                description="否定类触发",
-            ),
+        default_patterns = self._default_patterns or [
+            {
+                "pattern_id": "rejection",
+                "keywords": ["不要你", "讨厌你", "滚", "离开", "不想理你"],
+                "severity": 3.0,
+                "layer_type": "中层",
+                "response_type": "withdrawal",
+                "description": "拒绝类触发",
+            },
+            {
+                "pattern_id": "abandonment",
+                "keywords": ["抛弃", "丢下", "不管你", "没人要"],
+                "severity": 4.0,
+                "layer_type": "深层",
+                "response_type": "panic",
+                "description": "遗弃类触发",
+            },
+            {
+                "pattern_id": "humiliation",
+                "keywords": ["蠢", "笨", "废物", "没用", "丢人"],
+                "severity": 3.5,
+                "layer_type": "中层",
+                "response_type": "shame",
+                "description": "羞辱类触发",
+            },
+            {
+                "pattern_id": "threat",
+                "keywords": ["打死", "伤害", "报复", "让你后悔"],
+                "severity": 5.0,
+                "layer_type": "核心",
+                "response_type": "fear",
+                "description": "威胁类触发",
+            },
+            {
+                "pattern_id": "invalidation",
+                "keywords": ["你想多了", "太敏感", "无理取闹", "矫情"],
+                "severity": 2.5,
+                "layer_type": "浅层",
+                "response_type": "numbness",
+                "description": "否定类触发",
+            },
         ]
 
-        for pattern in default_patterns:
-            self._patterns[pattern.pattern_id] = pattern
+        for item in default_patterns:
+            if not isinstance(item, dict):
+                continue
+            pattern = TriggerPattern(
+                pattern_id=str(item.get("pattern_id", "")),
+                keywords=list(item.get("keywords", [])),
+                regex_pattern=str(item.get("regex_pattern", "")),
+                severity=float(item.get("severity", self._default_severity)),
+                layer_type=str(item.get("layer_type", "表层")),
+                response_type=str(item.get("response_type", "avoidance")),
+                description=str(item.get("description", "")),
+            )
+            self.add_pattern(pattern)
 
     def add_pattern(self, pattern: TriggerPattern) -> None:
         """添加触发模式"""
@@ -167,13 +183,13 @@ class TraumaTriggerEvaluator:
 
             for keyword in pattern.keywords:
                 if keyword.lower() in text_lower:
-                    confidence = max(confidence, 0.8)
+                    confidence = max(confidence, self._keyword_confidence)
                     matched = keyword
 
             if pattern_id in self._compiled_patterns:
                 match = self._compiled_patterns[pattern_id].search(text)
                 if match:
-                    confidence = max(confidence, 0.9)
+                    confidence = max(confidence, self._regex_confidence)
                     matched = match.group()
 
             if confidence > best_confidence:
@@ -201,12 +217,13 @@ class TraumaTriggerEvaluator:
 
     def _record_hit(self, pattern_id: str, severity: float, content: str):
         """记录触发历史"""
-        self._hit_history.append((pattern_id, time.time(), content[:50]))
+        self._hit_history.append((pattern_id, time.time(), content[: self._history_content_chars]))
         if len(self._hit_history) > self._max_history:
             self._hit_history = self._hit_history[-self._max_history:]
 
-    def get_recent_triggers(self, limit: int = 10) -> List[Dict[str, Any]]:
+    def get_recent_triggers(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
         """获取最近触发记录"""
+        limit = self._recent_trigger_limit if limit is None else limit
         recent = self._hit_history[-limit:]
         return [
             {
@@ -220,8 +237,9 @@ class TraumaTriggerEvaluator:
             for p_id, ts, content in reversed(recent)
         ]
 
-    def get_trigger_frequency(self, hours: int = 24) -> Dict[str, int]:
+    def get_trigger_frequency(self, hours: Optional[int] = None) -> Dict[str, int]:
         """获取触发频率"""
+        hours = self._frequency_window_hours if hours is None else hours
         cutoff = time.time() - hours * 3600
         frequency: Dict[str, int] = {}
         for pattern_id, ts, _ in self._hit_history:
@@ -253,11 +271,9 @@ class TraumaTriggerEvaluator:
 _trauma_trigger_evaluator: Optional[TraumaTriggerEvaluator] = None
 
 
-def get_trauma_trigger_evaluator(
-    config_engine: Optional[ConfigEngine] = None,
-) -> TraumaTriggerEvaluator:
+def get_trauma_trigger_evaluator() -> TraumaTriggerEvaluator:
     """获取创伤触发评估器单例"""
     global _trauma_trigger_evaluator
     if _trauma_trigger_evaluator is None:
-        _trauma_trigger_evaluator = TraumaTriggerEvaluator(config_engine)
+        _trauma_trigger_evaluator = TraumaTriggerEvaluator()
     return _trauma_trigger_evaluator

@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.trauma.runtime_config import trauma_module_view
 
 logger = get_logger("创伤层")
 
@@ -72,8 +72,7 @@ class TraumaLayerManager:
     管理创伤的层级结构、深度评估和层级间影响
     """
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self):
         self._layers: Dict[TraumaLayerType, TraumaLayer] = {}
         self._layer_influence_matrix: Dict[
             TraumaLayerType, Dict[TraumaLayerType, float]
@@ -83,7 +82,7 @@ class TraumaLayerManager:
 
     def _load_config(self):
         """加载配置"""
-        trauma_cfg = self._config.get("trauma", {})
+        trauma_cfg = trauma_module_view("trauma_layers")
 
         self._max_severity = trauma_cfg.get("max_severity", 10.0)
         self._healing_rate = trauma_cfg.get("healing_rate", 0.01)
@@ -91,8 +90,11 @@ class TraumaLayerManager:
         self._cross_layer_influence = trauma_cfg.get(
             "cross_layer_influence", 0.3
         )
+        self._max_triggers_per_layer = int(trauma_cfg.get("max_triggers_per_layer", 20))
+        self._max_symptoms_per_layer = int(trauma_cfg.get("max_symptoms_per_layer", 15))
+        self._decay_window_seconds = float(trauma_cfg.get("decay_window_seconds", 3600.0))
 
-        self._layer_influence_matrix = {
+        default_influence_matrix = {
             TraumaLayerType.CORE: {
                 TraumaLayerType.DEEP: 0.8,
                 TraumaLayerType.MEDIUM: 0.5,
@@ -124,6 +126,69 @@ class TraumaLayerManager:
                 TraumaLayerType.SHALLOW: 0.2,
             },
         }
+        configured_matrix = trauma_cfg.get("layer_influence_matrix", {})
+        self._layer_influence_matrix = self._build_layer_matrix(
+            configured_matrix,
+            default_influence_matrix,
+        )
+        self._severity_weights = self._build_layer_weights(
+            trauma_cfg.get("severity_weights", {}),
+            {
+                TraumaLayerType.SURFACE: 0.1,
+                TraumaLayerType.SHALLOW: 0.2,
+                TraumaLayerType.MEDIUM: 0.25,
+                TraumaLayerType.DEEP: 0.25,
+                TraumaLayerType.CORE: 0.2,
+            },
+        )
+
+    def _coerce_layer_type(self, value: Any) -> Optional[TraumaLayerType]:
+        text = str(value).strip().lower()
+        for layer_type in TraumaLayerType:
+            if text in {layer_type.name.lower(), layer_type.value.lower()}:
+                return layer_type
+        return None
+
+    def _build_layer_weights(
+        self,
+        raw_weights: Any,
+        fallback: Dict[TraumaLayerType, float],
+    ) -> Dict[TraumaLayerType, float]:
+        if not isinstance(raw_weights, dict):
+            return fallback
+        weights = dict(fallback)
+        for key, value in raw_weights.items():
+            layer_type = self._coerce_layer_type(key)
+            if layer_type is None:
+                continue
+            try:
+                weights[layer_type] = float(value)
+            except (TypeError, ValueError):
+                continue
+        return weights
+
+    def _build_layer_matrix(
+        self,
+        raw_matrix: Any,
+        fallback: Dict[TraumaLayerType, Dict[TraumaLayerType, float]],
+    ) -> Dict[TraumaLayerType, Dict[TraumaLayerType, float]]:
+        if not isinstance(raw_matrix, dict):
+            return fallback
+        matrix = {source: dict(targets) for source, targets in fallback.items()}
+        for source_key, raw_targets in raw_matrix.items():
+            source_type = self._coerce_layer_type(source_key)
+            if source_type is None or not isinstance(raw_targets, dict):
+                continue
+            target_map = matrix.setdefault(source_type, {})
+            for target_key, value in raw_targets.items():
+                target_type = self._coerce_layer_type(target_key)
+                if target_type is None:
+                    continue
+                try:
+                    target_map[target_type] = float(value)
+                except (TypeError, ValueError):
+                    continue
+        return matrix
 
     def _initialize_layers(self):
         """初始化各层级"""
@@ -154,13 +219,13 @@ class TraumaLayerManager:
 
         if trigger and trigger not in layer.triggers:
             layer.triggers.append(trigger)
-            if len(layer.triggers) > 20:
-                layer.triggers = layer.triggers[-20:]
+            if len(layer.triggers) > self._max_triggers_per_layer:
+                layer.triggers = layer.triggers[-self._max_triggers_per_layer:]
 
         if symptom and symptom not in layer.symptoms:
             layer.symptoms.append(symptom)
-            if len(layer.symptoms) > 15:
-                layer.symptoms = layer.symptoms[-15:]
+            if len(layer.symptoms) > self._max_symptoms_per_layer:
+                layer.symptoms = layer.symptoms[-self._max_symptoms_per_layer:]
 
         self._propagate_influence(layer_type, severity_delta)
 
@@ -198,16 +263,9 @@ class TraumaLayerManager:
 
     def get_total_severity(self) -> float:
         """获取总严重度"""
-        weights = {
-            TraumaLayerType.SURFACE: 0.1,
-            TraumaLayerType.SHALLOW: 0.2,
-            TraumaLayerType.MEDIUM: 0.25,
-            TraumaLayerType.DEEP: 0.25,
-            TraumaLayerType.CORE: 0.2,
-        }
         total = 0.0
         for layer_type, layer in self._layers.items():
-            weight = weights.get(layer_type, 0.1)
+            weight = self._severity_weights.get(layer_type, 0.1)
             total += layer.severity * weight
         return total
 
@@ -251,7 +309,7 @@ class TraumaLayerManager:
             decay_amount = (
                 self._activation_decay
                 * (time.time() - layer.last_activated)
-                / 3600.0
+                / self._decay_window_seconds
             )
             layer.severity = max(0.0, layer.severity - decay_amount)
 
@@ -274,11 +332,9 @@ class TraumaLayerManager:
 _trauma_layer_manager: Optional[TraumaLayerManager] = None
 
 
-def get_trauma_layer_manager(
-    config_engine: Optional[ConfigEngine] = None,
-) -> TraumaLayerManager:
+def get_trauma_layer_manager() -> TraumaLayerManager:
     """获取创伤层级管理器单例"""
     global _trauma_layer_manager
     if _trauma_layer_manager is None:
-        _trauma_layer_manager = TraumaLayerManager(config_engine)
+        _trauma_layer_manager = TraumaLayerManager()
     return _trauma_layer_manager
