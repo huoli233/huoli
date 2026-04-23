@@ -77,6 +77,7 @@ type Presentation = {
   circadian_detail?: CircadianDetail;
   emotion_detail?: EmotionDetail;
   behavior_detail?: BehaviorDetail;
+  context_detail?: ContextDetail;
   memory_detail?: MemoryDetail;
   autonomy_detail?: AutonomyDetail;
   initiative_state?: InitiativeState;
@@ -89,6 +90,10 @@ type Presentation = {
 type Prediction = {
   speak_probability: number;
   probability_percent?: number;
+  shared_verdict_id?: string;
+  model_path?: string;
+  should_reply?: boolean;
+  complexity_label?: string;
   eta_seconds: number;
   eta_label: string;
   decision_label?: string;
@@ -222,6 +227,32 @@ type BehaviorDetail = {
   model_governor: ModelGovernorDetail;
 };
 
+type ContextDetail = {
+  direct_target: boolean;
+  quote_anchor: boolean;
+  recent_human_activity: boolean;
+  scene_suitable: boolean;
+  watch_state: string;
+  watch_state_label: string;
+  attention_level: number;
+  perception_engagement_pull: number;
+  self_recent_messages_count: number;
+  self_recent_actions_count: number;
+  self_recent_events_count: number;
+  memoir_phase: string;
+  memoir_phase_label: string;
+  memoir_consecutive_timeouts: number;
+  current_target_user_id: string;
+  reply_mode: string;
+  reply_mode_label: string;
+  interrupt_level: string;
+  interrupt_level_label: string;
+  silence_policy: string;
+  silence_policy_label: string;
+  behavior_reason_labels: string[];
+  rest_reason_labels: string[];
+};
+
 type MemoryDetail = {
   ephemeral_short_term_count: number;
   planner_short_term_count: number;
@@ -321,7 +352,7 @@ const severityRank: Record<string, number> = {
 const fallbackDisplayPolicy: DisplayPolicy = {
   resident: ["精力储备", "内在心情", "注意状态", "社交姿态", "安全护盾", "流转阶段", "场景热度", "发言预测"],
   active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "情绪低落/好奇心/社交欲显著变化", "浅睡/深睡/熬穿/黎明恢复/睡眠债", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/群聊升温"],
-  detail: ["资源账本的聊天值和思考值", "昼夜节律、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "群聊感知、话题焦点、活跃人数", "目标用户关系、好感、信任、压力", "发言预测的驱动和抑制因素"],
+  detail: ["资源账本的聊天值和思考值", "昼夜节律、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "群聊感知、话题焦点、活跃人数", "目标用户关系、好感、信任、压力", "发言预测的驱动和抑制因素"],
   hidden: ["内部阈值", "调试原因", "缓存字段", "旧命名残留", "纯计数器原值"],
 };
 
@@ -361,6 +392,19 @@ function humanSceneHeat(value: string | undefined): string {
 
 function countText(value: number | undefined | null, unit: string): string {
   return `${Math.round(Number(value ?? 0))}${unit}`;
+}
+
+function yesNo(value: boolean | undefined | null): string {
+  return value ? "是" : "否";
+}
+
+function modelPathLabel(value: string | undefined): string {
+  return {
+    skip: "不调用模型",
+    small: "小模型",
+    large: "大模型",
+    small_fallback: "小模型兜底",
+  }[value ?? ""] ?? (value || "未裁定");
 }
 
 function connectionLabel(value: string): string {
@@ -414,6 +458,7 @@ export function EmotionDashboard() {
   const circadianDetail = packet?.presentation?.circadian_detail;
   const emotionDetail = packet?.presentation?.emotion_detail;
   const behaviorDetail = packet?.presentation?.behavior_detail;
+  const contextDetail = packet?.presentation?.context_detail;
   const memoryDetail = packet?.presentation?.memory_detail;
   const autonomyDetail = packet?.presentation?.autonomy_detail;
   const initiativeState = packet?.presentation?.initiative_state;
@@ -594,7 +639,7 @@ export function EmotionDashboard() {
         <article className="command-card is-score">
           <span>是否该聊</span>
           <strong>{predictionPercent}%</strong>
-          <p>{prediction?.decision_label ?? "等待状态"} · {prediction?.eta_label ?? "-"}</p>
+          <p>{prediction?.decision_label ?? "等待状态"} · {modelPathLabel(prediction?.model_path)} · {prediction?.eta_label ?? "-"}</p>
         </article>
         <article className="command-card">
           <span>最后同步</span>
@@ -812,6 +857,70 @@ export function EmotionDashboard() {
             ))}
             {(behaviorDetail?.rest_governor.reason_labels ?? []).map((item) => (
               <span className="topic-chip" key={`rg-${item}`}>
+                {item}
+              </span>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <h2>上下文感知</h2>
+            <span>{contextDetail?.watch_state_label ?? "瞥一眼"}</span>
+          </div>
+          <div className="detail-grid compact">
+            <div className="detail-row">
+              <span>直接目标</span>
+              <strong>{yesNo(contextDetail?.direct_target)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>引用锚点</span>
+              <strong>{yesNo(contextDetail?.quote_anchor)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>近期有人说话</span>
+              <strong>{yesNo(contextDetail?.recent_human_activity)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>场景适合参与</span>
+              <strong>{yesNo(contextDetail?.scene_suitable)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>关注等级</span>
+              <strong>{contextDetail?.attention_level ?? 0}</strong>
+            </div>
+            <div className="detail-row">
+              <span>感知拉力</span>
+              <strong>{percent(contextDetail?.perception_engagement_pull)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>回忆录阶段</span>
+              <strong>{contextDetail?.memoir_phase_label ?? "开放会话"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>连续超时</span>
+              <strong>{contextDetail?.memoir_consecutive_timeouts ?? 0}</strong>
+            </div>
+            <div className="detail-row">
+              <span>行为模式</span>
+              <strong>{contextDetail?.reply_mode_label ?? "-"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>静默策略</span>
+              <strong>{contextDetail?.silence_policy_label ?? "-"}</strong>
+            </div>
+          </div>
+          <p className="panel-note">
+            当前目标：{contextDetail?.current_target_user_id || "暂无"} · 自我近期消息 {contextDetail?.self_recent_messages_count ?? 0} 条 · 动作 {contextDetail?.self_recent_actions_count ?? 0} 条 · 事件 {contextDetail?.self_recent_events_count ?? 0} 条
+          </p>
+          <div className="topic-wrap">
+            {(contextDetail?.behavior_reason_labels ?? []).map((item) => (
+              <span className="topic-chip is-secondary" key={`ctx-bg-${item}`}>
+                {item}
+              </span>
+            ))}
+            {(contextDetail?.rest_reason_labels ?? []).map((item) => (
+              <span className="topic-chip" key={`ctx-rg-${item}`}>
                 {item}
               </span>
             ))}
@@ -1052,7 +1161,12 @@ export function EmotionDashboard() {
             <div>
               <p className="prediction-title">{prediction?.decision_label ?? "继续观察"}</p>
               <p className="prediction-subtitle">{prediction?.content_direction ?? "暂无预测方向"}</p>
-              <p className="prediction-meta">语气：{prediction?.tone ?? "正常回应"} · 长度：{prediction?.reply_length ?? "-"} · ETA：{prediction?.eta_label ?? "-"}</p>
+              <p className="prediction-meta">
+                语气：{prediction?.tone ?? "正常回应"} · 长度：{prediction?.reply_length ?? "-"} · ETA：{prediction?.eta_label ?? "-"} · 模型路径：{modelPathLabel(prediction?.model_path)}
+              </p>
+              <p className="prediction-meta">
+                统一裁定：{prediction?.shared_verdict_id || "暂无"} · 是否回复：{yesNo(prediction?.should_reply)} · 复杂度：{prediction?.complexity_label ?? "普通"}
+              </p>
               <p className="prediction-reason">{prediction?.decision_reason ?? "等待后端预测理由。"}</p>
             </div>
           </div>
