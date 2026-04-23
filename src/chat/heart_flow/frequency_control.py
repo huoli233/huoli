@@ -1,5 +1,5 @@
 import time as _tm
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from src.chat.heart_flow.dimension_protocol import (
     DimensionBase,
@@ -13,13 +13,27 @@ from src.common.logger import get_logger
 logger = get_logger("频率控制")
 
 
-# ---------------------------------------------------------------------------
-#  衰减参数
-# ---------------------------------------------------------------------------
-_DECAY_HALF_LIFE_SEC = 300.0  # 频率调整值半衰期（秒）
-_MIN_FACTOR = 0.1
-_MAX_FACTOR = 5.0
-_DEFAULT_FACTOR = 1.0
+def _frequency_view() -> Dict[str, Any]:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        return get_core_config().resolve_module_view("frequency_control").values
+    except Exception:
+        return {}
+
+
+def _freq_float(key: str, fallback: float) -> float:
+    try:
+        return float(_frequency_view().get(key, fallback))
+    except Exception:
+        return fallback
+
+
+def _freq_int(key: str, fallback: int) -> int:
+    try:
+        return int(_frequency_view().get(key, fallback))
+    except Exception:
+        return fallback
 
 
 class FrequencyControl:
@@ -33,7 +47,7 @@ class FrequencyControl:
 
     def __init__(self, chat_id: str):
         self.chat_id = chat_id
-        self.talk_frequency_adjust: float = _DEFAULT_FACTOR
+        self.talk_frequency_adjust: float = _freq_float("baseline_multiplier", 1.0)
         self._last_adjust_ts: float = _tm.time()
         self._cumulative_boost: float = 0.0
 
@@ -45,13 +59,14 @@ class FrequencyControl:
         elapsed = now - self._last_adjust_ts
         if elapsed <= 0:
             return
-        diff = self.talk_frequency_adjust - _DEFAULT_FACTOR
+        default_factor = _freq_float("baseline_multiplier", 1.0)
+        diff = self.talk_frequency_adjust - default_factor
         if abs(diff) < 0.01:
-            self.talk_frequency_adjust = _DEFAULT_FACTOR
+            self.talk_frequency_adjust = default_factor
             self._last_adjust_ts = now
             return
-        decay = math.exp(-0.693 * elapsed / _DECAY_HALF_LIFE_SEC)
-        self.talk_frequency_adjust = _DEFAULT_FACTOR + diff * decay
+        decay = math.exp(-0.693 * elapsed / _freq_float("decay_half_life_seconds", 300.0))
+        self.talk_frequency_adjust = default_factor + diff * decay
         self._last_adjust_ts = now
 
     def get_talk_frequency_adjust(self) -> float:
@@ -61,7 +76,9 @@ class FrequencyControl:
 
     def set_talk_frequency_adjust(self, value: float) -> None:
         """设置频率因子，限制在合理范围"""
-        self.talk_frequency_adjust = max(_MIN_FACTOR, min(_MAX_FACTOR, value))
+        floor = _freq_float("multiplier_floor", 0.1)
+        ceiling = _freq_float("multiplier_ceiling", 5.0)
+        self.talk_frequency_adjust = max(floor, min(ceiling, value))
         self._last_adjust_ts = _tm.time()
         logger.debug(
             f"[{self.chat_id}] 频率因子→{self.talk_frequency_adjust:.2f}"
@@ -79,7 +96,7 @@ class FrequencyControl:
 
     def reset_frequency(self) -> None:
         """重置为默认值"""
-        self.talk_frequency_adjust = _DEFAULT_FACTOR
+        self.talk_frequency_adjust = _freq_float("baseline_multiplier", 1.0)
         self._cumulative_boost = 0.0
         self._last_adjust_ts = _tm.time()
 
@@ -89,10 +106,10 @@ class FrequencyControl:
         长消息 → 稍微提高频率（对方在认真聊）
         极短消息 → 稍微降低频率（对方可能不想聊）
         """
-        if msg_length > 80:
-            self.increase_frequency(0.05)
-        elif msg_length < 5:
-            self.decrease_frequency(0.03)
+        if msg_length > _freq_int("long_msg_chars", 80):
+            self.increase_frequency(_freq_float("long_msg_delta", 0.05))
+        elif msg_length < _freq_int("short_msg_chars", 5):
+            self.decrease_frequency(_freq_float("short_msg_delta", 0.03))
 
     def adapt_by_interval(self, seconds_since_last_msg: float) -> None:
         """根据消息间隔自适应微调
@@ -100,10 +117,10 @@ class FrequencyControl:
         消息来得快 → 提高频率
         消息来得慢 → 降低频率
         """
-        if seconds_since_last_msg < 5.0:
-            self.increase_frequency(0.08)
-        elif seconds_since_last_msg > 60.0:
-            self.decrease_frequency(0.05)
+        if seconds_since_last_msg < _freq_float("fast_interval_sec", 5.0):
+            self.increase_frequency(_freq_float("fast_interval_delta", 0.08))
+        elif seconds_since_last_msg > _freq_float("slow_interval_sec", 60.0):
+            self.decrease_frequency(_freq_float("slow_interval_delta", 0.05))
 
     def effective_probability(self, base_prob: float) -> float:
         """计算有效回复概率 = 基础概率 × 频率因子"""
@@ -185,10 +202,6 @@ def acquire_frequency_manager() -> FrequencyControlManager:
 _consecutive_skips: Dict[str, int] = {}
 # 上次回复时间追踪（per-channel）
 _last_reply_timestamps: Dict[str, float] = {}
-# 连续不回复上限：超过此值应强制回复一次
-_SKIP_LIMIT = 5
-
-
 class FrequencyDimension(DimensionBase):
     """
     D3 频率控制维度。
@@ -221,7 +234,7 @@ class FrequencyDimension(DimensionBase):
 
     @property
     def tick_interval_sec(self) -> float:
-        return 5.0
+        return _freq_float("tick_interval_seconds", 5.0)
 
     def tick(self, elapsed_sec: float) -> TickResult:
         """周期性驱动所有频道的频率衰减"""
@@ -232,7 +245,7 @@ class FrequencyDimension(DimensionBase):
             if abs(ctrl.talk_frequency_adjust - old_val) > 0.001:
                 updated = True
         # 清理过期实例
-        cleaned = self._manager.cleanup_stale(max_idle_sec=1800.0)
+        cleaned = self._manager.cleanup_stale(max_idle_sec=_freq_float("stale_idle_seconds", 1800.0))
         return TickResult(
             dimension_name=self.dimension_name,
             updated=updated or cleaned > 0,
@@ -260,7 +273,7 @@ class FrequencyDimension(DimensionBase):
         elif ctx.event_type == "reply_completed":
             _consecutive_skips[ctx.channel_id] = 0
             _last_reply_timestamps[ctx.channel_id] = _tm.time()
-            ctrl.increase_frequency(0.02)
+            ctrl.increase_frequency(_freq_float("reply_completed_boost", 0.02))
         elif ctx.event_type == "reply_skipped":
             _consecutive_skips[ctx.channel_id] = (
                 _consecutive_skips.get(ctx.channel_id, 0) + 1
@@ -280,28 +293,32 @@ class FrequencyDimension(DimensionBase):
         last_reply = _last_reply_timestamps.get(ctx.channel_id, 0.0)
         since_reply = _tm.time() - last_reply if last_reply > 0 else 999.0
         # 冷却判定：刚回复完5秒内算冷却
-        in_cooldown = since_reply < 5.0
+        in_cooldown = since_reply < _freq_float("reply_cooldown_seconds", 5.0)
         # 连续跳过太多次 → 建议强制触发
-        force_trigger = skips >= _SKIP_LIMIT
+        skip_limit = _freq_int("skip_limit", 5)
+        force_trigger = skips >= skip_limit
         # 概率乘数：直接使用频率因子（已经由半衰期衰减管理）
-        prob = max(0.1, min(2.0, factor))
+        prob = max(
+            _freq_float("probability_floor", 0.1),
+            min(_freq_float("probability_ceiling", 2.0), factor),
+        )
         if in_cooldown:
-            prob *= 0.3
+            prob *= _freq_float("cooldown_probability_factor", 0.3)
         return FrequencyVote(
             probability_factor=prob,
             force_trigger=force_trigger,
             adjust_factor=factor,
-            dynamic_threshold=0.5,
+            dynamic_threshold=_freq_float("dynamic_threshold", 0.5),
             in_cooldown=in_cooldown,
             consecutive_skip_count=skips,
-            skip_limit=_SKIP_LIMIT,
+            skip_limit=skip_limit,
             seconds_since_last_reply=round(since_reply, 1),
             debug_reason=f"factor={factor:.2f} skips={skips} cd={in_cooldown}",
         )
 
     def calibrate(self, offline_seconds: float):
         """离线校准：离线超过10分钟重置所有频率"""
-        if offline_seconds > 600:
+        if offline_seconds > _freq_float("offline_reset_seconds", 600.0):
             for ctrl in self._manager.frequency_control_dict.values():
                 ctrl.reset_frequency()
             _consecutive_skips.clear()

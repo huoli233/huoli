@@ -697,6 +697,82 @@ energy_system_enabled = true
 inner_voice_enabled = true
 silence_watcher_enabled = true
 
+[profile_mapping.semantic_domains.inner_voice]
+max_output_actions = 5
+desire_scale_min = 1
+desire_scale_max = 10
+fallback_action = "observe"
+mention_min_desire = 6
+private_chat_min_desire = 5
+resource_penalty_max = 5
+
+[profile_mapping.semantic_domains.inner_voice.resource_thresholds]
+chat_low = 20
+chat_mid = 40
+brain_low = 20
+brain_mid = 40
+streak_mid = 3
+streak_high = 5
+
+[profile_mapping.semantic_domains.inner_voice.time_bands.deep_night]
+start = 2
+end = 6
+adjustment = -2
+
+[profile_mapping.semantic_domains.inner_voice.time_bands.late_night]
+start = 0
+end = 2
+adjustment = -1
+
+[profile_mapping.semantic_domains.inner_voice.time_bands.evening]
+start = 22
+end = 24
+adjustment = -1
+
+[profile_mapping.semantic_domains.inner_voice.time_bands.morning]
+start = 6
+end = 9
+adjustment = 0
+
+[profile_mapping.semantic_domains.inner_voice.time_bands.daytime]
+start = 9
+end = 18
+adjustment = 1
+
+[profile_mapping.semantic_domains.inner_voice.time_bands.afternoon]
+start = 18
+end = 22
+adjustment = 0
+
+[profile_mapping.semantic_domains.inner_voice.waiting_thoughts]
+short = ["对方可能在忙吧...", "再等等看", "不知道在做什么呢"]
+medium = ["等了一会了...", "是不是忘记回复了？", "嗯...还没消息"]
+long = ["等了挺久了", "要不要主动说点什么...", "快到时间了"]
+
+[profile_mapping.semantic_domains.frequency_control]
+decay_half_life_seconds = 300.0
+multiplier_floor = 0.1
+multiplier_ceiling = 5.0
+baseline_multiplier = 1.0
+long_msg_chars = 80
+long_msg_delta = 0.05
+short_msg_chars = 5
+short_msg_delta = 0.03
+fast_interval_sec = 5.0
+fast_interval_delta = 0.08
+slow_interval_sec = 60.0
+slow_interval_delta = 0.05
+stale_idle_seconds = 1800.0
+skip_limit = 5
+reply_cooldown_seconds = 5.0
+probability_floor = 0.1
+probability_ceiling = 2.0
+cooldown_probability_factor = 0.3
+dynamic_threshold = 0.5
+tick_interval_seconds = 5.0
+offline_reset_seconds = 600.0
+reply_completed_boost = 0.02
+
 [profile_mapping.semantic_domains.heartflow_runtime]
 focus_channels = []
 initiative_interval_sec = 300.0
@@ -825,3 +901,13 @@ profile_name = "module_switches_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["heartflow_runtime"]
 profile_name = "heartflow_runtime_view"
+
+[profile_mapping.module_views.inner_voice]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["inner_voice"]
+profile_name = "inner_voice_view"
+
+[profile_mapping.module_views.frequency_control]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["frequency_control"]
+profile_name = "frequency_control_view"

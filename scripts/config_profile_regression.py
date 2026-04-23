@@ -69,6 +69,24 @@ heartflow_enabled = true
 initiative_probability = 0.44
 focus_channels = ["demo"]
 
+[profile_mapping.semantic_domains.inner_voice]
+mention_min_desire = 7
+private_chat_min_desire = 6
+resource_penalty_max = 4
+
+[profile_mapping.semantic_domains.inner_voice.time_bands.deep_night]
+start = 2
+end = 6
+adjustment = -3
+
+[profile_mapping.semantic_domains.inner_voice.waiting_thoughts]
+short = ["稍等"]
+
+[profile_mapping.semantic_domains.frequency_control]
+baseline_multiplier = 1.2
+skip_limit = 7
+tick_interval_seconds = 4.0
+
 [profile_mapping.semantic_domains.skill]
 trial_to_active_invocations = 6
 runtime_skill_cost = 0.4
@@ -112,6 +130,12 @@ semantic_domains = ["module_switches"]
 
 [profile_mapping.module_views.heartflow_runtime]
 semantic_domains = ["heartflow_runtime"]
+
+[profile_mapping.module_views.inner_voice]
+semantic_domains = ["inner_voice"]
+
+[profile_mapping.module_views.frequency_control]
+semantic_domains = ["frequency_control"]
 
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
@@ -163,6 +187,8 @@ def main() -> None:
         assert hub.resolve_module_view("heartflow_decision").values["heated_pulse_limit"] == 9
         assert hub.resolve_module_view("module_switches").values["heartflow_enabled"] is True
         assert hub.resolve_module_view("heartflow_runtime").values["initiative_probability"] == 0.44
+        assert hub.resolve_module_view("inner_voice").values["mention_min_desire"] == 7
+        assert hub.resolve_module_view("frequency_control").values["skip_limit"] == 7
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
 
@@ -181,6 +207,8 @@ def main() -> None:
             "model_fail_threshold": hub.resolve_module_view("model_routing").values["model_fail_threshold"],
             "context_reply_tokens": hub.resolve_module_view("context").values["reply_context_max_tokens"],
             "phase_idle_timeout": hub.resolve_module_view("phase_timing").values["phase_idle_timeout_seconds"],
+            "inner_voice_mention_floor": hub.resolve_module_view("inner_voice").values["mention_min_desire"],
+            "frequency_skip_limit": hub.resolve_module_view("frequency_control").values["skip_limit"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "trace_layers": sorted({item.layer for item in vision.trace}),

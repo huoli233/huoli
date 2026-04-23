@@ -14,12 +14,19 @@ from src.common.data_models.heartflow_models import (
     BehaviorIntent,
     VoiceVerdict,
 )
-from src.common.config.config_engine import get_default_config_engine
+from src.config.core_config_engine import get_core_config
 
 import src.chat.prompts.catalog  # noqa: F401 注册提示词
 from src.chat.utils.prompt_builder import global_prompt_manager
 
 logger = get_logger("独白系统")
+
+
+def _inner_voice_view() -> Dict[str, Any]:
+    try:
+        return get_core_config().resolve_module_view("inner_voice").values
+    except Exception:
+        return {}
 
 
 class ConversationScene(Enum):
@@ -42,8 +49,7 @@ class SubjectMatter(Enum):
 
 
 def _load_time_bands() -> Dict[str, Tuple[int, int, int]]:
-    engine = get_default_config_engine()
-    bands_cfg = engine.get("inner_voice", "time_bands", {})
+    bands_cfg = _inner_voice_view().get("time_bands", {}) or {}
     result = {}
     for name, cfg in bands_cfg.items():
         start = int(cfg.get("start", 0))
@@ -537,8 +543,7 @@ class SelfDialogueEngine:
         self, verdict: VoiceVerdict, ctx: BoundaryContext
     ) -> VoiceVerdict:
         """多层护栏修正确保 thought 与 desire 逻辑一致"""
-        engine = get_default_config_engine()
-        inner_voice_cfg = engine.get("inner_voice", {}) or {}
+        inner_voice_cfg = _inner_voice_view()
         mention_min_desire = int(inner_voice_cfg.get("mention_min_desire", 6))
         private_min_desire = int(
             inner_voice_cfg.get("private_chat_min_desire", 5)
@@ -877,7 +882,7 @@ class SelfDialogueEngine:
         """根据当前时段计算 desire 偏移"""
         if hour < 0:
             hour = time.localtime().tm_hour
-        for _, (start, end, adj) in TIME_BANDS.items():
+        for _, (start, end, adj) in _load_time_bands().items():
             if start <= hour < end:
                 return adj
         return 0
@@ -1339,8 +1344,7 @@ class SelfDialogueEngine:
         progress: float,
     ) -> str:
         """生成等待期间的碎碎念"""
-        engine = get_default_config_engine()
-        waiting_cfg = engine.get("inner_voice", "waiting_thoughts", {}) or {}
+        waiting_cfg = _inner_voice_view().get("waiting_thoughts", {}) or {}
         if progress < 0.4:
             options = waiting_cfg.get(
                 "short", ["对方可能在忙吧...", "再等等看", "不知道在做什么呢"]
