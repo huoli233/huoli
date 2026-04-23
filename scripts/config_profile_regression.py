@@ -36,6 +36,21 @@ importance_floor = 0.2
 overload_ratio_threshold = 0.76
 reactivation_cooldown_seconds = 88.0
 
+[profile_mapping.semantic_domains.memory_capacity]
+review_interval_seconds = 333
+
+[profile_mapping.semantic_domains.memory_capacity.max_count_by_tier]
+working = 222
+
+[profile_mapping.semantic_domains.memory_retrieval]
+rrf_k = 77
+
+[profile_mapping.semantic_domains.memory_decay]
+forget_threshold = 0.22
+
+[profile_mapping.semantic_domains.memory_dedup]
+similarity_threshold = 0.88
+
 [profile_mapping.semantic_domains.context]
 reply_context_max_tokens = 96
 extra_info_max_tokens = 72
@@ -108,6 +123,18 @@ risk_score = {value}
 semantic_domains = ["memory"]
 long_term_limit = 4096
 
+[profile_mapping.module_views.memory_capacity]
+semantic_domains = ["memory_capacity"]
+
+[profile_mapping.module_views.memory_retrieval]
+semantic_domains = ["memory_retrieval"]
+
+[profile_mapping.module_views.memory_decay]
+semantic_domains = ["memory_decay"]
+
+[profile_mapping.module_views.memory_dedup]
+semantic_domains = ["memory_dedup"]
+
 [profile_mapping.module_views.vision]
 timeout_seconds = 12.0
 vlm_temperature = 0.2
@@ -171,6 +198,11 @@ def main() -> None:
         assert memory.values["long_term_limit"] == 4096
         assert memory.values["reactivation_cooldown_seconds"] == 88.0
         assert memory.fallback_used is False
+        assert hub.resolve_module_view("memory_capacity").values["review_interval_seconds"] == 333
+        assert hub.resolve_module_view("memory_capacity").values["max_count_by_tier"]["working"] == 222
+        assert hub.resolve_module_view("memory_retrieval").values["rrf_k"] == 77
+        assert hub.resolve_module_view("memory_decay").values["forget_threshold"] == 0.22
+        assert hub.resolve_module_view("memory_dedup").values["similarity_threshold"] == 0.88
 
         vision = hub.resolve_module_view("vision", scenario="image_high_risk")
         assert vision.values["reply_suppressed"] is True
@@ -212,6 +244,7 @@ def main() -> None:
             "model_fail_threshold": hub.resolve_module_view("model_routing").values["model_fail_threshold"],
             "context_reply_tokens": hub.resolve_module_view("context").values["reply_context_max_tokens"],
             "phase_idle_timeout": hub.resolve_module_view("phase_timing").values["phase_idle_timeout_seconds"],
+            "memory_rrf_k": hub.resolve_module_view("memory_retrieval").values["rrf_k"],
             "inner_voice_mention_floor": hub.resolve_module_view("inner_voice").values["mention_min_desire"],
             "frequency_skip_limit": hub.resolve_module_view("frequency_control").values["skip_limit"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],

@@ -6,8 +6,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Set
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
 from src.memory_system.memory_models import BufferedMemory, capacity_to_retention_index
+from src.memory_system.runtime_config import memory_module_view
 
 logger = get_logger("capacity_governor")
 
@@ -61,7 +61,7 @@ class CapacityGovernor:
     def __init__(
         self, config_engine=None, prompt_manager=None, llm_client=None
     ):
-        self._config = config_engine or get_default_config_engine()
+        self._config = config_engine
         self._prompt_manager = prompt_manager or DefaultPromptManager()
         self._llm_client = llm_client or DefaultLLMClient()
 
@@ -81,16 +81,23 @@ class CapacityGovernor:
         self._load_config()
 
     def _load_config(self) -> None:
-        self._review_interval_seconds = max(
-            60,
-            self._config.get(
-                "memory_capacity", "review_interval_seconds", 900
-            ),
-        )
-
-        raw_limits = self._config.get(
-            "memory_capacity", "max_count_by_tier", {}
-        )
+        if self._config is not None:
+            self._review_interval_seconds = max(
+                60,
+                self._config.get(
+                    "memory_capacity", "review_interval_seconds", 900
+                ),
+            )
+            raw_limits = self._config.get(
+                "memory_capacity", "max_count_by_tier", {}
+            )
+        else:
+            view = memory_module_view("memory_capacity")
+            self._review_interval_seconds = max(
+                60,
+                int(view.get("review_interval_seconds", 900)),
+            )
+            raw_limits = view.get("max_count_by_tier", {})
         if isinstance(raw_limits, dict):
             self._tier_limits = {
                 MemoryTier.IMMEDIATE: max(
@@ -177,7 +184,10 @@ class CapacityGovernor:
             return []
 
         prompt = self._build_prompt(tier=tier, candidates=payload)
-        _llm_timeout = 15.0
+        if self._config is not None:
+            _llm_timeout = float(self._config.get("memory_capacity", "llm_timeout_seconds", 15.0))
+        else:
+            _llm_timeout = float(memory_module_view("memory_capacity").get("llm_timeout_seconds", 15.0))
         try:
             response = await asyncio.wait_for(
                 self._llm_client.generate(prompt), timeout=_llm_timeout
@@ -275,7 +285,6 @@ class CapacityGovernor:
             return
         try:
             from src.memory_system.hippocampus_buffer import (
-                get_hippocampus_buffer,
                 _buffer_pool,
             )
             for buffer in _buffer_pool.values():

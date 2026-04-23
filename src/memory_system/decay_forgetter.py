@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
 from src.memory_system.memory_models import BufferedMemory
+from src.memory_system.runtime_config import memory_module_view
 
 logger = get_logger("衰减遗忘")
 
@@ -45,7 +45,7 @@ class ImportanceDecayScheduler:
         config_engine=None,
         model_interface: Optional[ModelInterface] = None,
     ):
-        self._config = config_engine or get_default_config_engine()
+        self._config = config_engine
         self._model = model_interface or DefaultModelInterface()
         self._decay_rate_per_hour: float = 0.005
         self._forget_threshold: float = 0.15
@@ -59,21 +59,29 @@ class ImportanceDecayScheduler:
         self._load_config()
 
     def _load_config(self) -> None:
-        self._decay_rate_per_hour = self._config.get(
-            "decay_forgetting", "decay_rate_per_hour", 0.005
-        )
-        self._forget_threshold = self._config.get(
-            "decay_forgetting", "forget_threshold", 0.15
-        )
-        self._cycle_interval_seconds = self._config.get(
-            "decay_forgetting", "cycle_interval_seconds", 300.0
-        )
-        self._max_batch_for_llm = self._config.get(
-            "decay_forgetting", "max_batch_for_llm", 15
-        )
-        self._min_age_for_decay_seconds = self._config.get(
-            "decay_forgetting", "min_age_for_decay_seconds", 3600.0
-        )
+        if self._config is not None:
+            self._decay_rate_per_hour = self._config.get(
+                "decay_forgetting", "decay_rate_per_hour", 0.005
+            )
+            self._forget_threshold = self._config.get(
+                "decay_forgetting", "forget_threshold", 0.15
+            )
+            self._cycle_interval_seconds = self._config.get(
+                "decay_forgetting", "cycle_interval_seconds", 300.0
+            )
+            self._max_batch_for_llm = self._config.get(
+                "decay_forgetting", "max_batch_for_llm", 15
+            )
+            self._min_age_for_decay_seconds = self._config.get(
+                "decay_forgetting", "min_age_for_decay_seconds", 3600.0
+            )
+            return
+        view = memory_module_view("memory_decay")
+        self._decay_rate_per_hour = float(view.get("decay_rate_per_hour", 0.005))
+        self._forget_threshold = float(view.get("forget_threshold", 0.15))
+        self._cycle_interval_seconds = float(view.get("cycle_interval_seconds", 300.0))
+        self._max_batch_for_llm = int(view.get("max_batch_for_llm", 15))
+        self._min_age_for_decay_seconds = float(view.get("min_age_for_decay_seconds", 3600.0))
 
     def set_model_interface(self, model: ModelInterface) -> None:
         self._model = model

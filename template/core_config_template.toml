@@ -397,6 +397,35 @@ emotion_reactivation_threshold = 0.6
 boredom_reactivation_threshold = 0.5
 boredom_high_threshold = 0.7
 
+[profile_mapping.semantic_domains.memory_capacity]
+review_interval_seconds = 900
+llm_timeout_seconds = 15.0
+
+[profile_mapping.semantic_domains.memory_capacity.max_count_by_tier]
+immediate = 120
+working = 180
+recent = 260
+midterm = 380
+longterm = 800
+
+[profile_mapping.semantic_domains.memory_retrieval]
+bm25_weight = 1.0
+vector_weight = 0.0
+rrf_k = 60
+
+[profile_mapping.semantic_domains.memory_decay]
+decay_rate_per_hour = 0.005
+forget_threshold = 0.15
+cycle_interval_seconds = 300.0
+max_batch_for_llm = 15
+min_age_for_decay_seconds = 3600.0
+
+[profile_mapping.semantic_domains.memory_dedup]
+similarity_threshold = 0.9
+scan_interval_seconds = 1800
+max_pairs_per_scan = 60
+merge_top_k = 20
+
 [profile_mapping.semantic_domains.context]
 max_context_messages = 24
 pollution_threshold = 0.72
@@ -856,6 +885,26 @@ profile_name = "schedule_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory"]
 profile_name = "memory_view"
+
+[profile_mapping.module_views.memory_capacity]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["memory_capacity"]
+profile_name = "memory_capacity_view"
+
+[profile_mapping.module_views.memory_retrieval]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["memory_retrieval"]
+profile_name = "memory_retrieval_view"
+
+[profile_mapping.module_views.memory_decay]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["memory_decay"]
+profile_name = "memory_decay_view"
+
+[profile_mapping.module_views.memory_dedup]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["memory_dedup"]
+profile_name = "memory_dedup_view"
 
 [profile_mapping.module_views.context]
 base_refs = ["runtime_defaults"]

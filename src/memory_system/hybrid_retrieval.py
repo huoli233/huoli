@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
 from src.memory_system.vector_store import EmbeddingVault, AdapterInterface
+from src.memory_system.runtime_config import memory_module_view
 
 logger = get_logger("混合检索")
 
@@ -118,7 +118,7 @@ class HybridRetriever:
         adapter: Optional[AdapterInterface] = None,
         embedding_vault: Optional[EmbeddingVault] = None,
     ):
-        self._config = config_engine or get_default_config_engine()
+        self._config = config_engine
         self._adapter = adapter
         self._embedding_vault = embedding_vault
 
@@ -140,22 +140,18 @@ class HybridRetriever:
             return default
 
     def _load_config(self) -> None:
-        self._bm25_weight = self._safe_number(
-            self._config.get("memory_retrieval", "bm25_weight", 1.0),
-            1.0,
-        )
-        self._vector_weight = self._safe_number(
-            self._config.get("memory_retrieval", "vector_weight", 0.0),
-            0.0,
-        )
-        self._rrf_k = max(
-            1,
-            self._safe_number(
-                self._config.get("memory_retrieval", "rrf_k", 60),
-                60,
-                cast=int,
-            ),
-        )
+        if self._config is not None:
+            bm25_raw = self._config.get("memory_retrieval", "bm25_weight", 1.0)
+            vector_raw = self._config.get("memory_retrieval", "vector_weight", 0.0)
+            rrf_raw = self._config.get("memory_retrieval", "rrf_k", 60)
+        else:
+            view = memory_module_view("memory_retrieval")
+            bm25_raw = view.get("bm25_weight", 1.0)
+            vector_raw = view.get("vector_weight", 0.0)
+            rrf_raw = view.get("rrf_k", 60)
+        self._bm25_weight = self._safe_number(bm25_raw, 1.0)
+        self._vector_weight = self._safe_number(vector_raw, 0.0)
+        self._rrf_k = max(1, self._safe_number(rrf_raw, 60, cast=int))
 
     def bind_adapter(self, adapter: AdapterInterface) -> None:
         self._adapter = adapter

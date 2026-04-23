@@ -6,8 +6,8 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
-from src.memory_system.memory_models import BufferedMemory, retention_to_dedup_tier
+from src.memory_system.memory_models import BufferedMemory
+from src.memory_system.runtime_config import memory_module_view
 
 logger = get_logger("去重融合")
 
@@ -84,7 +84,7 @@ class DedupFuser:
         llm_client: Optional[LLMClientInterface] = None,
         embedding_vault: Optional[EmbeddingVaultInterface] = None,
     ):
-        self._config = config_engine or get_default_config_engine()
+        self._config = config_engine
         self._prompt_manager = prompt_manager or DefaultPromptManager()
         self._llm_client = llm_client or DefaultLLMClient()
         self._embedding_vault = embedding_vault or DefaultEmbeddingVault()
@@ -100,18 +100,25 @@ class DedupFuser:
         self._load_config()
 
     def _load_config(self) -> None:
-        self._similarity_threshold = self._config.get(
-            "memory_dedup", "similarity_threshold", 0.9
-        )
-        self._scan_interval_seconds = max(
-            60, self._config.get("memory_dedup", "scan_interval_seconds", 1800)
-        )
-        self._max_pairs_per_scan = max(
-            1, self._config.get("memory_dedup", "max_pairs_per_scan", 60)
-        )
-        self._merge_top_k = max(
-            2, self._config.get("memory_dedup", "merge_top_k", 20)
-        )
+        if self._config is not None:
+            self._similarity_threshold = self._config.get(
+                "memory_dedup", "similarity_threshold", 0.9
+            )
+            self._scan_interval_seconds = max(
+                60, self._config.get("memory_dedup", "scan_interval_seconds", 1800)
+            )
+            self._max_pairs_per_scan = max(
+                1, self._config.get("memory_dedup", "max_pairs_per_scan", 60)
+            )
+            self._merge_top_k = max(
+                2, self._config.get("memory_dedup", "merge_top_k", 20)
+            )
+            return
+        view = memory_module_view("memory_dedup")
+        self._similarity_threshold = float(view.get("similarity_threshold", 0.9))
+        self._scan_interval_seconds = max(60, int(view.get("scan_interval_seconds", 1800)))
+        self._max_pairs_per_scan = max(1, int(view.get("max_pairs_per_scan", 60)))
+        self._merge_top_k = max(2, int(view.get("merge_top_k", 20)))
 
     def bind_llm(
         self,
