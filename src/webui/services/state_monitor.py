@@ -1516,9 +1516,19 @@ def _build_participant_impacts(
         user_id = str(participant.get("user_id", "") or "")
         if not user_id:
             continue
+        in_current_scene = bool(participant.get("in_current_scene", False))
+        recent_speaker = bool(participant.get("recent_speaker", False))
+        recent_targeted_interaction = bool(participant.get("recent_targeted_interaction", False))
+        source_scope = str(participant.get("source_scope", "recent_history") or "recent_history")
         labels: list[str] = []
         if bool(participant.get("is_current_target", False)):
             labels.append("当前焦点")
+        if in_current_scene:
+            labels.append("当前群相关")
+        if recent_speaker:
+            labels.append("近5分钟发言")
+        if recent_targeted_interaction:
+            labels.append("近期目标互动")
         if _safe_float(participant.get("irritation_load", 0.0)) >= 15:
             labels.append("烦躁偏高")
         if _safe_float(participant.get("pressure_load", 0.0)) >= 15:
@@ -1550,9 +1560,14 @@ def _build_participant_impacts(
                 "mask_load": round(_safe_float(participant.get("mask_load", 0.0)), 2),
                 "interaction_count": int(_safe_float(participant.get("interaction_count", 0), 0)),
                 "current_mood_hint": str(participant.get("current_mood_hint", "") or "状态平稳"),
+                "last_interaction_age_sec": round(_safe_float(participant.get("last_interaction_age_sec", 999999.0)), 1),
                 "active_signals": deduped_labels,
                 "impact_rank": round(_safe_float(participant.get("impact_rank", 0.0)), 3),
                 "is_current_target": bool(participant.get("is_current_target", False)),
+                "in_current_scene": in_current_scene,
+                "recent_speaker": recent_speaker,
+                "recent_targeted_interaction": recent_targeted_interaction,
+                "source_scope": source_scope,
             }
         )
 
@@ -1571,6 +1586,7 @@ def _build_participant_impacts(
                 "mask_load": relationship.get("mask_load", 0.0),
                 "interaction_count": relationship.get("interaction_count", 0),
                 "current_mood_hint": _derive_current_user_mood_hint(relationship),
+                "last_interaction_age_sec": 999999.0,
                 "active_signals": list(dict.fromkeys(focus_signal_labels)),
                 "impact_rank": round(
                     _safe_float(relationship.get("rapport_score", 0.0)) * 0.2
@@ -1579,14 +1595,20 @@ def _build_participant_impacts(
                     3,
                 ),
                 "is_current_target": True,
+                "in_current_scene": False,
+                "recent_speaker": False,
+                "recent_targeted_interaction": True,
+                "source_scope": "mentioned_target",
             }
         )
 
     impacts.sort(
         key=lambda item: (
             0 if item.get("is_current_target") else 1,
+            0 if item.get("in_current_scene") else 1,
+            0 if item.get("recent_targeted_interaction") else 1,
             -_safe_float(item.get("impact_rank", 0.0)),
-            -int(_safe_float(item.get("interaction_count", 0), 0)),
+            _safe_float(item.get("last_interaction_age_sec", 999999.0)),
         )
     )
     return impacts[:6]

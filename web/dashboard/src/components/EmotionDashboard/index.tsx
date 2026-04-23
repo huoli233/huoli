@@ -50,9 +50,14 @@ type ParticipantImpact = {
   mask_load: number;
   interaction_count: number;
   current_mood_hint: string;
+  last_interaction_age_sec?: number;
   active_signals: string[];
   impact_rank: number;
   is_current_target?: boolean;
+  in_current_scene?: boolean;
+  recent_speaker?: boolean;
+  recent_targeted_interaction?: boolean;
+  source_scope?: string;
 };
 
 type SceneContext = {

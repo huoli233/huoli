@@ -791,6 +791,10 @@ def _relationship_entry_from_state(
     state: Any,
     *,
     target_user_id: str = "",
+    in_current_scene: bool = False,
+    recent_speaker: bool = False,
+    recent_targeted_interaction: bool = False,
+    source_scope: str = "recent_history",
 ) -> Dict[str, Any]:
     rapport_score = _safe_float(getattr(state, "affection", 0.0))
     trust_score = _safe_float(getattr(state, "trust_value", getattr(state, "trust_score", 0.0)))
@@ -818,6 +822,12 @@ def _relationship_entry_from_state(
     )
     if str(user_id) == str(target_user_id):
         emotional_pressure += 120.0
+    if in_current_scene:
+        emotional_pressure += 28.0
+    if recent_speaker:
+        emotional_pressure += 24.0
+    if recent_targeted_interaction:
+        emotional_pressure += 16.0
     return {
         "user_id": str(user_id or ""),
         "display_name": str(getattr(state, "nickname", "") or user_id or "用户"),
@@ -833,6 +843,10 @@ def _relationship_entry_from_state(
         "current_mood_hint": _dominant_emotion_label(state),
         "last_interaction_age_sec": round(last_seen_age, 1),
         "is_current_target": bool(str(user_id) == str(target_user_id)),
+        "in_current_scene": bool(in_current_scene),
+        "recent_speaker": bool(recent_speaker),
+        "recent_targeted_interaction": bool(recent_targeted_interaction),
+        "source_scope": str(source_scope or "recent_history"),
         "is_blocked": bool(getattr(state, "is_blocked", False)),
         "is_protected": bool(getattr(state, "is_protected", False)),
         "impact_rank": round(emotional_pressure, 3),
@@ -924,6 +938,30 @@ def _extract_relationship_population(chat: Any, target_user_id: str) -> Dict[str
     if chat is None or not getattr(chat, "stream_id", ""):
         return payload
     try:
+        candidate_sources: Dict[str, set[str]] = {}
+
+        def add_candidate(user_id: str, scope: str) -> None:
+            normalized = str(user_id or "").strip()
+            if not normalized:
+                return
+            candidate_sources.setdefault(normalized, set()).add(str(scope or "recent_history"))
+
+        if target_user_id:
+            add_candidate(target_user_id, "mentioned_target")
+
+        try:
+            from src.core.group_scene_state import get_group_scene
+
+            scene_engine = get_group_scene(str(getattr(chat, "stream_id", "") or ""))
+            for user_id in scene_engine.recent_speakers(window_sec=300.0, limit=12):
+                add_candidate(user_id, "current_scene")
+            for user_id in scene_engine.alive_thread_participants(limit=12):
+                add_candidate(user_id, "thread_participant")
+            for user_id in scene_engine.recent_mentioned_users(window_sec=300.0, limit=12):
+                add_candidate(user_id, "mentioned_target")
+        except Exception as exc:
+            logger.debug(f"关系候选用户场景过滤失败: {exc}")
+
         from src.modules.modcore.dynamic_persona.emotion_tracker import get_emotion_tracker
 
         tracker = get_emotion_tracker(str(getattr(chat, "stream_id", "") or ""))
@@ -933,18 +971,50 @@ def _extract_relationship_population(chat: Any, target_user_id: str) -> Dict[str
         payload["relationship_distribution"] = dict(stats.get("relationship_distribution", {}) or {})
         participants: List[Dict[str, Any]] = []
         for user_id, state in list(all_states.items()):
-            entry = _relationship_entry_from_state(str(user_id or ""), state, target_user_id=target_user_id)
+            normalized_user_id = str(user_id or "").strip()
+            if not normalized_user_id:
+                continue
+            last_interaction = _safe_float(getattr(state, "last_interaction", 0.0))
+            last_interaction_age_sec = 999999.0
+            if last_interaction > 0:
+                last_interaction_age_sec = max(0.0, time.time() - last_interaction)
+            if last_interaction_age_sec <= 3600.0:
+                add_candidate(normalized_user_id, "recent_history")
+            scopes = candidate_sources.get(normalized_user_id, set())
+            if not scopes and normalized_user_id != str(target_user_id or "").strip():
+                continue
+            if "current_scene" in scopes:
+                source_scope = "current_scene"
+            elif "thread_participant" in scopes:
+                source_scope = "thread_participant"
+            elif "mentioned_target" in scopes:
+                source_scope = "mentioned_target"
+            else:
+                source_scope = "recent_history"
+            entry = _relationship_entry_from_state(
+                normalized_user_id,
+                state,
+                target_user_id=target_user_id,
+                in_current_scene=bool(scopes & {"current_scene", "thread_participant", "mentioned_target"}),
+                recent_speaker=bool("current_scene" in scopes),
+                recent_targeted_interaction=bool(
+                    "mentioned_target" in scopes or normalized_user_id == str(target_user_id or "").strip()
+                ),
+                source_scope=source_scope,
+            )
             if not entry.get("user_id"):
                 continue
             participants.append(entry)
         participants.sort(
             key=lambda item: (
                 0 if item.get("is_current_target") else 1,
+                0 if item.get("in_current_scene") else 1,
+                0 if item.get("recent_targeted_interaction") else 1,
                 -_safe_float(item.get("impact_rank", 0.0)),
                 _safe_float(item.get("last_interaction_age_sec", 999999.0)),
             )
         )
-        payload["participants"] = participants[:6]
+        payload["participants"] = participants[:8]
     except Exception as exc:
         logger.debug(f"关系群体导出失败: {exc}")
     return payload

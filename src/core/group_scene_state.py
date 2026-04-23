@@ -459,6 +459,75 @@ class GroupSceneState:
             if t.is_alive(self._thread_ttl)
         ]
 
+    def recent_speakers(
+        self,
+        *,
+        window_sec: float = 300.0,
+        limit: int = 12,
+    ) -> List[str]:
+        """返回指定窗口内真实发言过的用户，按近期活跃度排序。"""
+        self._prune_stale()
+        cutoff = time.time() - max(1.0, float(window_sec or 300.0))
+        ranked: List[tuple[str, int, float]] = []
+        for uid, ts_list in self._speaker_timestamps.items():
+            recent = [ts for ts in ts_list if ts > cutoff]
+            if not recent:
+                continue
+            ranked.append((str(uid), len(recent), max(recent)))
+        ranked.sort(key=lambda item: (-item[1], -item[2], item[0]))
+        safe_limit = max(1, int(limit or 12))
+        return [uid for uid, _, _ in ranked[:safe_limit]]
+
+    def alive_thread_participants(
+        self,
+        *,
+        limit: int = 12,
+    ) -> List[str]:
+        """返回当前仍存活线程中的参与者与目标用户。"""
+        self._prune_stale()
+        participant_scores: Dict[str, float] = {}
+        now = time.time()
+        for marker in self._threads.values():
+            if not marker.is_alive(self._thread_ttl):
+                continue
+            freshness = max(0.0, 1.0 - ((now - marker.last_active) / max(1.0, self._thread_ttl)))
+            weight = max(0.2, freshness) + max(0.0, marker.message_count * 0.05)
+            for uid in list(marker.participants) + list(marker.target_users):
+                normalized = str(uid or "").strip()
+                if not normalized:
+                    continue
+                participant_scores[normalized] = participant_scores.get(normalized, 0.0) + weight
+        ranked = sorted(participant_scores.items(), key=lambda item: (-item[1], item[0]))
+        safe_limit = max(1, int(limit or 12))
+        return [uid for uid, _ in ranked[:safe_limit]]
+
+    def recent_mentioned_users(
+        self,
+        *,
+        window_sec: float = 300.0,
+        limit: int = 12,
+    ) -> List[str]:
+        """返回最近窗口内被提及的目标用户。"""
+        self._prune_stale()
+        cutoff = time.time() - max(1.0, float(window_sec or 300.0))
+        mentioned_scores: Dict[str, float] = {}
+        last_seen: Dict[str, float] = {}
+        for message in self._recent_messages:
+            if message.timestamp <= cutoff:
+                continue
+            for uid in message.mentioned_users:
+                normalized = str(uid or "").strip()
+                if not normalized:
+                    continue
+                mentioned_scores[normalized] = mentioned_scores.get(normalized, 0.0) + 1.0
+                last_seen[normalized] = max(last_seen.get(normalized, 0.0), message.timestamp)
+        ranked = sorted(
+            mentioned_scores.items(),
+            key=lambda item: (-item[1], -last_seen.get(item[0], 0.0), item[0]),
+        )
+        safe_limit = max(1, int(limit or 12))
+        return [uid for uid, _ in ranked[:safe_limit]]
+
     # ────────────────── 内部方法 ──────────────────
 
     def _touch_topic(self, keyword: str, user_id: str) -> None:
