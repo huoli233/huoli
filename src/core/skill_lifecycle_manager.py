@@ -1,11 +1,7 @@
-import math
 import time
-import random
-import threading
 from collections import deque
 from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional
 
 from src.common.logger import get_logger
 from src.common.singleton import _get_class_lock
@@ -24,6 +20,29 @@ _PHASE_TO_STAGE = {
 }
 
 SkillPhase = SkillStage
+
+
+def _skill_view() -> Dict[str, Any]:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        return get_core_config().resolve_module_view("skill").values
+    except Exception:
+        return {}
+
+
+def _skill_int(key: str, fallback: int) -> int:
+    try:
+        return int(_skill_view().get(key, fallback))
+    except Exception:
+        return fallback
+
+
+def _skill_float(key: str, fallback: float) -> float:
+    try:
+        return float(_skill_view().get(key, fallback))
+    except Exception:
+        return fallback
 
 
 @dataclass
@@ -93,21 +112,25 @@ class SkillLifecycleManager:
     为 ACFN 和 planner 提供成本修正和使用建议。
     """
 
-    MAX_SKILLS_TRACKED = 150
-    TRIAL_DEFAULT_BUDGET = 10
-    STABILIZATION_MIN_SUCCESS_RATE = 0.70
-    DECLINE_INACTIVITY_DAYS = 14.0
-    AUTO_RETIRE_SUCCESS_THRESHOLD = 0.35
-
     def __init__(self):
         self._skills: Dict[str, SkillRecord] = {}
+        self._max_skills_tracked = _skill_int("max_skills_tracked", 150)
+        self._trial_default_budget = _skill_int("trial_default_budget", 10)
+        self._stabilization_min_success_rate = _skill_float("stabilization_min_success_rate", 0.70)
+        self._decline_inactivity_days = _skill_float("decline_idle_days", 14.0)
+        self._auto_retire_success_threshold = _skill_float("auto_retire_success_threshold", 0.35)
+        self._phase_check_interval_sec: float = _skill_float("phase_check_interval_seconds", 600.0)
+        self._trial_early_promote_count = _skill_int("trial_early_promote_count", 5)
+        self._trial_early_promote_success_rate = _skill_float("trial_early_promote_success_rate", 0.80)
+        self._trial_failure_streak_threshold = _skill_int("trial_failure_streak_threshold", 3)
+        self._mature_failure_streak_threshold = _skill_int("mature_failure_streak_threshold", 5)
+        self._retire_failure_streak_threshold = _skill_int("retire_failure_streak_threshold", 8)
         self._global_stats = {
             "total_skills": 0,
             "phase_distribution": {},
             "avg_success_rate": 0.0,
         }
         self._last_phase_check: float = 0.0
-        self._phase_check_interval_sec: float = 600.0
 
     def discover_skill(
         self,
@@ -121,6 +144,8 @@ class SkillLifecycleManager:
         """注册一个新发现的技能（进入 DISCOVERED 阶段）"""
         if skill_id in self._skills:
             return self._skills[skill_id]
+        if len(self._skills) >= self._max_skills_tracked:
+            self._prune_retired_skills()
         record = SkillRecord(
             metadata=SkillMetadata(
                 skill_id=skill_id,
@@ -154,7 +179,7 @@ class SkillLifecycleManager:
         self._transition_to(
             rec, SkillStage.TRIAL, f"proposed_by_{proposer}"
         )
-        rec.state.trial_budget_remaining = self.TRIAL_DEFAULT_BUDGET
+        rec.state.trial_budget_remaining = self._trial_default_budget
         return True
 
     def start_trial(self, skill_id: str) -> bool:
@@ -267,7 +292,7 @@ class SkillLifecycleManager:
                     time.time() - rec.state.last_used_at
                 ) / 86400.0
             inactivity_penalty = min(
-                0.30, days_inactive / self.DECLINE_INACTIVITY_DAYS * 0.20
+                0.30, days_inactive / self._decline_inactivity_days * 0.20
             )
             base += inactivity_penalty
         rec.cost_modifier = base
@@ -369,14 +394,14 @@ class SkillLifecycleManager:
         if phase == SkillStage.TRIAL:
             if rec.state.trial_budget_remaining <= 0:
                 sr = self._get_success_rate(rec)
-                if sr >= self.STABILIZATION_MIN_SUCCESS_RATE:
+                if sr >= self._stabilization_min_success_rate:
                     self._transition_to(
                         rec,
                         SkillStage.ACTIVE,
                         f"trial_complete(sr={sr:.2f})",
                     )
                 else:
-                    if rec.state.consecutive_failures >= 3:
+                    if rec.state.consecutive_failures >= self._trial_failure_streak_threshold:
                         self._transition_to(
                             rec,
                             SkillStage.TRIAL,
@@ -388,9 +413,9 @@ class SkillLifecycleManager:
                             SkillStage.DECLINING,
                             "trial_exhausted_declining",
                         )
-            elif rec.state.total_usage_count >= 5:
+            elif rec.state.total_usage_count >= self._trial_early_promote_count:
                 sr = self._get_success_rate(rec)
-                if sr >= 0.80:
+                if sr >= self._trial_early_promote_success_rate:
                     self._transition_to(
                         rec,
                         SkillStage.ACTIVE,
@@ -399,7 +424,7 @@ class SkillLifecycleManager:
         elif phase == SkillStage.ACTIVE:
             if rec.state.total_usage_count >= 15:
                 sr = self._get_success_rate(rec)
-                if sr >= self.STABILIZATION_MIN_SUCCESS_RATE:
+                if sr >= self._stabilization_min_success_rate:
                     self._transition_to(
                         rec, SkillStage.MATURED, f"stabilized(sr={sr:.2f})"
                     )
@@ -411,18 +436,18 @@ class SkillLifecycleManager:
                     )
         elif phase == SkillStage.MATURED:
             sr = self._get_success_rate(rec)
-            if sr < self.AUTO_RETIRE_SUCCESS_THRESHOLD:
+            if sr < self._auto_retire_success_threshold:
                 days_since_use = 0.0
                 if rec.state.last_used_at > 0:
                     days_since_use = (now - rec.state.last_used_at) / 86400.0
-                if days_since_use > self.DECLINE_INACTIVITY_DAYS:
+                if days_since_use > self._decline_inactivity_days:
                     self._transition_to(
                         rec,
                         SkillStage.DECLINING,
                         f"inactive_{
                             days_since_use:.0f}d",
                     )
-            elif rec.state.consecutive_failures >= 5:
+            elif rec.state.consecutive_failures >= self._mature_failure_streak_threshold:
                 self._transition_to(
                     rec, SkillStage.DECLINING, "streak_failures"
                 )
@@ -430,7 +455,7 @@ class SkillLifecycleManager:
             days_inactive = 0.0
             if rec.state.last_used_at > 0:
                 days_inactive = (now - rec.state.last_used_at) / 86400.0
-            if days_inactive > self.DECLINE_INACTIVITY_DAYS * 2.0:
+            if days_inactive > self._decline_inactivity_days * 2.0:
                 self._transition_to(
                     rec,
                     SkillStage.RETIRED,
@@ -438,11 +463,21 @@ class SkillLifecycleManager:
                         days_inactive:.0f}d",
                 )
                 rec.is_active = False
-            elif rec.state.consecutive_failures >= 8:
+            elif rec.state.consecutive_failures >= self._retire_failure_streak_threshold:
                 self._transition_to(
                     rec, SkillStage.RETIRED, "persistent_failure"
                 )
                 rec.is_active = False
+
+    def _prune_retired_skills(self) -> None:
+        retired = [
+            (sid, rec)
+            for sid, rec in self._skills.items()
+            if not rec.is_active or rec.state.phase == SkillStage.RETIRED
+        ]
+        retired.sort(key=lambda item: item[1].state.entered_at)
+        for sid, _rec in retired[: max(1, len(self._skills) - self._max_skills_tracked + 1)]:
+            self._skills.pop(sid, None)
 
     def _reset_counters_if_needed(self, rec: SkillRecord, now: float) -> None:
         """重置小时/天/周计数器"""

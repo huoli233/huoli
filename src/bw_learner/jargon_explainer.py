@@ -39,6 +39,20 @@ class JargonExplainer:
             model_set=model_config.model_task_config.tool_use,
             request_type="jargon.explain",
         )
+        self._auto_learn_min_count = 3
+        self._auto_learn_cooldown = 300.0
+        self._unknown_term_min_length = 2
+        self._unknown_term_max_length = 15
+        try:
+            from src.config.core_config_engine import get_core_config
+
+            view = get_core_config().resolve_module_view("adaptive_learning").values
+            self._auto_learn_min_count = int(view.get("unknown_term_min_count", self._auto_learn_min_count))
+            self._auto_learn_cooldown = float(view.get("unknown_term_cooldown_seconds", self._auto_learn_cooldown))
+            self._unknown_term_min_length = int(view.get("unknown_term_min_length", self._unknown_term_min_length))
+            self._unknown_term_max_length = int(view.get("unknown_term_max_length", self._unknown_term_max_length))
+        except Exception:
+            pass
 
     def match_jargon_from_messages(
         self, messages: List[Any]
@@ -68,7 +82,6 @@ class JargonExplainer:
             query = query.where(Jargon.is_global)
         query = query.order_by(Jargon.count.desc())
         matched_jargon: Dict[str, Dict[str, str]] = {}
-        query_time = time.time()
         for jargon in query:
             content = jargon.content or ""
             if not content or not content.strip():
@@ -195,14 +208,15 @@ class JargonExplainer:
 
     _unknown_term_counts: Dict[str, int] = {}
     _unknown_term_last_seen: Dict[str, float] = {}
-    _auto_learn_min_count: int = 3
-    _auto_learn_cooldown: float = 300.0
-
     def _try_auto_learn_unknown(self, term: str) -> None:
         """未知词自动学习: 出现≥3次时用LLM推断含义并缓存"""
         now = time.time()
         clean_term = term.strip()
-        if not clean_term or len(clean_term) < 2 or len(clean_term) > 15:
+        if (
+            not clean_term
+            or len(clean_term) < self._unknown_term_min_length
+            or len(clean_term) > self._unknown_term_max_length
+        ):
             return
         try:
             from src.common.database.database_model import Jargon as JargonModel
@@ -213,13 +227,12 @@ class JargonExplainer:
                 return
         except Exception as _exc:
             logger.debug(f"非关键异常: {_exc}")
+        last_ts = self._unknown_term_last_seen.get(clean_term, 0.0)
+        if last_ts and now - last_ts > self._auto_learn_cooldown:
+            self._unknown_term_counts[clean_term] = 0
         cnt = self._unknown_term_counts.get(clean_term, 0) + 1
         self._unknown_term_counts[clean_term] = cnt
         self._unknown_term_last_seen[clean_term] = now
-        last_ts = self._unknown_term_last_seen.get(clean_term, 0)
-        if now - last_ts > self._auto_learn_cooldown:
-            self._unknown_term_counts[clean_term] = 1
-            return
         if cnt < self._auto_learn_min_count:
             logger.debug(
                 f"未知词'{clean_term}'出现{cnt}/{self._auto_learn_min_count}次，"

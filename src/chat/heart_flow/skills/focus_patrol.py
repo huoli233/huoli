@@ -9,16 +9,25 @@ from src.common.task_utils import safe_create_task
 logger = get_logger("focus_patrol")
 
 
+def _skill_view() -> Dict[str, Any]:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        return get_core_config().resolve_module_view("skill").values
+    except Exception:
+        return {}
+
+
 class FocusPatrol:
     """专注模式的消息巡查与召回技能"""
-
-    _REVIEW_DELAY_LO: float = 1.0
-    _REVIEW_DELAY_HI: float = 115.0
 
     def __init__(self):
         self._post_send_analyzer_ref = None
         self._typo_generator_ref = None
         self._review_contexts: Dict[int, Dict[str, Any]] = {}
+        skill_view = _skill_view()
+        self._review_delay_lo: float = float(skill_view.get("focus_review_delay_min_seconds", 1.0))
+        self._review_delay_hi: float = float(skill_view.get("focus_review_delay_max_seconds", 115.0))
 
     @staticmethod
     def _current_task_key() -> Optional[int]:
@@ -236,7 +245,7 @@ class FocusPatrol:
         send_func: Optional[Callable[[str, str], Awaitable[str]]] = None,
     ):
         """在后台延迟审阅已发送的消息，必要时撤回并重写"""
-        delay = random.uniform(self._REVIEW_DELAY_LO, self._REVIEW_DELAY_HI)
+        delay = random.uniform(self._review_delay_lo, self._review_delay_hi)
 
         async def _audit_task():
             try:

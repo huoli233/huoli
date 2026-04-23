@@ -110,6 +110,29 @@ _STICKER_CONTEXT_HINTS: Dict[str, str] = {
 }
 
 
+def _adaptive_learning_view() -> Dict[str, Any]:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        return get_core_config().resolve_module_view("adaptive_learning").values
+    except Exception:
+        return {}
+
+
+def _adaptive_int(key: str, fallback: int) -> int:
+    try:
+        return int(_adaptive_learning_view().get(key, fallback))
+    except Exception:
+        return fallback
+
+
+def _adaptive_float(key: str, fallback: float) -> float:
+    try:
+        return float(_adaptive_learning_view().get(key, fallback))
+    except Exception:
+        return fallback
+
+
 class LearnableType(Enum):
     """可学习的内容类型"""
 
@@ -209,11 +232,11 @@ class LearnedItem:
     def should_promote(self) -> bool:
         """是否应该晋升到下一阶段"""
         if self.stage == LearningStage.OBSERVED:
-            return self.observation_count >= 3
+            return self.observation_count >= _adaptive_int("observed_promote_count", 3)
         if self.stage == LearningStage.TENTATIVE:
-            return self.usage_count >= 2 and self.success_rate() > 0.5
+            return self.usage_count >= _adaptive_int("tentative_usage_promote_count", 2) and self.success_rate() > _adaptive_float("tentative_success_rate", 0.5)
         if self.stage == LearningStage.PRACTICING:
-            return self.usage_count >= 5 and self.success_rate() > 0.7
+            return self.usage_count >= _adaptive_int("practicing_usage_promote_count", 5) and self.success_rate() > _adaptive_float("practicing_success_rate", 0.7)
         return False
 
     def should_deprecate(self) -> bool:
@@ -221,9 +244,9 @@ class LearnedItem:
         if self.stage == LearningStage.DEPRECATED:
             return False
         stale_days = (time.time() - self.last_reinforced) / 86400
-        if stale_days > 30 and self.usage_count < 3:
+        if stale_days > _adaptive_float("deprecate_stale_days", 30.0) and self.usage_count < _adaptive_int("deprecate_min_usage", 3):
             return True
-        if self.failure_count > 5 and self.success_rate() < 0.2:
+        if self.failure_count > _adaptive_int("deprecate_failure_count", 5) and self.success_rate() < _adaptive_float("deprecate_success_rate", 0.2):
             return True
         return False
 
@@ -260,8 +283,8 @@ class LearningHub:
             "items": [],
             "types": [],
         }
-        self._max_events = 100
-        self._max_items = 200
+        self._max_events = _adaptive_int("max_learning_events", 100)
+        self._max_items = _adaptive_int("max_learning_items", 200)
 
     def observe(self, event: LearningEvent) -> LearnedItem:
         """接收一个学习事件"""
@@ -430,8 +453,10 @@ class LearningHub:
             in (LearningStage.PRACTICING, LearningStage.INTERNALIZED)
         ]
 
-    def get_all_usable_vocabulary(self, limit: int = 30) -> List[str]:
+    def get_all_usable_vocabulary(self, limit: int | None = None) -> List[str]:
         """获取所有可用的已学词汇(梗/口头禅/礼仪/话题)，供提示词注入使用"""
+        if limit is None:
+            limit = _adaptive_int("vocabulary_limit", 30)
         result: List[str] = []
         usable_stages = {LearningStage.PRACTICING, LearningStage.INTERNALIZED}
         for item in self._learned.values():
@@ -445,14 +470,15 @@ class LearningHub:
         return result
 
     def get_mood_tagged_vocabulary(
-        self, mood_filter: str = "", limit: int = 15
+        self, mood_filter: str = "", limit: int | None = None
     ) -> Dict[str, List[str]]:
         """按情绪标签获取可用词汇
 
         返回 {"sarcasm": [...], "warm": [...], "casual": [...], "other": [...]}
         根据内容特征自动分类。
         """
-        import re as _re
+        if limit is None:
+            limit = _adaptive_int("mood_vocabulary_limit", 15)
         _sarcasm_markers = {"不是", "有完", "怎么不", "笑死", "绷不住", "6", "草", "离谱", "绝了", "纯纯", "真的会谢", "大受震撼"}
         _warm_markers = {"哈哈", "确实", "懂了", "有道理", "好活", "站你", "巧了", "英雄", "懂的"}
         buckets: Dict[str, List[str]] = {
@@ -613,7 +639,9 @@ class LearningHub:
                 )
             )
         phrase_count = self._track_user_phrase(user_id, normalized_text)
-        if phrase_count >= 2 and 4 <= len(normalized_text) <= 24:
+        min_length = _adaptive_int("user_phrase_min_length", 4)
+        max_length = _adaptive_int("user_phrase_max_length", 24)
+        if phrase_count >= _adaptive_int("user_phrase_promote_count", 2) and min_length <= len(normalized_text) <= max_length:
             events.append(
                 LearningEvent(
                     event_type=LearnableType.USER_CATCHPHRASE,
@@ -627,17 +655,17 @@ class LearningHub:
     def _track_user_phrase(self, user_id: str, normalized_text: str) -> int:
         if (
             not user_id
-            or len(normalized_text) < 4
-            or len(normalized_text) > 24
+            or len(normalized_text) < _adaptive_int("user_phrase_min_length", 4)
+            or len(normalized_text) > _adaptive_int("user_phrase_max_length", 24)
         ):
             return 0
         phrase_map = self._user_phrase_counts.setdefault(user_id, {})
         phrase_map[normalized_text] = phrase_map.get(normalized_text, 0) + 1
-        if len(phrase_map) > 100:
+        if len(phrase_map) > _adaptive_int("user_phrase_cache_limit", 100):
             sorted_items = sorted(
                 phrase_map.items(), key=lambda item: item[1], reverse=True
             )
-            self._user_phrase_counts[user_id] = dict(sorted_items[:50])
+            self._user_phrase_counts[user_id] = dict(sorted_items[: _adaptive_int("user_phrase_keep_limit", 50)])
             phrase_map = self._user_phrase_counts[user_id]
         return phrase_map.get(normalized_text, 0)
 
@@ -824,7 +852,7 @@ class LearningHub:
             for k, v in self._learned.items()
             if v.stage == LearningStage.DEPRECATED
         ]
-        for k in deprecated_keys[:20]:
+        for k in deprecated_keys[: _adaptive_int("purge_deprecated_batch", 20)]:
             del self._learned[k]
         if len(self._learned) <= self._max_items:
             return

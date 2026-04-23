@@ -10,17 +10,26 @@ from src.common.logger import get_logger
 logger = get_logger("sticker_policy")
 
 
+def _skill_view() -> dict:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        return get_core_config().resolve_module_view("skill").values
+    except Exception:
+        return {}
+
+
 class StickerPolicyEngine:
     """表情包发送策略引擎"""
-
-    # 默认参数
-    _COOLDOWN_SEC: float = 120.0
-    _DAILY_CEILING: int = 20
 
     def __init__(self):
         self._prev_dispatch_ts: float = 0.0
         self._today_dispatched: int = 0
         self._today_date_tag: str = ""
+        skill_view = _skill_view()
+        self._cooldown_sec: float = float(skill_view.get("sticker_dispatch_cooldown_seconds", 120.0))
+        self._daily_ceiling: int = int(skill_view.get("sticker_daily_ceiling", 20))
+        self._trigger_threshold: float = float(skill_view.get("sticker_dispatch_threshold", 0.55))
 
     # ----------------------------------------------------------------
     #  核心决策
@@ -41,14 +50,14 @@ class StickerPolicyEngine:
         """
         now = _tm.time()
         # 冷却检测
-        if now - self._prev_dispatch_ts < self._COOLDOWN_SEC:
+        if now - self._prev_dispatch_ts < self._cooldown_sec:
             return False, "冷却中"
         # 日限额检测
         date_tag = _tm.strftime("%Y-%m-%d")
         if self._today_date_tag != date_tag:
             self._today_date_tag = date_tag
             self._today_dispatched = 0
-        if self._today_dispatched >= self._DAILY_CEILING:
+        if self._today_dispatched >= self._daily_ceiling:
             return False, "今日额度已用尽"
         # 精力过低
         if chat_stamina < 20:
@@ -64,6 +73,8 @@ class StickerPolicyEngine:
 
             judge = acquire_action_judge()
             ctx_score = await self._probe_timing_relevance(dialogue_excerpt, current_mood)
+            if ctx_score < self._trigger_threshold:
+                return False, f"触发分不足({ctx_score:.2f}<{self._trigger_threshold:.2f})"
             # 尝试获取心理数据
             aff, trs, irr = 0.0, 0.0, 0.0
             try:

@@ -51,6 +51,16 @@ task_cancel_timeout_seconds = 7.0
 telemetry_heartbeat_interval_seconds = 123.0
 expression_learning_interval_seconds = 456.0
 
+[profile_mapping.semantic_domains.skill]
+trial_to_active_invocations = 6
+runtime_skill_cost = 0.4
+sticker_dispatch_cooldown_seconds = 150.0
+
+[profile_mapping.semantic_domains.adaptive_learning]
+max_learning_items = 210
+unknown_term_min_count = 4
+vocabulary_limit = 18
+
 [profile_mapping.scenario_profiles.image_high_risk.vision]
 reply_suppressed = true
 risk_score = {value}
@@ -72,6 +82,12 @@ semantic_domains = ["schedule"]
 
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
+
+[profile_mapping.module_views.skill]
+semantic_domains = ["skill"]
+
+[profile_mapping.module_views.adaptive_learning]
+semantic_domains = ["adaptive_learning"]
 """.strip()
 
 
@@ -110,6 +126,8 @@ def main() -> None:
         assert hub.assemble_scheduler_config()["cooldown_sec"] == 45.0
         assert hub.assemble_scheduler_config()["task_cancel_timeout_sec"] == 7.0
         assert hub.resolve_module_view("model_routing").values["model_fail_threshold"] == 4
+        assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
+        assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
 
         sleep(1.1)
         _write(config_path, _config(0.35))
@@ -125,6 +143,8 @@ def main() -> None:
             "schedule_cooldown_sec": hub.assemble_scheduler_config()["cooldown_sec"],
             "model_fail_threshold": hub.resolve_module_view("model_routing").values["model_fail_threshold"],
             "context_reply_tokens": hub.resolve_module_view("context").values["reply_context_max_tokens"],
+            "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
+            "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "trace_layers": sorted({item.layer for item in vision.trace}),
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))

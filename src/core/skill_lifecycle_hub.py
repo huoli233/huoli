@@ -9,6 +9,29 @@ logger = get_logger("技能生命周期")
 _lifecycle_instances: Dict[str, "SkillLifecycleHub"] = {}
 
 
+def _skill_view() -> Dict[str, Any]:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        return get_core_config().resolve_module_view("skill").values
+    except Exception:
+        return {}
+
+
+def _skill_int(key: str, fallback: int) -> int:
+    try:
+        return int(_skill_view().get(key, fallback))
+    except Exception:
+        return fallback
+
+
+def _skill_float(key: str, fallback: float) -> float:
+    try:
+        return float(_skill_view().get(key, fallback))
+    except Exception:
+        return fallback
+
+
 class SkillStage(Enum):
     """Skill 生命周期阶段"""
 
@@ -136,10 +159,13 @@ class SkillRecord:
 
     def composite_score(self) -> float:
         """综合评分：效果 * 0.4 + 反馈 * 0.3 + 相关性 * 0.3"""
+        effect_weight = _skill_float("composite_effectiveness_weight", 0.4)
+        feedback_weight = _skill_float("composite_feedback_weight", 0.3)
+        relevance_weight = _skill_float("composite_relevance_weight", 0.3)
         return (
-            self.effectiveness_score * 0.4
-            + self.feedback_score() * 0.3
-            + self.relevance_score * 0.3
+            self.effectiveness_score * effect_weight
+            + self.feedback_score() * feedback_weight
+            + self.relevance_score * relevance_weight
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -171,13 +197,13 @@ class SkillLifecycleHub:
         self._channel_id = channel_id
         self._skills: Dict[str, SkillRecord] = {}
         # 晋升/降级阈值
-        self._trial_to_active_invocations = 5
-        self._trial_to_active_success_rate = 0.5
-        self._active_to_matured_invocations = 20
-        self._active_to_matured_success_rate = 0.7
-        self._decline_idle_days = 14
-        self._retire_idle_days = 30
-        self._retire_low_score = 0.2
+        self._trial_to_active_invocations = _skill_int("trial_to_active_invocations", 5)
+        self._trial_to_active_success_rate = _skill_float("trial_to_active_success_rate", 0.5)
+        self._active_to_matured_invocations = _skill_int("active_to_matured_invocations", 20)
+        self._active_to_matured_success_rate = _skill_float("active_to_matured_success_rate", 0.7)
+        self._decline_idle_days = _skill_int("decline_idle_days", 14)
+        self._retire_idle_days = _skill_int("retire_idle_days", 30)
+        self._retire_low_score = _skill_float("retire_low_score", 0.2)
 
     def register_skill(
         self,
@@ -406,32 +432,31 @@ class SkillLifecycleHub:
     #  预算约束接口
     # ════════════════════════════════════════════
     # 域→基础成本映射
-    _DOMAIN_BASE_COST = {
-        SkillDomain.RUNTIME: 0.3,
-        SkillDomain.ANALYSIS: 1.5,
-        SkillDomain.DEV: 2.0,
-    }
-    _DOMAIN_BASE_TOKENS = {
-        SkillDomain.RUNTIME: 200,
-        SkillDomain.ANALYSIS: 800,
-        SkillDomain.DEV: 1500,
-    }
-
     def estimate_invocation_cost(self, skill_id: str) -> tuple:
         """估算一次调用的预算消耗 (cost, tokens, skill_calls=1)"""
         record = self._skills.get(skill_id)
+        domain_base_cost = {
+            SkillDomain.RUNTIME: _skill_float("runtime_skill_cost", 0.3),
+            SkillDomain.ANALYSIS: _skill_float("analysis_skill_cost", 1.5),
+            SkillDomain.DEV: _skill_float("dev_skill_cost", 2.0),
+        }
+        domain_base_tokens = {
+            SkillDomain.RUNTIME: _skill_int("runtime_skill_tokens", 200),
+            SkillDomain.ANALYSIS: _skill_int("analysis_skill_tokens", 800),
+            SkillDomain.DEV: _skill_int("dev_skill_tokens", 1500),
+        }
         if record is None:
             return (1.0, 500, 1)
         # 使用历史平均值（如果有的话）
         if record.avg_cost_per_call > 0 and record.invocation_count >= 3:
             return (
                 record.avg_cost_per_call,
-                self._DOMAIN_BASE_TOKENS.get(record.domain, 500),
+                domain_base_tokens.get(record.domain, 500),
                 1,
             )
         return (
-            self._DOMAIN_BASE_COST.get(record.domain, 1.0),
-            self._DOMAIN_BASE_TOKENS.get(record.domain, 500),
+            domain_base_cost.get(record.domain, 1.0),
+            domain_base_tokens.get(record.domain, 500),
             1,
         )
 
