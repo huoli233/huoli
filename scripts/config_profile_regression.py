@@ -109,7 +109,6 @@ def main() -> None:
         assert memory.values["enabled"] is True
         assert memory.values["short_term_limit"] == 64
         assert memory.values["long_term_limit"] == 4096
-        assert memory.values["hippocampus_min_importance"] == 0.2
         assert memory.values["reactivation_cooldown_seconds"] == 88.0
         assert memory.fallback_used is False
 
@@ -120,9 +119,9 @@ def main() -> None:
         assert vision.values["gif_frame_limit"] == 4
         assert hub.resolve_module_view("context").values["reply_context_max_tokens"] == 96
 
-        fallback = hub.resolve_module_view("schedule")
-        assert fallback.fallback_used is False
-        assert fallback.values["min_cooldown_seconds"] == 60.0
+        schedule = hub.resolve_module_view("schedule")
+        assert schedule.fallback_used is False
+        assert schedule.values["proactive_reply_cooldown_seconds"] == 45.0
         assert hub.assemble_scheduler_config()["cooldown_sec"] == 45.0
         assert hub.assemble_scheduler_config()["task_cancel_timeout_sec"] == 7.0
         assert hub.resolve_module_view("model_routing").values["model_fail_threshold"] == 4
@@ -139,7 +138,7 @@ def main() -> None:
         result = {
             "memory_keys": sorted(memory.values.keys()),
             "vision_risk_score": reloaded.values["risk_score"],
-            "schedule_fallback_used": fallback.fallback_used,
+            "schedule_fallback_used": schedule.fallback_used,
             "schedule_cooldown_sec": hub.assemble_scheduler_config()["cooldown_sec"],
             "model_fail_threshold": hub.resolve_module_view("model_routing").values["model_fail_threshold"],
             "context_reply_tokens": hub.resolve_module_view("context").values["reply_context_max_tokens"],

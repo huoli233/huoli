@@ -757,7 +757,6 @@ class ImpressionEvolutionHub:
         truth = imp.truth
         # 收集命名素材
         stage = narrative.relationship_stage
-        feeling = tags.overall_feeling
         style = tags.speaking_style
         personality = tags.personality_tags[:3]
         # 亲密阶段直接取显著特征
@@ -806,7 +805,6 @@ class ImpressionEvolutionHub:
         if not tags:
             return
         try:
-            from src.chat.heart_flow.fondness_trust import FondnessTrustDimension
             from src.modules.social_value.phase_tracker import get_phase_tracker
 
             _tracker = get_phase_tracker()
@@ -936,9 +934,9 @@ class ImpressionEvolutionHub:
             self.periodic_rewrite(user_id)
         # 共享资源
         try:
-            from src.config.core_config_engine import acquire_settings_hub
+            from src.config.core_config_engine import boot_core_config
 
-            acquire_settings_hub()
+            boot_core_config()
             from src.chat.heart_flow.energy_manager import EnergyChainDimension
 
             _d6 = EnergyChainDimension.get_instance()

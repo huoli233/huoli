@@ -58,7 +58,7 @@ class QuietPeriodMonitor:
         if now - self._param_ts < 60.0:
             return
         hub = get_core_config()
-        blk = hub.silence_detection_block()
+        blk = hub.resolve_module_view("schedule").values
         self._param_cache = {
             "default_minutes": int(blk.get("default_idle_minutes", 10)),
         }

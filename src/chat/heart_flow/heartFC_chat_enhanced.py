@@ -68,7 +68,7 @@ class EnhancedHeartFChatting(
         try:
             from src.config.core_config_engine import get_core_config
 
-            proactive_cfg = get_core_config().proactive_schedule_block()
+            proactive_cfg = get_core_config().resolve_module_view("schedule").values
             self._backend_status_log_enabled = bool(proactive_cfg.get("backend_status_log_enabled", False))
             self._backend_status_interval = float(proactive_cfg.get("backend_status_log_interval_sec", 10.0))
         except Exception as _e:
@@ -698,7 +698,6 @@ class EnhancedHeartFChatting(
 
 
     _SUMMARY_MIN_EVENTS_FOR_PIPELINE = 3
-
 
 
 

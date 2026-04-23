@@ -7,7 +7,7 @@ import uuid
 from collections import deque
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional
 
 from src.chat.heart_flow.dimension_protocol import (
     DimensionBase,
@@ -222,7 +222,7 @@ class WoundNetwork:
         if now - self._conf_ts < 60.0:
             return
         hub = get_core_config()
-        ps = hub.personality_sliders_block()
+        ps = hub.resolve_module_view("personality").values
         self._conf_cache = {
             "chaos_sensitivity": float(ps.get("chaos_sensitivity", 0.8)),
             "mask_strain_rate": float(ps.get("mask_strain_rate", 0.3)),
@@ -748,7 +748,7 @@ class WoundNetwork:
             )
             return text
         except asyncio.TimeoutError:
-            logger.error(f"[伤网] LLM 超时(30s)")
+            logger.error("[伤网] LLM 超时(30s)")
             return None
 
     @staticmethod

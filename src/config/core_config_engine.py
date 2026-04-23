@@ -45,16 +45,6 @@ class CoreSettingsHub:
             "profile_mapping",
         }
     )
-    _DEFAULT_PROFILE_FALLBACKS = {
-        "model_routing": ("runtime_tuning",),
-        "schedule": ("proactive_schedule", "silence_detection", "runtime_tuning"),
-        "memory": ("message_processor", "runtime_tuning"),
-        "context": ("message_processor", "frequency_control"),
-        "vision": ("message_processor", "runtime_tuning"),
-        "skill": ("module_switches", "runtime_tuning"),
-        "adaptive_learning": ("proactive_decider", "frequency_control", "runtime_tuning"),
-        "chat_emotion": ("emotion_stream", "personality_sliders", "proactive_decider"),
-    }
 
     @classmethod
     def boot(
@@ -140,17 +130,17 @@ class CoreSettingsHub:
         self._ingest_disk()
         return True
 
-    # ---- 通用读取 ----
+    # ---- 私有读取 ----
 
-    def fetch_block(self, block_name: str) -> Dict[str, Any]:
-        """获取指定TOML段落的完整副本"""
+    def _section(self, block_name: str) -> Dict[str, Any]:
+        """获取指定 TOML 段落的副本，仅内部使用。"""
         block = self._sections.get(block_name)
         if not isinstance(block, dict):
             return {}
         return copy.deepcopy(block)
 
-    def fetch_item(self, block_name: str, key: str, fallback: Any = None) -> Any:
-        """获取指定段落下单个键值"""
+    def _value(self, block_name: str, key: str, fallback: Any = None) -> Any:
+        """获取指定段落下单个键值，仅内部使用。"""
         block = self._sections.get(block_name)
         if not isinstance(block, dict):
             return fallback
@@ -161,8 +151,8 @@ class CoreSettingsHub:
             return copy.deepcopy(val)
         return val
 
-    def fetch_deep(self, *segments: str, fallback: Any = None) -> Any:
-        """通过多级路径读取嵌套值"""
+    def _deep_value(self, *segments: str, fallback: Any = None) -> Any:
+        """通过多级路径读取嵌套值，仅内部使用。"""
         cursor: Any = self._sections
         for seg in segments:
             if not isinstance(cursor, dict):
@@ -174,86 +164,19 @@ class CoreSettingsHub:
             return copy.deepcopy(cursor)
         return cursor
 
-    # ---- 段落快捷方法 ----
-
-    def heartflow_timing(self) -> Dict[str, Any]:
-        """心流状态机时序参数"""
-        return self.fetch_block("heartflow_timing")
-
-    def dual_pool_energy(self) -> Dict[str, Any]:
-        """双池能量系统参数"""
-        return self.fetch_block("dual_pool_energy")
-
-    def proactive_schedule(self) -> Dict[str, Any]:
-        """主动回复调度参数"""
-        return self.fetch_block("proactive_schedule")
-
-    def proactive_schedule_block(self) -> Dict[str, Any]:
-        """兼容旧调用名。"""
-        return self.proactive_schedule()
-
-    def emotion_stream_block(self) -> Dict[str, Any]:
-        """情绪流参数"""
-        return self.fetch_block("emotion_stream")
-
-    def penalty_caps_block(self) -> Dict[str, Any]:
-        """惩罚上限参数"""
-        return self.fetch_block("penalty_caps")
-
-    def silence_detection_block(self) -> Dict[str, Any]:
-        """沉默检测参数"""
-        return self.fetch_block("silence_detection")
-
-    def trigger_thresholds_block(self) -> Dict[str, Any]:
-        """触发阈值参数"""
-        return self.fetch_block("trigger_thresholds")
-
-    def heartfc_thresholds_block(self) -> Dict[str, Any]:
-        """heartFC 阈值参数"""
-        return self.fetch_block("heartfc_thresholds")
-
-    def inner_voice_block(self) -> Dict[str, Any]:
-        """内心独白参数"""
-        return self.fetch_block("inner_voice")
-
-    def personality_sliders_block(self) -> Dict[str, Any]:
-        """人格滑块"""
-        return self.fetch_block("personality_sliders")
-
-    def module_switches_block(self) -> Dict[str, Any]:
-        """模块开关"""
-        return self.fetch_block("module_switches")
-
-    def heartflow_decision_block(self) -> Dict[str, Any]:
-        """心流决策参数"""
-        return self.fetch_block("heartflow_decision")
-
-    def message_processor_block(self) -> Dict[str, Any]:
-        """消息处理管线参数"""
-        return self.fetch_block("message_processor")
-
-    def runtime_tuning_block(self) -> Dict[str, Any]:
-        """运行时调优参数"""
-        return self.fetch_block("runtime_tuning")
-
     def profile_mapping_block(self) -> Dict[str, Any]:
         """四层配置画像映射。"""
-        return self.fetch_block("profile_mapping")
+        return self._section("profile_mapping")
 
     def resolve_module_view(self, module_name: str, scenario: Optional[str] = None) -> ModuleConfigView:
         """解析指定模块在当前场景下的配置视图。"""
-        legacy_blocks = {}
-        for block_name in self._DEFAULT_PROFILE_FALLBACKS.get(module_name, ()):
-            block = self.fetch_block(block_name)
-            if block:
-                legacy_blocks[block_name] = block
         profile = self.profile_mapping_block()
-        resolver = ConfigProfileResolver(profile_mapping=profile, legacy_blocks=legacy_blocks)
+        resolver = ConfigProfileResolver(profile_mapping=profile)
         return resolver.resolve(module_name, scenario=scenario)
 
     def assemble_decision_config(self) -> Dict[str, Any]:
         """组装心流决策的完整配置包"""
-        d = self.heartflow_decision_block()
+        d = self._section("heartflow_decision")
         return {
             "calm_slot_ttl": float(d.get("calm_slot_ttl", 5.0)),
             "heated_slot_ttl": float(d.get("heated_slot_ttl", 2.0)),
@@ -283,13 +206,13 @@ class CoreSettingsHub:
 
     def energy_ceilings(self) -> Tuple[float, float]:
         """获取聊天精力值和思考值的上限"""
-        chat_ceil = float(self.fetch_deep("dual_pool_energy", "chat_value", "ceiling", fallback=100.0))
-        thinking_ceil = float(self.fetch_deep("dual_pool_energy", "thinking_power", "ceiling", fallback=100.0))
+        chat_ceil = float(self._deep_value("dual_pool_energy", "chat_value", "ceiling", fallback=100.0))
+        thinking_ceil = float(self._deep_value("dual_pool_energy", "thinking_power", "ceiling", fallback=100.0))
         return (chat_ceil, thinking_ceil)
 
     def wait_timing_triple(self) -> Tuple[int, int, int]:
         """等待阶段三元组: (最大等待秒, 反思间隔, 最大反思轮数)"""
-        t = self.heartflow_timing()
+        t = self._section("heartflow_timing")
         return (
             int(t.get("max_idle_wait_seconds", 120)),
             int(t.get("reflect_interval_seconds", 30)),
@@ -298,7 +221,7 @@ class CoreSettingsHub:
 
     def rest_stage_bundle(self) -> Dict[str, Any]:
         """休息阶段参数包"""
-        t = self.heartflow_timing()
+        t = self._section("heartflow_timing")
         return {
             "default_duration": int(t.get("rest_default_seconds", 300)),
             "peek_chance": float(t.get("peek_chance_ratio", 0.05)),
@@ -307,7 +230,7 @@ class CoreSettingsHub:
 
     def chat_pool_params(self) -> Dict[str, float]:
         """聊天值子段"""
-        sub = self.fetch_deep("dual_pool_energy", "chat_value", fallback={})
+        sub = self._deep_value("dual_pool_energy", "chat_value", fallback={})
         if not isinstance(sub, dict):
             sub = {}
         return {
@@ -319,7 +242,7 @@ class CoreSettingsHub:
 
     def thinking_pool_params(self) -> Dict[str, float]:
         """思考值子段"""
-        sub = self.fetch_deep("dual_pool_energy", "thinking_power", fallback={})
+        sub = self._deep_value("dual_pool_energy", "thinking_power", fallback={})
         if not isinstance(sub, dict):
             sub = {}
         return {
@@ -331,7 +254,7 @@ class CoreSettingsHub:
 
     def decay_params(self) -> Dict[str, float]:
         """衰减子段"""
-        sub = self.fetch_deep("dual_pool_energy", "decay", fallback={})
+        sub = self._deep_value("dual_pool_energy", "decay", fallback={})
         if not isinstance(sub, dict):
             sub = {}
         return {
@@ -341,7 +264,7 @@ class CoreSettingsHub:
 
     def penalty_caps(self) -> Dict[str, float]:
         """各项惩罚上限"""
-        sec = self.penalty_caps_block()
+        sec = self._section("penalty_caps")
         return {
             "trauma_cap": float(sec.get("trauma_cap", 0.6)),
             "annoyance_cap": float(sec.get("annoyance_cap", 0.5)),
@@ -365,33 +288,33 @@ class CoreSettingsHub:
 
     def emotion_annoy_count(self) -> int:
         """触发烦恼的重复次数"""
-        return int(self.fetch_item("emotion_stream", "annoyed_repeat_count", 3))
+        return int(self._value("emotion_stream", "annoyed_repeat_count", 3))
 
     def voice_action_limit(self) -> int:
         """内心独白最多输出动作数"""
-        return int(self.fetch_item("inner_voice", "max_output_actions", 5))
+        return int(self._value("inner_voice", "max_output_actions", 5))
 
     def voice_desire_range(self) -> Tuple[int, int]:
         """回复欲望值范围"""
-        lo = int(self.fetch_item("inner_voice", "desire_scale_min", 1))
-        hi = int(self.fetch_item("inner_voice", "desire_scale_max", 10))
+        lo = int(self._value("inner_voice", "desire_scale_min", 1))
+        hi = int(self._value("inner_voice", "desire_scale_max", 10))
         return (lo, hi)
 
     def energy_overflow_ratio(self) -> float:
         """能量溢出触发比例"""
-        return float(self.fetch_item("trigger_thresholds", "energy_overflow_ratio", 0.85))
+        return float(self._value("trigger_thresholds", "energy_overflow_ratio", 0.85))
 
     def social_warmth_floor(self) -> float:
         """社交温度下限"""
-        return float(self.fetch_item("trigger_thresholds", "social_warmth_floor", 0.3))
+        return float(self._value("trigger_thresholds", "social_warmth_floor", 0.3))
 
     def plan_trigger_gap(self) -> float:
         """规划触发最小间隔"""
-        return float(self.fetch_item("trigger_thresholds", "plan_trigger_interval", 600.0))
+        return float(self._value("trigger_thresholds", "plan_trigger_interval", 600.0))
 
     def curiosity_threshold(self) -> float:
         """好奇心爆发阈值"""
-        return float(self.fetch_item("trigger_thresholds", "curiosity_spike_threshold", 0.7))
+        return float(self._value("trigger_thresholds", "curiosity_spike_threshold", 0.7))
 
     # ---- 人格滑块 ----
 
@@ -438,7 +361,7 @@ class CoreSettingsHub:
 
     def assemble_wait_config(self) -> Dict[str, Any]:
         """组装等待阶段的完整配置包"""
-        t = self.heartflow_timing()
+        t = self._section("heartflow_timing")
         return {
             "max_wait_sec": int(t.get("max_idle_wait_seconds", 120)),
             "reflect_interval": int(t.get("reflect_interval_seconds", 30)),
@@ -448,7 +371,7 @@ class CoreSettingsHub:
 
     def assemble_rest_config(self) -> Dict[str, Any]:
         """组装休息阶段的完整配置包"""
-        t = self.heartflow_timing()
+        t = self._section("heartflow_timing")
         return {
             "duration_sec": int(t.get("rest_default_seconds", 300)),
             "peek_chance": float(t.get("peek_chance_ratio", 0.05)),
@@ -476,7 +399,7 @@ class CoreSettingsHub:
 
     def assemble_silence_config(self) -> Dict[str, Any]:
         """组装沉默监测的完整配置包"""
-        s = self.silence_detection_block()
+        s = self.resolve_module_view("schedule").values
         return {
             "idle_sec": float(s.get("idle_trigger_seconds", 180.0)),
             "topic_cooldown": float(s.get("topic_launch_cooldown", 300.0)),
@@ -486,7 +409,7 @@ class CoreSettingsHub:
 
     def assemble_emotion_config(self) -> Dict[str, Any]:
         """组装情绪流的完整配置包"""
-        e = self.emotion_stream_block()
+        e = self.resolve_module_view("chat_emotion").values
         return {
             "window_sec": float(e.get("query_window_seconds", 300.0)),
             "max_queries": int(e.get("max_queries_per_window", 50)),
@@ -499,7 +422,7 @@ class CoreSettingsHub:
 
     def assemble_trigger_config(self) -> Dict[str, Any]:
         """组装触发系统的完整配置包"""
-        t = self.trigger_thresholds_block()
+        t = self._section("trigger_thresholds")
         return {
             "overflow_ratio": float(t.get("energy_overflow_ratio", 0.85)),
             "warmth_floor": float(t.get("social_warmth_floor", 0.3)),
@@ -509,7 +432,7 @@ class CoreSettingsHub:
 
     def assemble_voice_config(self) -> Dict[str, Any]:
         """组装内心独白的完整配置包"""
-        v = self.inner_voice_block()
+        v = self._section("inner_voice")
         return {
             "action_cap": int(v.get("max_output_actions", 5)),
             "desire_lo": int(v.get("desire_scale_min", 1)),
@@ -519,14 +442,9 @@ class CoreSettingsHub:
 
     # ---- 工具 ----
 
-    def frequency_control_block(self) -> Dict[str, Any]:
-        """获取 [frequency_control] 段原始字典"""
-        blk = self._sections.get("frequency_control")
-        return dict(blk) if isinstance(blk, dict) else {}
-
     def assemble_frequency_config(self) -> Dict[str, Any]:
         """组装频率控制的完整配置包"""
-        f = self.frequency_control_block()
+        f = self._section("frequency_control")
         return {
             "baseline": float(f.get("baseline_multiplier", 1.0)),
             "floor": float(f.get("multiplier_floor", 0.1)),
@@ -594,10 +512,3 @@ def get_core_config() -> CoreSettingsHub:
 def boot_core_config(config_dir: Optional[Path] = None, template_dir: Optional[Path] = None) -> CoreSettingsHub:
     """全局快捷函数，启动核心配置中枢"""
     return CoreSettingsHub.boot(config_dir=config_dir, template_dir=template_dir)
-
-
-def acquire_settings_hub() -> CoreSettingsHub:
-    """兼容旧入口，获取或启动核心配置中枢。"""
-    if CoreSettingsHub._sole_ref is not None:
-        return CoreSettingsHub._sole_ref
-    return CoreSettingsHub.boot()

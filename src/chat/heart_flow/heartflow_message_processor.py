@@ -2,7 +2,7 @@ import re
 import time as _tm
 import asyncio
 import traceback
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, Optional, Set
 
 from src.chat.heart_flow.heartflow import heartflow
 from src.chat.message_receive.message import MessageRecv
@@ -28,7 +28,7 @@ def _normalize_repeat_text(text: str) -> str:
 def _pipe_cfg() -> Dict[str, Any]:
     """从配置中枢读取消息取得参数"""
     try:
-        return get_core_config().message_processor_block()
+        return get_core_config().resolve_module_view("message_processor").values
     except RuntimeError:
         return {}
 

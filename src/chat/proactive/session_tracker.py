@@ -2,7 +2,7 @@ import asyncio
 import json
 import os
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from src.common.logger import get_logger
@@ -385,7 +385,7 @@ class MemoirCabinet:
 
     def __init__(self):
         hub = get_core_config()
-        schedule_blk = hub.proactive_schedule_block()
+        schedule_blk = hub.resolve_module_view("schedule").values
         self._vault_dir = Path(str(schedule_blk.get("session_storage_dir", "data/memoir_vault")))
         self._stale_days = int(schedule_blk.get("session_max_age_days", 30))
         self._vault_dir.mkdir(parents=True, exist_ok=True)

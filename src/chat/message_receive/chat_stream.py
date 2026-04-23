@@ -1,7 +1,6 @@
 import asyncio
 import hashlib
 import time
-import copy
 from typing import Dict, Optional, TYPE_CHECKING
 from rich.traceback import install
 from src.common.message_types.group_info import GroupInfo
@@ -189,8 +188,8 @@ class ChatManager:
 
             interval = int(
                 get_core_config()
-                .runtime_tuning_block()
-                .get("autosave_interval_seconds", 300)
+                .resolve_module_view("runtime_tuning")
+                .values.get("autosave_interval_seconds", 300)
             )
         except Exception:
             interval = 300

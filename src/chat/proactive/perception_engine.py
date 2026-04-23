@@ -21,8 +21,6 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.common.logger import get_logger
 from src.config.core_config_engine import get_core_config
 from src.common.data_models.heartflow_models import (
-    MultisensoryData,
-    PerceptionConclusion,
     ContextDemand,
 )
 
@@ -441,7 +439,7 @@ class AwarenessEngine:
         if now - self._conf_ts < 60.0:
             return
         hub = get_core_config()
-        sched = hub.proactive_schedule_block()
+        sched = hub.resolve_module_view("schedule").values
         self._conf_cache = {
             "llm_perception_enabled": sched.get(
                 "llm_perception_enabled", True

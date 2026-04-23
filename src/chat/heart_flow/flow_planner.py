@@ -1,6 +1,6 @@
 import asyncio
 import time as _tm
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
@@ -15,7 +15,7 @@ def _runtime_float(name: str, default: float) -> float:
     try:
         from src.config.core_config_engine import get_core_config
 
-        return float(get_core_config().runtime_tuning_block().get(name, default))
+        return float(get_core_config().resolve_module_view("runtime_tuning").values.get(name, default))
     except Exception:
         return default
 
@@ -194,7 +194,6 @@ class FlowPlanner:
         quick_kind: Optional[SituationKind],
     ) -> PlannerOutput:
         """调用LLM规划"""
-        import json as _json
         from datetime import datetime
 
         prompt = await global_prompt_manager.format_prompt(
@@ -220,9 +219,6 @@ class FlowPlanner:
         self_state_context: str = "",
     ) -> Optional[PlannerOutput]:
         """判断是否适合主动发言并生成策略"""
-        import json as _json
-        from datetime import datetime
-
         snap = self._cal_snapshot
         if snap.is_recent() and snap.intimacy_after < 30.0:
             logger.info(f"[流程规划] {channel_id} 亲密度过低({snap.intimacy_after:.1f})，拒绝主动发言")

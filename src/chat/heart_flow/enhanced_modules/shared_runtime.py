@@ -142,9 +142,9 @@ _WATCH_LEVEL_BY_RANK = {
 def _rt_float(key: str, default: float) -> float:
     """从 runtime_tuning 读取浮点参数，失败时返回默认值"""
     try:
-        from src.config.core_config_engine import CoreSettingsHub
+        from src.config.core_config_engine import get_core_config
 
-        val = CoreSettingsHub().runtime_tuning_block().get(key, default)
+        val = get_core_config().resolve_module_view("runtime_tuning").values.get(key, default)
         return float(val)
     except Exception as exc:
         logger.debug(f"读取运行时配置 {key} 失败: {exc}")

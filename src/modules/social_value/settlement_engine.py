@@ -1,6 +1,5 @@
-import math
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 from src.common.config.config_engine import (
     ConfigEngine,
@@ -142,7 +141,7 @@ class SettlementEngine:
         try:
             from src.config.core_config_engine import get_core_config
 
-            ps = get_core_config().personality_sliders_block()
+            ps = get_core_config().resolve_module_view("personality").values
             slider_mapping = {
                 "saturation_steepness": "bond_saturation_steepness",
                 "reversal_amplifier": "bond_reversal_multiplier",

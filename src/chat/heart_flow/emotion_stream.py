@@ -116,14 +116,14 @@ class ChannelMoodTracker:
         if now - self._cfg_ts < 60.0:
             return
         hub = get_core_config()
-        blk = hub.emotion_stream_block()
+        blk = hub.resolve_module_view("chat_emotion").values
         self._cfg_cache = {
             "window_sec": float(blk.get("query_window_seconds", 300.0)),
             "max_per_window": int(blk.get("max_queries_per_window", 50)),
             "dup_threshold": int(blk.get("repeat_detection_threshold", 3)),
-            "refresh_gap": float(blk.get("emotion_refresh_interval", 60.0)),
+            "refresh_gap": float(blk.get("emotion_refresh_interval_seconds", 60.0)),
             "recent_sec": float(blk.get("recent_query_window_seconds", 60.0)),
-            "annoyed_dup": int(blk.get("annoyed_repeat_count", 3)),
+            "annoyed_dup": int(blk.get("annoyance_repeat_threshold", 3)),
             "social_scale": float(blk.get("social_delta_scale", 0.02)),
         }
         pool = hub.dual_pool_energy()

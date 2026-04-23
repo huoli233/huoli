@@ -90,7 +90,7 @@ def load_heartfc_thresholds(config_block: Dict[str, Any] | None = None) -> Heart
         try:
             from src.config.core_config_engine import get_core_config
 
-            config_block = get_core_config().heartfc_thresholds_block()
+            config_block = get_core_config().resolve_module_view("heartfc_thresholds").values
         except Exception as exc:
             logger.debug(f"读取 heartfc_thresholds 配置失败，使用默认值: {exc}")
             config_block = {}
@@ -110,4 +110,3 @@ def load_heartfc_thresholds(config_block: Dict[str, Any] | None = None) -> Heart
 
 def get_heartfc_thresholds() -> HeartFCThresholds:
     return load_heartfc_thresholds()
-

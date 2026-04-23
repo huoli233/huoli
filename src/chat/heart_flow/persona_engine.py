@@ -193,7 +193,7 @@ class CharacterFoundry:
         if now - self._conf_ts < 60.0:
             return
         hub = get_core_config()
-        ps = hub.personality_sliders_block()
+        ps = hub.resolve_module_view("personality").values
         self._conf_cache = {
             "pool_capacity": int(ps.get("persona_pool_capacity", 10)),
             "default_blend_sec": float(
@@ -664,7 +664,7 @@ class CharacterFoundry:
             )
             return text
         except asyncio.TimeoutError:
-            logger.error(f"[铸造] LLM 调用超时(30s)")
+            logger.error("[铸造] LLM 调用超时(30s)")
             return None
 
     @staticmethod

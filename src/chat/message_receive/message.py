@@ -5,7 +5,7 @@ import urllib3
 from abc import abstractmethod
 from dataclasses import dataclass
 from rich.traceback import install
-from typing import Optional, Any, List, Union
+from typing import Optional, Any, List
 from src.common.message_types.seg import Seg
 from src.common.message_types.user_info import UserInfo
 from src.common.message_types.message_info import BaseMessageInfo
@@ -36,7 +36,7 @@ def _get_vlm_semaphore() -> asyncio.Semaphore:
         try:
             from src.config.core_config_engine import get_core_config
 
-            rt = get_core_config().runtime_tuning_block()
+            rt = get_core_config().resolve_module_view("runtime_tuning").values
             limit = int(rt.get("vlm_concurrency_limit", 3))
         except (KeyError, ValueError, TypeError) as e:
             from src.common.logger import get_logger as _gl

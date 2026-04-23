@@ -340,6 +340,9 @@ high_risk_threshold = 0.75
 skip_low_value_threshold = 0.18
 default_model_path = "small"
 large_model_path = "large"
+model_cooldown_seconds = 120.0
+model_fail_threshold = 3
+tool_incompat_cooldown_seconds = 600.0
 
 [profile_mapping.semantic_domains.schedule]
 backend_event_cooldown_seconds = 60.0
@@ -348,6 +351,20 @@ memory_governance_interval_seconds = 300.0
 expression_learning_interval_seconds = 3600.0
 skill_patrol_interval_seconds = 600.0
 telemetry_heartbeat_interval_seconds = 300.0
+max_concurrent_thinks = 3
+think_timeout_seconds = 30.0
+retry_max_count = 2
+queue_capacity = 20
+priority_boost_on_mention = 2.0
+idle_trigger_seconds = 180.0
+default_idle_minutes = 10
+backend_status_log_enabled = false
+backend_status_log_interval_sec = 10.0
+llm_perception_enabled = true
+perception_max_tokens = 800
+perception_engagement_threshold = 0.45
+session_storage_dir = "data/memoir_vault"
+session_max_age_days = 30
 task_cancel_timeout_seconds = 5.0
 task_shutdown_timeout_seconds = 10.0
 cleanup_initial_delay_seconds = 60.0
@@ -473,10 +490,80 @@ user_phrase_keep_limit = 50
 purge_deprecated_batch = 20
 
 [profile_mapping.semantic_domains.chat_emotion]
+query_window_seconds = 300.0
+max_queries_per_window = 50
+repeat_detection_threshold = 3
 annoyance_repeat_threshold = 3
 emotion_refresh_interval_seconds = 60.0
+recent_query_window_seconds = 60.0
 social_delta_scale = 0.02
 reply_eagerness_floor = 0.2
+
+[profile_mapping.semantic_domains.message_processor]
+boot_shield_duration = 5
+stale_thr = 180
+dedup_cap = 500
+short_min = 3
+short_whitelist = ["?", "？", "!", "！", "在吗", "你在", "干嘛"]
+short_filter_on = true
+at_also_filter = false
+engage_fallback = 0.5
+engage_full_thr = 0.6
+hippo_min_imp = 0.2
+img_desc_tpl = "[图片：{desc}]"
+img_fallback = "[图片]"
+log_max = 120
+kg_min = 10
+
+[profile_mapping.semantic_domains.runtime_tuning]
+vlm_concurrency_limit = 3
+autosave_interval_seconds = 300
+flow_planner_timeout_seconds = 20.0
+flow_planner_slow_threshold_seconds = 10.0
+heartfc_tick_floor_sec = 0.15
+heartfc_dormant_poll_sec = 1.0
+heartfc_perception_cooldown_sec = 5.0
+heartfc_voice_cooldown_sec = 6.0
+heartfc_energy_drain_floor = 0.08
+heartfc_post_message_retry_sec = 2.0
+
+[profile_mapping.semantic_domains.heartfc_thresholds]
+rest_energy_ratio = 0.10
+rest_thinking_ratio = 0.08
+loafing_high = 0.60
+loafing_medium = 0.45
+loafing_idle = 0.45
+quiet_high = 0.55
+quiet_medium = 0.45
+quiet_watch_low = 0.60
+avoidance_high = 0.40
+avoidance_medium = 0.45
+social_low_willingness = 0.45
+boredom_peek_trigger = 55.0
+boredom_scan_trigger = 40.0
+boredom_downgrade_trigger = 35.0
+loafing_social_inhibit = 0.40
+boredom_reply_suppress_high = 0.60
+boredom_reply_suppress_medium = 0.30
+boredom_activation_reduce = 0.75
+boredom_drift_trigger = 0.50
+
+[profile_mapping.semantic_domains.personality]
+bond_saturation_steepness = 0.02
+bond_reversal_multiplier = 1.35
+bond_reversal_min_streak = 3
+bond_large_delta_threshold = 15.0
+bond_large_delta_dampen_rate = 0.6
+bond_step_ceiling = 20.0
+persona_pool_capacity = 10
+default_blend_duration_sec = 6.0
+persona_auto_revert_sec = 300.0
+crisis_persona_chaos_threshold = 7.0
+chaos_sensitivity = 0.8
+mask_strain_rate = 0.3
+mask_recovery_rate = 0.05
+mask_base_armor = 8.0
+chaos_natural_decay_per_hour = 0.1
 
 [profile_mapping.scenario_profiles.deep_sleep.model_routing]
 skip_non_urgent = true
@@ -516,47 +603,59 @@ behavior_check_interval_seconds = 2400.0
 [profile_mapping.module_views.model_routing]
 base_refs = ["runtime_defaults", "model_defaults"]
 semantic_domains = ["model_routing"]
-legacy_blocks = ["runtime_tuning"]
 profile_name = "model_routing_view"
 
 [profile_mapping.module_views.schedule]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["schedule"]
-legacy_blocks = ["proactive_schedule", "silence_detection", "runtime_tuning"]
 profile_name = "schedule_view"
 
 [profile_mapping.module_views.memory]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory"]
-legacy_blocks = ["message_processor", "runtime_tuning"]
 profile_name = "memory_view"
 
 [profile_mapping.module_views.context]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["context"]
-legacy_blocks = ["message_processor", "frequency_control"]
 profile_name = "context_view"
 
 [profile_mapping.module_views.vision]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["vision"]
-legacy_blocks = ["message_processor", "runtime_tuning"]
 profile_name = "vision_view"
 
 [profile_mapping.module_views.skill]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["skill"]
-legacy_blocks = ["module_switches", "runtime_tuning"]
 profile_name = "skill_view"
 
 [profile_mapping.module_views.adaptive_learning]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["adaptive_learning"]
-legacy_blocks = ["proactive_decider", "frequency_control", "runtime_tuning"]
 profile_name = "adaptive_learning_view"
 
 [profile_mapping.module_views.chat_emotion]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["chat_emotion"]
-legacy_blocks = ["emotion_stream", "personality_sliders", "proactive_decider"]
 profile_name = "chat_emotion_view"
+
+[profile_mapping.module_views.message_processor]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["message_processor"]
+profile_name = "message_processor_view"
+
+[profile_mapping.module_views.runtime_tuning]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["runtime_tuning"]
+profile_name = "runtime_tuning_view"
+
+[profile_mapping.module_views.heartfc_thresholds]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["heartfc_thresholds"]
+profile_name = "heartfc_thresholds_view"
+
+[profile_mapping.module_views.personality]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["personality"]
+profile_name = "personality_view"
