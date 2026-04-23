@@ -2,7 +2,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional, Any, Dict, Tuple
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
+from src.modules.safety.runtime_config import safety_float, safety_int
 
 logger = get_logger("全局防护")
 
@@ -32,12 +32,12 @@ class GlobalShieldManager:
 
     def __init__(self, config_engine=None):
         if self._initialized:
-            new_config = config_engine or self._config or get_default_config_engine()
+            new_config = config_engine if config_engine is not None else self._config
             if new_config is not self._config:
                 self._config = new_config
                 self._load_config()
             return
-        self._config = config_engine or get_default_config_engine()
+        self._config = config_engine
         self._state = GlobalShieldState()
         self._default_duration = 300.0
         self._max_duration = 1800.0
@@ -51,24 +51,32 @@ class GlobalShieldManager:
 
     def _load_config(self) -> None:
         """从配置引擎加载参数"""
-        self._default_duration = self._config.get(
-            "global_shield", "default_duration", 300.0
-        )
-        self._max_duration = self._config.get(
-            "global_shield", "max_duration", 1800.0
-        )
-        self._irritation_threshold = self._config.get(
-            "global_shield", "irritation_threshold", 150.0
-        )
-        self._irritation_decay_rate = self._config.get(
-            "global_shield", "irritation_decay_rate", 0.1
-        )
-        self._auto_shield_count_threshold = self._config.get(
-            "global_shield", "auto_shield_count_threshold", 5
-        )
-        self._auto_shield_severity_threshold = self._config.get(
-            "global_shield", "auto_shield_severity_threshold", 3.0
-        )
+        if self._config is not None:
+            self._default_duration = self._config.get(
+                "global_shield", "default_duration", 300.0
+            )
+            self._max_duration = self._config.get(
+                "global_shield", "max_duration", 1800.0
+            )
+            self._irritation_threshold = self._config.get(
+                "global_shield", "irritation_threshold", 150.0
+            )
+            self._irritation_decay_rate = self._config.get(
+                "global_shield", "irritation_decay_rate", 0.1
+            )
+            self._auto_shield_count_threshold = self._config.get(
+                "global_shield", "auto_shield_count_threshold", 5
+            )
+            self._auto_shield_severity_threshold = self._config.get(
+                "global_shield", "auto_shield_severity_threshold", 3.0
+            )
+            return
+        self._default_duration = safety_float("global_shield", "default_duration", 300.0)
+        self._max_duration = safety_float("global_shield", "max_duration", 1800.0)
+        self._irritation_threshold = safety_float("global_shield", "irritation_threshold", 150.0)
+        self._irritation_decay_rate = safety_float("global_shield", "irritation_decay_rate", 0.1)
+        self._auto_shield_count_threshold = safety_int("global_shield", "auto_shield_count_threshold", 5)
+        self._auto_shield_severity_threshold = safety_float("global_shield", "auto_shield_severity_threshold", 3.0)
 
     def activate_shield(
         self, duration: Optional[float] = None, reason: str = ""

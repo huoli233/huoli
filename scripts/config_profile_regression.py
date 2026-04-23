@@ -102,6 +102,18 @@ baseline_multiplier = 1.2
 skip_limit = 7
 tick_interval_seconds = 4.0
 
+[profile_mapping.semantic_domains.global_shield]
+default_duration = 321.0
+
+[profile_mapping.semantic_domains.harassment_detection]
+block_threshold = 0.66
+
+[profile_mapping.semantic_domains.injection_detection]
+cache_max_entries = 123
+
+[profile_mapping.semantic_domains.user_protection]
+max_escalation_count = 7
+
 [profile_mapping.semantic_domains.skill]
 trial_to_active_invocations = 6
 runtime_skill_cost = 0.4
@@ -167,6 +179,18 @@ semantic_domains = ["inner_voice"]
 [profile_mapping.module_views.frequency_control]
 semantic_domains = ["frequency_control"]
 
+[profile_mapping.module_views.global_shield]
+semantic_domains = ["global_shield"]
+
+[profile_mapping.module_views.harassment_detection]
+semantic_domains = ["harassment_detection"]
+
+[profile_mapping.module_views.injection_detection]
+semantic_domains = ["injection_detection"]
+
+[profile_mapping.module_views.user_protection]
+semantic_domains = ["user_protection"]
+
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
 
@@ -224,6 +248,10 @@ def main() -> None:
         assert hub.resolve_module_view("heartflow_runtime").values["initiative_probability"] == 0.44
         assert hub.resolve_module_view("inner_voice").values["mention_min_desire"] == 7
         assert hub.resolve_module_view("frequency_control").values["skip_limit"] == 7
+        assert hub.resolve_module_view("global_shield").values["default_duration"] == 321.0
+        assert hub.resolve_module_view("harassment_detection").values["block_threshold"] == 0.66
+        assert hub.resolve_module_view("injection_detection").values["cache_max_entries"] == 123
+        assert hub.resolve_module_view("user_protection").values["max_escalation_count"] == 7
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
         assert hub.resolve_module_view("adaptive_learning").values["expression_learn_temperature"] == 0.25
@@ -247,6 +275,7 @@ def main() -> None:
             "memory_rrf_k": hub.resolve_module_view("memory_retrieval").values["rrf_k"],
             "inner_voice_mention_floor": hub.resolve_module_view("inner_voice").values["mention_min_desire"],
             "frequency_skip_limit": hub.resolve_module_view("frequency_control").values["skip_limit"],
+            "harassment_block_threshold": hub.resolve_module_view("harassment_detection").values["block_threshold"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "jargon_thresholds": hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"],

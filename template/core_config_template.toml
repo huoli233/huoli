@@ -827,6 +827,53 @@ tick_interval_seconds = 5.0
 offline_reset_seconds = 600.0
 reply_completed_boost = 0.02
 
+[profile_mapping.semantic_domains.global_shield]
+default_duration = 300.0
+max_duration = 1800.0
+irritation_threshold = 150.0
+irritation_decay_rate = 0.1
+auto_shield_count_threshold = 5
+auto_shield_severity_threshold = 3.0
+
+[profile_mapping.semantic_domains.harassment_detection]
+enabled = true
+weight_harassment = 0.65
+weight_sentiment = 0.35
+block_threshold = 0.72
+warn_threshold = 0.42
+window_seconds = 300.0
+cumulative_block_threshold = 5.0
+cumulative_warn_ratio = 0.55
+cumulative_high_threshold = 10.0
+combined_high_threshold = 0.9
+cumulative_mid_threshold = 5.0
+combined_mid_threshold = 0.55
+block_duration_high = 120
+block_duration_mid = 60
+block_duration_low = 30
+harassment_keywords = {"傻逼" = 0.8, "傻" = 0.3, "蠢" = 0.3, "笨蛋" = 0.3, "滚" = 0.5, "闭嘴" = 0.4, "讨厌你" = 0.4, "恶心" = 0.5, "去死" = 0.9, "打死" = 0.7, "打你" = 0.4, "杀了你" = 0.9, "骂你" = 0.4, "废物" = 0.6, "垃圾" = 0.5}
+negative_sentiment_words = ["不爽", "生气", "愤怒", "讨厌", "烦", "累", "难过", "伤心", "失望"]
+
+[profile_mapping.semantic_domains.injection_detection]
+enabled = true
+cache_enabled = true
+cache_ttl_seconds = 3600.0
+cache_max_entries = 500
+max_content_length = 4096
+quick_screen_enabled = true
+whitelisted_senders = []
+
+[profile_mapping.semantic_domains.user_protection]
+default_duration = 300.0
+max_duration = 3600.0
+auto_protect_threshold = -80.0
+harassment_protect_duration = 600.0
+harassment_severity_threshold = 0.8
+cooldown_after_expire = 60.0
+max_severity_history = 10
+escalation_factor = 1.5
+max_escalation_count = 5
+
 [profile_mapping.semantic_domains.heartflow_runtime]
 focus_channels = []
 initiative_interval_sec = 300.0
@@ -985,3 +1032,23 @@ profile_name = "inner_voice_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["frequency_control"]
 profile_name = "frequency_control_view"
+
+[profile_mapping.module_views.global_shield]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["global_shield"]
+profile_name = "global_shield_view"
+
+[profile_mapping.module_views.harassment_detection]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["harassment_detection"]
+profile_name = "harassment_detection_view"
+
+[profile_mapping.module_views.injection_detection]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["injection_detection"]
+profile_name = "injection_detection_view"
+
+[profile_mapping.module_views.user_protection]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["user_protection"]
+profile_name = "user_protection_view"

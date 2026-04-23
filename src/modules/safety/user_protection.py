@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Optional, Any, Tuple, TYPE_CHECKING
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
+from src.modules.safety.runtime_config import safety_float, safety_int
 
 if TYPE_CHECKING:
     from src.modules.safety.social_calculator import SocialCalculator
@@ -71,14 +71,12 @@ class UserProtectionManager:
         if self._initialized:
             if social_calculator:
                 self._social_calculator = social_calculator
-            self._config = (
-                config_engine or self._config or get_default_config_engine()
-            )
+            self._config = config_engine if config_engine is not None else self._config
             self._load_config()
             return
 
         self._social_calculator = social_calculator
-        self._config = config_engine or get_default_config_engine()
+        self._config = config_engine
         self._protection_states: Dict[str, ProtectionState] = {}
         self._config_data = ProtectionConfig()
         self._last_cleanup_time = time.time()
@@ -90,33 +88,44 @@ class UserProtectionManager:
 
     def _load_config(self) -> None:
         """从配置引擎加载参数"""
-        self._config_data.default_duration = self._config.get(
-            "user_protection", "default_duration", 300.0
-        )
-        self._config_data.max_duration = self._config.get(
-            "user_protection", "max_duration", 3600.0
-        )
-        self._config_data.auto_protect_threshold = self._config.get(
-            "user_protection", "auto_protect_threshold", -80.0
-        )
-        self._config_data.harassment_protect_duration = self._config.get(
-            "user_protection", "harassment_protect_duration", 600.0
-        )
-        self._config_data.harassment_severity_threshold = self._config.get(
-            "user_protection", "harassment_severity_threshold", 0.8
-        )
-        self._config_data.cooldown_after_expire = self._config.get(
-            "user_protection", "cooldown_after_expire", 60.0
-        )
-        self._config_data.max_severity_history = self._config.get(
-            "user_protection", "max_severity_history", 10
-        )
-        self._config_data.escalation_factor = self._config.get(
-            "user_protection", "escalation_factor", 1.5
-        )
-        self._config_data.max_escalation_count = self._config.get(
-            "user_protection", "max_escalation_count", 5
-        )
+        if self._config is not None:
+            self._config_data.default_duration = self._config.get(
+                "user_protection", "default_duration", 300.0
+            )
+            self._config_data.max_duration = self._config.get(
+                "user_protection", "max_duration", 3600.0
+            )
+            self._config_data.auto_protect_threshold = self._config.get(
+                "user_protection", "auto_protect_threshold", -80.0
+            )
+            self._config_data.harassment_protect_duration = self._config.get(
+                "user_protection", "harassment_protect_duration", 600.0
+            )
+            self._config_data.harassment_severity_threshold = self._config.get(
+                "user_protection", "harassment_severity_threshold", 0.8
+            )
+            self._config_data.cooldown_after_expire = self._config.get(
+                "user_protection", "cooldown_after_expire", 60.0
+            )
+            self._config_data.max_severity_history = self._config.get(
+                "user_protection", "max_severity_history", 10
+            )
+            self._config_data.escalation_factor = self._config.get(
+                "user_protection", "escalation_factor", 1.5
+            )
+            self._config_data.max_escalation_count = self._config.get(
+                "user_protection", "max_escalation_count", 5
+            )
+            return
+        self._config_data.default_duration = safety_float("user_protection", "default_duration", 300.0)
+        self._config_data.max_duration = safety_float("user_protection", "max_duration", 3600.0)
+        self._config_data.auto_protect_threshold = safety_float("user_protection", "auto_protect_threshold", -80.0)
+        self._config_data.harassment_protect_duration = safety_float("user_protection", "harassment_protect_duration", 600.0)
+        self._config_data.harassment_severity_threshold = safety_float("user_protection", "harassment_severity_threshold", 0.8)
+        self._config_data.cooldown_after_expire = safety_float("user_protection", "cooldown_after_expire", 60.0)
+        self._config_data.max_severity_history = safety_int("user_protection", "max_severity_history", 10)
+        self._config_data.escalation_factor = safety_float("user_protection", "escalation_factor", 1.5)
+        self._config_data.max_escalation_count = safety_int("user_protection", "max_escalation_count", 5)
 
     def set_dependencies(
         self,
@@ -125,9 +134,7 @@ class UserProtectionManager:
     ) -> None:
         """设置依赖"""
         self._social_calculator = social_calculator
-        self._config = (
-            config_engine or self._config or get_default_config_engine()
-        )
+        self._config = config_engine if config_engine is not None else self._config
         self._load_config()
 
     def _get_key(self, user_id: str, channel_id: str) -> str:

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from src.common.logger import get_logger  # noqa: E402
+from src.modules.safety.runtime_config import safety_bool, safety_float, safety_int, safety_module_view
 
 try:
     from src.common.config.config_engine import (
@@ -145,7 +146,7 @@ class InjectionSentinel:
         prompt_manager: Optional[PromptManager] = None,
         model_interface: Optional[ModelInterface] = None,
     ):
-        self._config_engine = config_engine or get_default_config_engine()
+        self._config_engine = config_engine
         self._prompt_mgr = prompt_manager
         self._model = model_interface or DefaultModelInterface(
             self._config_engine
@@ -159,27 +160,38 @@ class InjectionSentinel:
 
     def _load_config(self) -> None:
         """从配置加载参数"""
-        self._config_data.cache_enabled = self._config_engine.get(
-            "injection_detection", "cache_enabled", True
-        )
-        self._config_data.cache_ttl_seconds = self._config_engine.get(
-            "injection_detection", "cache_ttl_seconds", 3600.0
-        )
-        self._config_data.cache_max_entries = self._config_engine.get(
-            "injection_detection", "cache_max_entries", 500
-        )
-        self._config_data.max_content_length = self._config_engine.get(
-            "injection_detection", "max_content_length", 4096
-        )
-        self._config_data.enabled = self._config_engine.get(
-            "injection_detection", "enabled", True
-        )
-        self._config_data.quick_screen_enabled = self._config_engine.get(
-            "injection_detection", "quick_screen_enabled", True
-        )
-        self._config_data.whitelisted_senders = self._config_engine.get(
-            "injection_detection", "whitelisted_senders", []
-        )
+        if self._config_engine is not None:
+            self._config_data.cache_enabled = self._config_engine.get(
+                "injection_detection", "cache_enabled", True
+            )
+            self._config_data.cache_ttl_seconds = self._config_engine.get(
+                "injection_detection", "cache_ttl_seconds", 3600.0
+            )
+            self._config_data.cache_max_entries = self._config_engine.get(
+                "injection_detection", "cache_max_entries", 500
+            )
+            self._config_data.max_content_length = self._config_engine.get(
+                "injection_detection", "max_content_length", 4096
+            )
+            self._config_data.enabled = self._config_engine.get(
+                "injection_detection", "enabled", True
+            )
+            self._config_data.quick_screen_enabled = self._config_engine.get(
+                "injection_detection", "quick_screen_enabled", True
+            )
+            self._config_data.whitelisted_senders = self._config_engine.get(
+                "injection_detection", "whitelisted_senders", []
+            )
+            return
+        view = safety_module_view("injection_detection")
+        self._config_data.cache_enabled = safety_bool("injection_detection", "cache_enabled", True)
+        self._config_data.cache_ttl_seconds = safety_float("injection_detection", "cache_ttl_seconds", 3600.0)
+        self._config_data.cache_max_entries = safety_int("injection_detection", "cache_max_entries", 500)
+        self._config_data.max_content_length = safety_int("injection_detection", "max_content_length", 4096)
+        self._config_data.enabled = safety_bool("injection_detection", "enabled", True)
+        self._config_data.quick_screen_enabled = safety_bool("injection_detection", "quick_screen_enabled", True)
+        raw_whitelist = view.get("whitelisted_senders", [])
+        self._config_data.whitelisted_senders = raw_whitelist if isinstance(raw_whitelist, list) else []
 
     def set_model_interface(self, model: ModelInterface) -> None:
         """设置模型接口"""

@@ -11,10 +11,10 @@
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Tuple, Optional, Callable
+from typing import Any, Dict, List, Tuple, Optional
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
+from src.modules.safety.runtime_config import safety_bool, safety_float, safety_int, safety_module_view
 
 logger = get_logger("骚扰检测")
 
@@ -99,15 +99,20 @@ class DefaultModelAnalyzer(ModelAnalyzerInterface):
     """默认模型分析器（基于规则的简单实现）"""
 
     def __init__(self, config_engine=None):
-        self._config = config_engine or get_default_config_engine()
+        self._config = config_engine
         self._harassment_keywords = self._load_harassment_keywords()
         self._negative_sentiment_words = self._load_negative_words()
 
     def _load_harassment_keywords(self) -> Dict[str, float]:
         """加载骚扰关键词及权重"""
-        keywords = self._config.get("harassment_keywords", "words", {})
-        if keywords:
-            return keywords
+        if self._config is not None:
+            keywords = self._config.get("harassment_keywords", "words", {})
+            if keywords:
+                return keywords
+        else:
+            keywords = safety_module_view("harassment_detection").get("harassment_keywords", {})
+            if isinstance(keywords, dict) and keywords:
+                return {str(k): float(v) for k, v in keywords.items()}
         return {
             "傻逼": 0.8,
             "傻": 0.3,
@@ -128,9 +133,14 @@ class DefaultModelAnalyzer(ModelAnalyzerInterface):
 
     def _load_negative_words(self) -> List[str]:
         """加载负面情感词"""
-        words = self._config.get("sentiment_words", "negative", [])
-        if words:
-            return words
+        if self._config is not None:
+            words = self._config.get("sentiment_words", "negative", [])
+            if words:
+                return words
+        else:
+            words = safety_module_view("harassment_detection").get("negative_sentiment_words", [])
+            if isinstance(words, list) and words:
+                return [str(word) for word in words]
         return [
             "不爽",
             "生气",
@@ -296,7 +306,7 @@ class HarassmentDetector:
         config_engine=None,
         model_analyzer: Optional[ModelAnalyzerInterface] = None,
     ):
-        self._config = config_engine or get_default_config_engine()
+        self._config = config_engine
         self._model = model_analyzer or DefaultModelAnalyzer(self._config)
         self._cum_windows: Dict[str, CumulativeWindow] = {}
         self._config_data = HarassmentConfig()
@@ -306,51 +316,68 @@ class HarassmentDetector:
 
     def _load_config(self) -> None:
         """从配置加载所有阈值"""
-        self._config_data.weight_harassment = self._config.get(
-            "harassment_detector", "weight_harassment", 0.65
-        )
-        self._config_data.weight_sentiment = self._config.get(
-            "harassment_detector", "weight_sentiment", 0.35
-        )
-        self._config_data.block_threshold = self._config.get(
-            "harassment_detector", "block_threshold", 0.72
-        )
-        self._config_data.warn_threshold = self._config.get(
-            "harassment_detector", "warn_threshold", 0.42
-        )
-        self._config_data.window_seconds = self._config.get(
-            "harassment_detector", "window_seconds", 300.0
-        )
-        self._config_data.cumulative_block_threshold = self._config.get(
-            "harassment_detector", "cumulative_block_threshold", 5.0
-        )
-        self._config_data.cumulative_warn_ratio = self._config.get(
-            "harassment_detector", "cumulative_warn_ratio", 0.55
-        )
-        self._config_data.cumulative_high_threshold = self._config.get(
-            "harassment_detector", "cumulative_high_threshold", 10.0
-        )
-        self._config_data.combined_high_threshold = self._config.get(
-            "harassment_detector", "combined_high_threshold", 0.9
-        )
-        self._config_data.cumulative_mid_threshold = self._config.get(
-            "harassment_detector", "cumulative_mid_threshold", 5.0
-        )
-        self._config_data.combined_mid_threshold = self._config.get(
-            "harassment_detector", "combined_mid_threshold", 0.55
-        )
-        self._config_data.block_duration_high = self._config.get(
-            "harassment_detector", "block_duration_high", 120
-        )
-        self._config_data.block_duration_mid = self._config.get(
-            "harassment_detector", "block_duration_mid", 60
-        )
-        self._config_data.block_duration_low = self._config.get(
-            "harassment_detector", "block_duration_low", 30
-        )
-        self._config_data.enabled = self._config.get(
-            "harassment_detector", "enabled", True
-        )
+        if self._config is not None:
+            self._config_data.weight_harassment = self._config.get(
+                "harassment_detector", "weight_harassment", 0.65
+            )
+            self._config_data.weight_sentiment = self._config.get(
+                "harassment_detector", "weight_sentiment", 0.35
+            )
+            self._config_data.block_threshold = self._config.get(
+                "harassment_detector", "block_threshold", 0.72
+            )
+            self._config_data.warn_threshold = self._config.get(
+                "harassment_detector", "warn_threshold", 0.42
+            )
+            self._config_data.window_seconds = self._config.get(
+                "harassment_detector", "window_seconds", 300.0
+            )
+            self._config_data.cumulative_block_threshold = self._config.get(
+                "harassment_detector", "cumulative_block_threshold", 5.0
+            )
+            self._config_data.cumulative_warn_ratio = self._config.get(
+                "harassment_detector", "cumulative_warn_ratio", 0.55
+            )
+            self._config_data.cumulative_high_threshold = self._config.get(
+                "harassment_detector", "cumulative_high_threshold", 10.0
+            )
+            self._config_data.combined_high_threshold = self._config.get(
+                "harassment_detector", "combined_high_threshold", 0.9
+            )
+            self._config_data.cumulative_mid_threshold = self._config.get(
+                "harassment_detector", "cumulative_mid_threshold", 5.0
+            )
+            self._config_data.combined_mid_threshold = self._config.get(
+                "harassment_detector", "combined_mid_threshold", 0.55
+            )
+            self._config_data.block_duration_high = self._config.get(
+                "harassment_detector", "block_duration_high", 120
+            )
+            self._config_data.block_duration_mid = self._config.get(
+                "harassment_detector", "block_duration_mid", 60
+            )
+            self._config_data.block_duration_low = self._config.get(
+                "harassment_detector", "block_duration_low", 30
+            )
+            self._config_data.enabled = self._config.get(
+                "harassment_detector", "enabled", True
+            )
+            return
+        self._config_data.weight_harassment = safety_float("harassment_detection", "weight_harassment", 0.65)
+        self._config_data.weight_sentiment = safety_float("harassment_detection", "weight_sentiment", 0.35)
+        self._config_data.block_threshold = safety_float("harassment_detection", "block_threshold", 0.72)
+        self._config_data.warn_threshold = safety_float("harassment_detection", "warn_threshold", 0.42)
+        self._config_data.window_seconds = safety_float("harassment_detection", "window_seconds", 300.0)
+        self._config_data.cumulative_block_threshold = safety_float("harassment_detection", "cumulative_block_threshold", 5.0)
+        self._config_data.cumulative_warn_ratio = safety_float("harassment_detection", "cumulative_warn_ratio", 0.55)
+        self._config_data.cumulative_high_threshold = safety_float("harassment_detection", "cumulative_high_threshold", 10.0)
+        self._config_data.combined_high_threshold = safety_float("harassment_detection", "combined_high_threshold", 0.9)
+        self._config_data.cumulative_mid_threshold = safety_float("harassment_detection", "cumulative_mid_threshold", 5.0)
+        self._config_data.combined_mid_threshold = safety_float("harassment_detection", "combined_mid_threshold", 0.55)
+        self._config_data.block_duration_high = safety_int("harassment_detection", "block_duration_high", 120)
+        self._config_data.block_duration_mid = safety_int("harassment_detection", "block_duration_mid", 60)
+        self._config_data.block_duration_low = safety_int("harassment_detection", "block_duration_low", 30)
+        self._config_data.enabled = safety_bool("harassment_detection", "enabled", True)
 
     def set_model_analyzer(self, analyzer: ModelAnalyzerInterface) -> None:
         """设置模型分析器"""
