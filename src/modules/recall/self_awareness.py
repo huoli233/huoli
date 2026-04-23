@@ -2,8 +2,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.recall.runtime_config import recall_module_view
 
 logger = get_logger("自我觉察")
 
@@ -60,31 +60,23 @@ class SelfAwareness:
     - 决策由模型完成
     """
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
-
+    def __init__(self):
         self._sent_messages: Dict[str, SentMessage] = {}
         self._stream_history: Dict[str, List[str]] = {}
         self._my_actions: Dict[str, List[ActionRecord]] = {}
         self._user_events: Dict[str, List[UserEvent]] = {}
-
-        self._max_history = 100
-        self._decay_seconds = 120.0
-        self._half_life_seconds = 300.0
 
         self._load_config()
         logger.info("自我意识模块初始化完成")
 
     def _load_config(self):
         """从配置加载参数"""
-        self._max_history = self._config.get(
-            "self_awareness", "max_history", 100
-        )
-        self._decay_seconds = self._config.get(
-            "self_awareness", "decay_seconds", 120.0
-        )
-        self._half_life_seconds = self._config.get(
-            "self_awareness", "half_life_seconds", 300.0
+        config = recall_module_view("recall_self_awareness")
+        self._max_history = int(config.get("max_history", 100))
+        self._decay_seconds = float(config.get("decay_seconds", 120.0))
+        self._half_life_seconds = float(config.get("half_life_seconds", 300.0))
+        self._default_cleanup_max_age_seconds = float(
+            config.get("default_cleanup_max_age_seconds", 3600.0)
         )
 
     def record_message(
@@ -334,8 +326,13 @@ class SelfAwareness:
             "event_breakdown": event_types,
         }
 
-    def cleanup_expired(self, max_age_seconds: float = 3600.0) -> int:
+    def cleanup_expired(self, max_age_seconds: Optional[float] = None) -> int:
         """清理过期记录"""
+        max_age_seconds = (
+            self._default_cleanup_max_age_seconds
+            if max_age_seconds is None
+            else max_age_seconds
+        )
         now = time.time()
         cutoff = now - max_age_seconds
         cleaned = 0
@@ -400,12 +397,11 @@ _self_awareness: Optional[SelfAwareness] = None
 
 
 def get_self_awareness(
-    config_engine: Optional[ConfigEngine] = None,
 ) -> SelfAwareness:
     """获取自我意识模块单例"""
     global _self_awareness
 
     if _self_awareness is None:
-        _self_awareness = SelfAwareness(config_engine)
+        _self_awareness = SelfAwareness()
 
     return _self_awareness

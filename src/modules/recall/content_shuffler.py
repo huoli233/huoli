@@ -1,10 +1,10 @@
 import json
 import random
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
+from src.modules.recall.runtime_config import recall_dict, recall_module_view
 
 logger = get_logger("content_shuffler")
 
@@ -41,29 +41,35 @@ class DefaultPromptManager(PromptManagerInterface):
 class ContentShuffler:
     def __init__(
         self,
-        config_engine=None,
         prompt_manager: Optional[PromptManagerInterface] = None,
         model_client: Optional[ModelInterface] = None,
     ):
-        self._config = config_engine or get_default_config_engine()
         self._prompts = prompt_manager or DefaultPromptManager()
         self._model = model_client or DefaultModelInterface()
-        self._shuffle_probability: float = 0.15
-        self._max_shuffle_length: int = 100
-        self._shuffle_types: List[str] = [
-            "typo",
-            "wrong_word",
-            "tone_shift",
-            "incomplete",
-        ]
         self._load_config()
 
     def _load_config(self) -> None:
+        config = recall_module_view("recall_shuffle")
         self._shuffle_probability = float(
-            self._config.get("content_shuffle", "probability", 0.15)
+            config.get("probability", 0.15)
         )
-        self._max_shuffle_length = int(
-            self._config.get("content_shuffle", "max_length", 100)
+        self._max_shuffle_length = int(config.get("max_length", 100))
+        self._prompt_key = str(config.get("prompt_key", "content_shuffle"))
+        self._shuffle_types = list(
+            config.get(
+                "shuffle_types",
+                ["typo", "wrong_word", "tone_shift", "incomplete"],
+            )
+        )
+        self._wrong_word_map = recall_dict(
+            "recall_shuffle",
+            "wrong_word_map",
+            {
+                "好": "坏",
+                "对": "错",
+                "是": "不是",
+                "喜欢": "讨厌",
+            },
         )
 
     def set_model_client(self, client: ModelInterface) -> None:
@@ -95,7 +101,18 @@ class ContentShuffler:
         context_str = json.dumps(
             context or {}, ensure_ascii=False, default=str
         )[:300]
-        return f"生成说错话效果:\n\n原始内容: {text}\n上下文: {context_str}\n\n返回JSON: shuffled_content, shuffle_type, confidence, reasoning"
+        try:
+            rendered = self._prompts.get(
+                self._prompt_key, text=text, context=context_str
+            )
+            if rendered:
+                return rendered
+        except Exception as exc:
+            logger.debug("[内容混淆] 提示词加载失败: %s", exc)
+        return (
+            f"生成说错话效果:\n\n原始内容: {text}\n上下文: {context_str}\n\n"
+            "返回JSON: shuffled_content, shuffle_type, confidence, reasoning"
+        )
 
     def _parse_response(
         self, raw_response: str, original: str
@@ -137,13 +154,7 @@ class ContentShuffler:
             chars[idx], chars[idx + 1] = chars[idx + 1], chars[idx]
             return "".join(chars)
         elif shuffle_type == "wrong_word":
-            wrong_words = {
-                "好": "坏",
-                "对": "错",
-                "是": "不是",
-                "喜欢": "讨厌",
-            }
-            for k, v in wrong_words.items():
+            for k, v in self._wrong_word_map.items():
                 if k in text:
                     return text.replace(k, v, 1)
         elif shuffle_type == "incomplete":
@@ -170,14 +181,12 @@ _content_shuffler: Optional[ContentShuffler] = None
 
 
 def get_content_shuffler(
-    config_engine=None,
     prompt_manager: Optional[PromptManagerInterface] = None,
     model_client: Optional[ModelInterface] = None,
 ) -> ContentShuffler:
     global _content_shuffler
     if _content_shuffler is None:
         _content_shuffler = ContentShuffler(
-            config_engine=config_engine,
             prompt_manager=prompt_manager,
             model_client=model_client,
         )

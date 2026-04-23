@@ -1,11 +1,10 @@
 import time
-import asyncio
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
 from src.common.task_utils import safe_create_task
+from src.modules.recall.runtime_config import recall_module_view
 
 logger = get_logger("行为学习")
 
@@ -42,22 +41,15 @@ class SelfBehaviorLearner:
 
     def __init__(
         self,
-        config_engine: Optional[ConfigEngine] = None,
         model_client: Any = None,
         prompt_manager: Any = None,
         self_awareness: Any = None,
         memory_core: Any = None,
     ):
-        self._config = config_engine or ConfigEngine.get_instance()
         self._model = model_client
         self._prompts = prompt_manager
         self._self_awareness = self_awareness
         self._memory_core = memory_core
-
-        self._enabled = True
-        self._min_samples = 3
-        self._cooldown_seconds = 90.0
-        self._max_patterns_per_stream = 20
         self._quick_learn_buffer: Dict[str, List[Dict[str, Any]]] = {}
 
         self._last_learn_ts_by_stream: Dict[str, float] = {}
@@ -68,23 +60,45 @@ class SelfBehaviorLearner:
 
     def _load_config(self) -> None:
         """从配置加载参数"""
-        self._enabled = self._config.get(
-            "self_behavior_learning", "enabled", True
-        )
+        config = recall_module_view("recall_self_behavior")
+        self._enabled = bool(config.get("enabled", True))
         self._min_samples = max(
-            2, self._config.get("self_behavior_learning", "min_samples", 3)
+            2, int(config.get("min_samples", 3))
         )
         self._cooldown_seconds = max(
             30.0,
-            self._config.get(
-                "self_behavior_learning", "cooldown_seconds", 90.0
-            ),
+            float(config.get("cooldown_seconds", 90.0)),
         )
         self._max_patterns_per_stream = max(
             5,
-            self._config.get(
-                "self_behavior_learning", "max_patterns_per_stream", 20
-            ),
+            int(config.get("max_patterns_per_stream", 20)),
+        )
+        self._model_task = str(
+            config.get("model_task", "self_behavior_learn")
+        )
+        self._default_action_type = str(
+            config.get("default_action_type", "send_reply")
+        )
+        self._default_style_hint = str(
+            config.get("default_style_hint", "保持简洁、自然、贴近上下文")
+        )
+        self._style_hint_chars = int(config.get("style_hint_chars", 60))
+        self._confidence_floor = float(config.get("confidence_floor", 0.35))
+        self._confidence_ceiling = float(
+            config.get("confidence_ceiling", 0.95)
+        )
+        self._precipitate_confidence_threshold = float(
+            config.get("precipitate_confidence_threshold", 0.5)
+        )
+        self._precipitate_style_min_chars = int(
+            config.get("precipitate_style_min_chars", 4)
+        )
+        self._quick_learn_soft_limit = int(
+            config.get("quick_learn_soft_limit", 15)
+        )
+        self._quick_learn_keep = int(config.get("quick_learn_keep", 8))
+        self._quick_learn_trigger_count = int(
+            config.get("quick_learn_trigger_count", 3)
         )
 
     def bind_memory_core(self, memory_core: Any) -> None:
@@ -247,7 +261,7 @@ class SelfBehaviorLearner:
 
                 if hasattr(self._model, "generate_raw"):
                     raw = await self._model.generate_raw(
-                        "self_behavior_learn",
+                        self._model_task,
                         stream_id=stream_id,
                         actions=str(payload),
                     )
@@ -277,7 +291,9 @@ class SelfBehaviorLearner:
             return LearnedPattern(
                 stream_id=str(data.get("stream_id", "")),
                 relation_stage=str(data.get("relation_stage", "unknown")),
-                action_type=str(data.get("action_type", "send_reply")),
+                action_type=str(
+                    data.get("action_type", self._default_action_type)
+                ),
                 style_hint=str(data.get("style_hint", "")),
                 confidence=float(data.get("confidence", 0.5)),
                 sample_count=int(data.get("sample_count", 0)),
@@ -322,7 +338,7 @@ class SelfBehaviorLearner:
         top_action = (
             max(action_counter.items(), key=lambda x: x[1])[0]
             if action_counter
-            else "send_reply"
+            else self._default_action_type
         )
 
         examples = [
@@ -331,11 +347,17 @@ class SelfBehaviorLearner:
             if getattr(a, "content", "").strip()
         ]
         style_hint = (
-            examples[-1][:60] if examples else "保持简洁、自然、贴近上下文"
+            examples[-1][: self._style_hint_chars]
+            if examples
+            else self._default_style_hint
         )
 
         confidence = min(
-            0.95, max(0.35, len(base) / max(float(self._min_samples), 1.0))
+            self._confidence_ceiling,
+            max(
+                self._confidence_floor,
+                len(base) / max(float(self._min_samples), 1.0),
+            ),
         )
         return LearnedPattern(
             stream_id=stream_id,
@@ -371,9 +393,13 @@ class SelfBehaviorLearner:
         让 StylePicker 能在后续的风格选择中发现并使用这些模式。
         只沉淀置信度>0.5的模式，避免低质量污染。
         """
-        if pattern.confidence < 0.5:
+        if pattern.confidence < self._precipitate_confidence_threshold:
             return
-        if not pattern.style_hint or len(pattern.style_hint.strip()) < 4:
+        if (
+            not pattern.style_hint
+            or len(pattern.style_hint.strip())
+            < self._precipitate_style_min_chars
+        ):
             return
         try:
             from src.common.database.database_model import Expression
@@ -427,9 +453,9 @@ class SelfBehaviorLearner:
             "context": context_summary[:80],
             "ts": time.time(),
         })
-        if len(buf) > 15:
-            self._quick_learn_buffer[stream_id] = buf[-8:]
-        if len(buf) >= 3 and self._should_trigger_learning(stream_id, time.time()):
+        if len(buf) > self._quick_learn_soft_limit:
+            self._quick_learn_buffer[stream_id] = buf[-self._quick_learn_keep:]
+        if len(buf) >= self._quick_learn_trigger_count and self._should_trigger_learning(stream_id, time.time()):
             safe_create_task(self.capture_event(
                 stream_id=stream_id,
                 action_type="reply",
@@ -461,7 +487,6 @@ _self_behavior_learner_instance: Optional[SelfBehaviorLearner] = None
 
 
 def get_self_behavior_learner(
-    config_engine: Optional[ConfigEngine] = None,
     model_client: Any = None,
     prompt_manager: Any = None,
     self_awareness: Any = None,
@@ -471,7 +496,6 @@ def get_self_behavior_learner(
     global _self_behavior_learner_instance
     if _self_behavior_learner_instance is None:
         _self_behavior_learner_instance = SelfBehaviorLearner(
-            config_engine,
             model_client,
             prompt_manager,
             self_awareness,

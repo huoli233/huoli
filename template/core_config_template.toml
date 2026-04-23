@@ -1132,6 +1132,111 @@ belief_patterns = [
     { belief = "未来有希望", triggers = ["绝望", "没希望", "完蛋"] },
 ]
 
+[profile_mapping.semantic_domains.recall_post_send]
+min_delay_seconds = 5.0
+max_delay_seconds = 110.0
+analysis_interval_seconds = 3.0
+prompt_key = "recall_decision"
+model_task = "recall_decision"
+rule_recent_recall_limit = 3
+rule_elapsed_limit_seconds = 60.0
+cleanup_expire_multiplier = 2.0
+default_recall_reason = "typo"
+default_after_action = "correct"
+default_confidence = 0.5
+psychology_surface_threshold = 6.0
+psychology_chaos_threshold = 6.5
+psychology_trauma_threshold = 5.0
+psychology_delay_seconds = 5.0
+psychology_reason = "regret"
+psychology_after_action = "correct"
+psychology_confidence = 0.72
+
+[profile_mapping.semantic_domains.recall_typo]
+prompt_key = "typo_decision"
+max_typo_length = 50
+probability = 0.05
+generation_task = "typo_generation"
+random_confidence = 0.3
+random_reasoning = "随机打错字"
+skip_reasoning = "随机检查通过"
+extra_chars = "的了啊呢吧"
+
+[profile_mapping.semantic_domains.recall_typo.wrong_char_map]
+"的" = "地"
+"地" = "的"
+"了" = "乐"
+"是" = "事"
+"在" = "再"
+"再" = "在"
+"有" = "又"
+"我" = "卧"
+
+[profile_mapping.semantic_domains.recall_self_behavior]
+enabled = true
+min_samples = 3
+cooldown_seconds = 90.0
+max_patterns_per_stream = 20
+model_task = "self_behavior_learn"
+default_action_type = "send_reply"
+default_style_hint = "保持简洁、自然、贴近上下文"
+style_hint_chars = 60
+confidence_floor = 0.35
+confidence_ceiling = 0.95
+precipitate_confidence_threshold = 0.5
+precipitate_style_min_chars = 4
+quick_learn_soft_limit = 15
+quick_learn_keep = 8
+quick_learn_trigger_count = 3
+
+[profile_mapping.semantic_domains.recall_self_awareness]
+max_history = 100
+decay_seconds = 120.0
+half_life_seconds = 300.0
+default_cleanup_max_age_seconds = 3600.0
+
+[profile_mapping.semantic_domains.recall_dimension]
+happy_social_threshold = 50.0
+good_social_threshold = 20.0
+calm_social_threshold = 0.0
+annoyed_social_threshold = -20.0
+active_atmosphere_threshold = 70.0
+normal_atmosphere_threshold = 40.0
+importance_short_chars = 10
+importance_medium_chars = 50
+importance_short_score = 0.3
+importance_medium_score = 0.5
+importance_long_score = 0.7
+question_importance_floor = 0.7
+serious_importance = 0.9
+sensitive_score = 0.8
+typo_window_seconds = 3600.0
+recall_window_seconds = 3600.0
+typo_limit_per_window = 3
+default_main_personality = "自然、克制、口语化"
+serious_keywords = ["工作", "学习", "帮助", "问题", "错误", "bug", "重要"]
+sensitive_keywords = ["密码", "账号", "隐私", "秘密"]
+negative_reaction_keywords = ["错", "不对", "不是", "什么", "？", "?", "啊", "哈"]
+positive_reaction_keywords = ["好", "对", "嗯", "哦", "行"]
+
+[profile_mapping.semantic_domains.recall_correction]
+history_limit = 12
+timeout_seconds = 150.0
+prompt_key = "correction_detection"
+model_task = "correction_detection"
+
+[profile_mapping.semantic_domains.recall_shuffle]
+probability = 0.15
+max_length = 100
+prompt_key = "content_shuffle"
+shuffle_types = ["typo", "wrong_word", "tone_shift", "incomplete"]
+
+[profile_mapping.semantic_domains.recall_shuffle.wrong_word_map]
+"好" = "坏"
+"对" = "错"
+"是" = "不是"
+"喜欢" = "讨厌"
+
 [profile_mapping.semantic_domains.heartflow_runtime]
 focus_channels = []
 initiative_interval_sec = 300.0
@@ -1350,3 +1455,38 @@ profile_name = "trauma_triggers_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["trauma_worldview"]
 profile_name = "trauma_worldview_view"
+
+[profile_mapping.module_views.recall_post_send]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["recall_post_send"]
+profile_name = "recall_post_send_view"
+
+[profile_mapping.module_views.recall_typo]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["recall_typo"]
+profile_name = "recall_typo_view"
+
+[profile_mapping.module_views.recall_self_behavior]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["recall_self_behavior"]
+profile_name = "recall_self_behavior_view"
+
+[profile_mapping.module_views.recall_self_awareness]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["recall_self_awareness"]
+profile_name = "recall_self_awareness_view"
+
+[profile_mapping.module_views.recall_dimension]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["recall_dimension"]
+profile_name = "recall_dimension_view"
+
+[profile_mapping.module_views.recall_correction]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["recall_correction"]
+profile_name = "recall_correction_view"
+
+[profile_mapping.module_views.recall_shuffle]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["recall_shuffle"]
+profile_name = "recall_shuffle_view"

@@ -2,15 +2,16 @@ import asyncio
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Awaitable
+from typing import Any, Callable, Dict, Optional, Awaitable
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
 from src.common.task_utils import safe_create_task
 from src.modules.recall.dimension_collector import (
     DimensionFactors,
     DimensionCollector,
+    get_dimension_collector,
 )
+from src.modules.recall.runtime_config import recall_module_view
 
 logger = get_logger("发送后分析")
 
@@ -88,25 +89,16 @@ class PostSendAnalyzer:
 
     def __init__(
         self,
-        config_engine: Optional[ConfigEngine] = None,
         model_client: Any = None,
         prompt_manager: Any = None,
         dimension_collector: Optional[DimensionCollector] = None,
     ):
-        self._config = config_engine or ConfigEngine.get_instance()
         self._model = model_client
         self._prompts = prompt_manager
-        self._dimensions = dimension_collector or DimensionCollector(
-            self._config
-        )
+        self._dimensions = dimension_collector or get_dimension_collector()
 
         self._pending: Dict[str, PendingRecall] = {}
         self._background_tasks: set = set()
-
-        self._min_delay = 5.0
-        self._max_delay = 110.0
-        self._analysis_interval = 3.0
-        self._prompt_key = "recall_decision"
 
         self._load_config()
         logger.info(
@@ -115,12 +107,52 @@ class PostSendAnalyzer:
 
     def _load_config(self):
         """从配置加载参数"""
-        self._min_delay = self._config.get("recall", "min_delay_seconds", 5.0)
-        self._max_delay = self._config.get(
-            "recall", "max_delay_seconds", 110.0
+        config = recall_module_view("recall_post_send")
+        self._min_delay = float(config.get("min_delay_seconds", 5.0))
+        self._max_delay = float(config.get("max_delay_seconds", 110.0))
+        self._analysis_interval = float(
+            config.get("analysis_interval_seconds", 3.0)
         )
-        self._analysis_interval = self._config.get(
-            "recall", "analysis_interval_seconds", 3.0
+        self._prompt_key = str(config.get("prompt_key", "recall_decision"))
+        self._model_task = str(config.get("model_task", "recall_decision"))
+        self._rule_recent_recall_limit = int(
+            config.get("rule_recent_recall_limit", 3)
+        )
+        self._rule_elapsed_limit_seconds = float(
+            config.get("rule_elapsed_limit_seconds", 60.0)
+        )
+        self._cleanup_expire_multiplier = float(
+            config.get("cleanup_expire_multiplier", 2.0)
+        )
+        self._default_recall_reason = str(
+            config.get("default_recall_reason", "typo")
+        )
+        self._default_after_action = str(
+            config.get("default_after_action", "correct")
+        )
+        self._default_confidence = float(
+            config.get("default_confidence", 0.5)
+        )
+        self._psychology_surface_threshold = float(
+            config.get("psychology_surface_threshold", 6.0)
+        )
+        self._psychology_chaos_threshold = float(
+            config.get("psychology_chaos_threshold", 6.5)
+        )
+        self._psychology_trauma_threshold = float(
+            config.get("psychology_trauma_threshold", 5.0)
+        )
+        self._psychology_delay_seconds = float(
+            config.get("psychology_delay_seconds", 5.0)
+        )
+        self._psychology_reason = str(
+            config.get("psychology_reason", "regret")
+        )
+        self._psychology_after_action = str(
+            config.get("psychology_after_action", "correct")
+        )
+        self._psychology_confidence = float(
+            config.get("psychology_confidence", 0.72)
         )
 
     async def start_analysis(
@@ -208,7 +240,7 @@ class PostSendAnalyzer:
             if hasattr(self._model, "analyze"):
                 response = await self._model.analyze(
                     {
-                        "task": "recall_decision",
+                        "task": self._model_task,
                         "content": pending.sent_content,
                         "context": dimensions.to_dict(),
                         "prompt": prompt,
@@ -229,17 +261,58 @@ class PostSendAnalyzer:
         self, dimensions: DimensionFactors, elapsed: float
     ) -> RecallDecision:
         """基于规则的决策（降级方案）"""
-        if dimensions.recent_recall_count >= 3:
+        if dimensions.recent_recall_count >= self._rule_recent_recall_limit:
             return RecallDecision(
                 should_recall=False, reasoning="最近撤回次数过多"
             )
 
-        if elapsed > 60:
+        if elapsed > self._rule_elapsed_limit_seconds:
             return RecallDecision(
                 should_recall=False, reasoning="已过撤回窗口"
             )
 
         return RecallDecision(should_recall=False, reasoning="规则检查通过")
+
+    def analyze_recall_need(
+        self,
+        surface_mask: float = 10.0,
+        inner_chaos: float = 0.0,
+        trauma_score: float = 0.0,
+    ) -> RecallDecision:
+        """基于心理状态做快速撤回预判，供高频链路同步使用。"""
+        if (
+            surface_mask > self._psychology_surface_threshold
+            and inner_chaos < self._psychology_chaos_threshold
+            and trauma_score < self._psychology_trauma_threshold
+        ):
+            return RecallDecision(
+                should_recall=False,
+                reasoning="心理压力未达到召回阈值",
+            )
+
+        try:
+            reason = RecallReason(self._psychology_reason)
+        except ValueError:
+            reason = RecallReason.REGRET
+        try:
+            after_action = AfterRecallAction(self._psychology_after_action)
+        except ValueError:
+            after_action = AfterRecallAction.CORRECT
+
+        delay = max(
+            self._min_delay, min(self._max_delay, self._psychology_delay_seconds)
+        )
+        return RecallDecision(
+            should_recall=True,
+            recall_reason=reason,
+            delay_seconds=delay,
+            after_action=after_action,
+            confidence=self._psychology_confidence,
+            reasoning=(
+                f"surface={surface_mask:.1f}, chaos={inner_chaos:.1f}, "
+                f"trauma={trauma_score:.1f}"
+            ),
+        )
 
     def _build_prompt(
         self,
@@ -324,8 +397,13 @@ class PostSendAnalyzer:
                 recall_reason = RecallReason(recall_reason_str)
             except ValueError:
                 recall_reason = RecallReason.TYPO
+        else:
+            try:
+                recall_reason = RecallReason(self._default_recall_reason)
+            except ValueError:
+                recall_reason = RecallReason.TYPO
 
-        after_action_str = data.get("after_action", "correct")
+        after_action_str = data.get("after_action", self._default_after_action)
         try:
             after_action = AfterRecallAction(after_action_str)
         except ValueError:
@@ -339,7 +417,7 @@ class PostSendAnalyzer:
             recall_reason=recall_reason,
             delay_seconds=delay,
             after_action=after_action,
-            confidence=float(data.get("confidence", 0.5)),
+            confidence=float(data.get("confidence", self._default_confidence)),
             reasoning=data.get("reasoning", ""),
         )
 
@@ -366,6 +444,52 @@ class PostSendAnalyzer:
 
         return decision if decision.should_recall else None
 
+    def _resolve_resend_content(self, pending: PendingRecall) -> str:
+        decision = pending.recall_decision
+        if decision and decision.after_action == AfterRecallAction.SILENT:
+            return ""
+        return pending.original_content or ""
+
+    async def schedule_recall(
+        self,
+        msg_id: str,
+        channel_id: str,
+        stream_id: str,
+        sent_content: str,
+        original_content: str = "",
+        delete_func: Optional[Callable[[str], Awaitable[bool]]] = None,
+        send_func: Optional[Callable[[str, str], Awaitable[str]]] = None,
+        user_id: str = "",
+    ) -> PendingRecall:
+        """创建一条待分析撤回任务，并在触发时执行删除/补发。"""
+        pending = PendingRecall(
+            msg_id=msg_id,
+            stream_id=stream_id,
+            channel_id=channel_id,
+            user_id=user_id,
+            sent_content=sent_content,
+            original_content=original_content,
+            scheduled_at=time.time(),
+        )
+
+        async def _on_recall(item: PendingRecall) -> None:
+            wait_seconds = max(0.0, item.recall_at - time.time())
+            if wait_seconds > 0:
+                await asyncio.sleep(wait_seconds)
+
+            deleted = False
+            if delete_func is not None:
+                deleted = bool(await delete_func(item.msg_id))
+            item.recalled = deleted
+
+            resend_content = self._resolve_resend_content(item)
+            if deleted and resend_content and send_func is not None:
+                await send_func(channel_id, resend_content)
+
+            item.completed = True
+
+        return await self.start_analysis(pending, on_recall=_on_recall)
+
     def get_pending(self, msg_id: str) -> Optional[PendingRecall]:
         """获取待处理撤回"""
         return self._pending.get(msg_id)
@@ -386,7 +510,8 @@ class PostSendAnalyzer:
             msg_id
             for msg_id, pending in self._pending.items()
             if pending.completed
-            or (now - pending.scheduled_at) > self._max_delay * 2
+            or (now - pending.scheduled_at)
+            > self._max_delay * self._cleanup_expire_multiplier
         ]
         for msg_id in expired:
             del self._pending[msg_id]
@@ -409,7 +534,6 @@ _post_send_analyzer_instance: Optional[PostSendAnalyzer] = None
 
 
 def get_post_send_analyzer(
-    config_engine: Optional[ConfigEngine] = None,
     model_client: Any = None,
     prompt_manager: Any = None,
     dimension_collector: Optional[DimensionCollector] = None,
@@ -418,6 +542,6 @@ def get_post_send_analyzer(
     global _post_send_analyzer_instance
     if _post_send_analyzer_instance is None:
         _post_send_analyzer_instance = PostSendAnalyzer(
-            config_engine, model_client, prompt_manager, dimension_collector
+            model_client, prompt_manager, dimension_collector
         )
     return _post_send_analyzer_instance

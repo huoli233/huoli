@@ -1,10 +1,9 @@
-import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.recall.runtime_config import recall_dict, recall_module_view
 
 logger = get_logger("拼写生成")
 
@@ -48,27 +47,48 @@ class TypoGenerator:
 
     def __init__(
         self,
-        config_engine: Optional[ConfigEngine] = None,
         model_client: Any = None,
         prompt_manager: Any = None,
         dimension_collector: Any = None,
     ):
-        self._config = config_engine or ConfigEngine.get_instance()
         self._model = model_client
         self._prompts = prompt_manager
         self._dimensions = dimension_collector
-
-        self._prompt_key = "typo_decision"
-        self._max_typo_length = 50
-        self._typo_probability = 0.05
 
         self._load_config()
         logger.info("打错字生成器初始化完成")
 
     def _load_config(self):
         """从配置加载参数"""
-        self._max_typo_length = self._config.get("typo", "max_typo_length", 50)
-        self._typo_probability = self._config.get("typo", "probability", 0.05)
+        config = recall_module_view("recall_typo")
+        self._prompt_key = str(config.get("prompt_key", "typo_decision"))
+        self._max_typo_length = int(config.get("max_typo_length", 50))
+        self._typo_probability = float(config.get("probability", 0.05))
+        self._generation_task = str(
+            config.get("generation_task", "typo_generation")
+        )
+        self._random_confidence = float(config.get("random_confidence", 0.3))
+        self._random_reasoning = str(
+            config.get("random_reasoning", "随机打错字")
+        )
+        self._skip_reasoning = str(
+            config.get("skip_reasoning", "随机检查通过")
+        )
+        self._extra_chars = str(config.get("extra_chars", "的了啊呢吧"))
+        self._wrong_char_map = recall_dict(
+            "recall_typo",
+            "wrong_char_map",
+            {
+                "的": "地",
+                "地": "的",
+                "了": "乐",
+                "是": "事",
+                "在": "再",
+                "再": "在",
+                "有": "又",
+                "我": "卧",
+            },
+        )
 
     def set_dimension_collector(self, collector: Any):
         """设置维度收集器"""
@@ -173,13 +193,13 @@ class TypoGenerator:
                 typo_type=typo_type,
                 error_content=error_content,
                 original_content=original_content,
-                confidence=0.3,
-                reasoning="随机打错字",
+                confidence=self._random_confidence,
+                reasoning=self._random_reasoning,
             )
         return TypoDecision(
             should_typo=False,
             original_content=original_content,
-            reasoning="随机检查通过",
+            reasoning=self._skip_reasoning,
         )
 
     def _build_prompt(
@@ -281,7 +301,7 @@ class TypoGenerator:
             if hasattr(self._model, "analyze"):
                 response = await self._model.analyze(
                     {
-                        "task": "typo_generation",
+                        "task": self._generation_task,
                         "content": original,
                         "context": {"typo_type": typo_type.value},
                         "prompt": prompt,
@@ -326,24 +346,15 @@ class TypoGenerator:
         elif typo_type == TypoType.EXTRA_CHAR:
             import random
 
-            extra_chars = "的了啊呢吧"
             pos = random.randint(0, len(content))
-            return content[:pos] + random.choice(extra_chars) + content[pos:]
+            return (
+                content[:pos]
+                + random.choice(self._extra_chars)
+                + content[pos:]
+            )
 
         elif typo_type == TypoType.WRONG_CHAR:
-            import random
-
-            wrong_map = {
-                "的": "地",
-                "地": "的",
-                "了": "乐",
-                "是": "事",
-                "在": "再",
-                "再": "在",
-                "有": "又",
-                "我": "卧",
-            }
-            for k, v in wrong_map.items():
+            for k, v in self._wrong_char_map.items():
                 if k in content:
                     return content.replace(k, v, 1)
             return content
@@ -364,7 +375,6 @@ _typo_generator_instance: Optional[TypoGenerator] = None
 
 
 def get_typo_generator(
-    config_engine: Optional[ConfigEngine] = None,
     model_client: Any = None,
     prompt_manager: Any = None,
     dimension_collector: Any = None,
@@ -373,6 +383,6 @@ def get_typo_generator(
     global _typo_generator_instance
     if _typo_generator_instance is None:
         _typo_generator_instance = TypoGenerator(
-            config_engine, model_client, prompt_manager, dimension_collector
+            model_client, prompt_manager, dimension_collector
         )
     return _typo_generator_instance

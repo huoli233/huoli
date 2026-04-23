@@ -1,9 +1,9 @@
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.recall.runtime_config import recall_module_view
 
 logger = get_logger("dimension_collector")
 
@@ -78,11 +78,84 @@ class DimensionCollector:
     - 反应维度：用户反应、反应类型
     """
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self):
         self._typo_history: Dict[str, List[float]] = {}
         self._recall_history: Dict[str, List[float]] = {}
+        self._load_config()
         logger.info("维度收集器初始化完成")
+
+    def _load_config(self) -> None:
+        config = recall_module_view("recall_dimension")
+        self._happy_social_threshold = float(
+            config.get("happy_social_threshold", 50.0)
+        )
+        self._good_social_threshold = float(
+            config.get("good_social_threshold", 20.0)
+        )
+        self._calm_social_threshold = float(
+            config.get("calm_social_threshold", 0.0)
+        )
+        self._annoyed_social_threshold = float(
+            config.get("annoyed_social_threshold", -20.0)
+        )
+        self._active_atmosphere_threshold = float(
+            config.get("active_atmosphere_threshold", 70.0)
+        )
+        self._normal_atmosphere_threshold = float(
+            config.get("normal_atmosphere_threshold", 40.0)
+        )
+        self._importance_short_chars = int(
+            config.get("importance_short_chars", 10)
+        )
+        self._importance_medium_chars = int(
+            config.get("importance_medium_chars", 50)
+        )
+        self._importance_short_score = float(
+            config.get("importance_short_score", 0.3)
+        )
+        self._importance_medium_score = float(
+            config.get("importance_medium_score", 0.5)
+        )
+        self._importance_long_score = float(
+            config.get("importance_long_score", 0.7)
+        )
+        self._question_importance_floor = float(
+            config.get("question_importance_floor", 0.7)
+        )
+        self._serious_keywords = list(
+            config.get(
+                "serious_keywords",
+                ["工作", "学习", "帮助", "问题", "错误", "bug", "重要"],
+            )
+        )
+        self._serious_importance = float(
+            config.get("serious_importance", 0.9)
+        )
+        self._sensitive_keywords = list(
+            config.get("sensitive_keywords", ["密码", "账号", "隐私", "秘密"])
+        )
+        self._sensitive_score = float(config.get("sensitive_score", 0.8))
+        self._negative_reaction_keywords = list(
+            config.get(
+                "negative_reaction_keywords",
+                ["错", "不对", "不是", "什么", "？", "?", "啊", "哈"],
+            )
+        )
+        self._positive_reaction_keywords = list(
+            config.get("positive_reaction_keywords", ["好", "对", "嗯", "哦", "行"])
+        )
+        self._typo_window_seconds = float(
+            config.get("typo_window_seconds", 3600.0)
+        )
+        self._recall_window_seconds = float(
+            config.get("recall_window_seconds", 3600.0)
+        )
+        self._typo_limit_per_window = int(
+            config.get("typo_limit_per_window", 3)
+        )
+        self._default_main_personality = str(
+            config.get("default_main_personality", "自然、克制、口语化")
+        )
 
     async def collect(
         self,
@@ -128,7 +201,6 @@ class DimensionCollector:
 
         try:
             from src.chat.heart_flow.fondness_trust import FondnessTrustDimension
-            from src.chat.heart_flow.social_value_dim import SocialValueDimension
 
             _fuser = FondnessTrustDimension.get_instance()
             _dossier = _fuser.get_dossier(user_id, stream_id)
@@ -178,13 +250,13 @@ class DimensionCollector:
             else:
                 factors.thinking_ratio = 1.0
 
-            if factors.social_value > 50:
+            if factors.social_value > self._happy_social_threshold:
                 factors.emotional_state = "开心"
-            elif factors.social_value > 20:
+            elif factors.social_value > self._good_social_threshold:
                 factors.emotional_state = "不错"
-            elif factors.social_value > 0:
+            elif factors.social_value > self._calm_social_threshold:
                 factors.emotional_state = "平静"
-            elif factors.social_value > -20:
+            elif factors.social_value > self._annoyed_social_threshold:
                 factors.emotional_state = "有点烦"
             else:
                 factors.emotional_state = "不爽"
@@ -222,9 +294,9 @@ class DimensionCollector:
             _ch = _d6._ensure_channel(stream_id)
             activity = float(_ch.activity_level) if _ch else 50.0
 
-            if activity > 70:
+            if activity > self._active_atmosphere_threshold:
                 factors.group_atmosphere = "活跃"
-            elif activity > 40:
+            elif activity > self._normal_atmosphere_threshold:
                 factors.group_atmosphere = "普通"
             else:
                 factors.group_atmosphere = "冷清"
@@ -257,12 +329,16 @@ class DimensionCollector:
         factors.time_elapsed = time_elapsed
 
         typo_history = self._typo_history.get(stream_id, [])
-        typo_history = [t for t in typo_history if now - t < 3600]
+        typo_history = [
+            t for t in typo_history if now - t < self._typo_window_seconds
+        ]
         self._typo_history[stream_id] = typo_history
         factors.recent_typo_count = len(typo_history)
 
         recall_history = self._recall_history.get(stream_id, [])
-        recall_history = [t for t in recall_history if now - t < 3600]
+        recall_history = [
+            t for t in recall_history if now - t < self._recall_window_seconds
+        ]
         self._recall_history[stream_id] = recall_history
         factors.recent_recall_count = len(recall_history)
 
@@ -276,34 +352,26 @@ class DimensionCollector:
             return
 
         length = len(content)
-        if length < 10:
-            factors.message_importance = 0.3
-        elif length < 50:
-            factors.message_importance = 0.5
+        if length < self._importance_short_chars:
+            factors.message_importance = self._importance_short_score
+        elif length < self._importance_medium_chars:
+            factors.message_importance = self._importance_medium_score
         else:
-            factors.message_importance = 0.7
+            factors.message_importance = self._importance_long_score
 
         question_marks = content.count("?") + content.count("？")
         if question_marks > 0:
             factors.topic_type = "question"
-            factors.message_importance = max(factors.message_importance, 0.7)
+            factors.message_importance = max(
+                factors.message_importance, self._question_importance_floor
+            )
 
-        serious_keywords = [
-            "工作",
-            "学习",
-            "帮助",
-            "问题",
-            "错误",
-            "bug",
-            "重要",
-        ]
-        if any(kw in content for kw in serious_keywords):
+        if any(kw in content for kw in self._serious_keywords):
             factors.topic_type = "serious"
-            factors.message_importance = 0.9
+            factors.message_importance = self._serious_importance
 
-        sensitive_keywords = ["密码", "账号", "隐私", "秘密"]
-        if any(kw in content for kw in sensitive_keywords):
-            factors.content_sensitivity = 0.8
+        if any(kw in content for kw in self._sensitive_keywords):
+            factors.content_sensitivity = self._sensitive_score
 
     async def _collect_reaction_factors(
         self,
@@ -317,23 +385,11 @@ class DimensionCollector:
 
         factors.user_reaction = user_reaction
 
-        negative_keywords = [
-            "错",
-            "不对",
-            "不是",
-            "什么",
-            "？",
-            "?",
-            "啊",
-            "哈",
-        ]
-        positive_keywords = ["好", "对", "嗯", "哦", "行"]
-
         negative_count = sum(
-            1 for kw in negative_keywords if kw in user_reaction
+            1 for kw in self._negative_reaction_keywords if kw in user_reaction
         )
         positive_count = sum(
-            1 for kw in positive_keywords if kw in user_reaction
+            1 for kw in self._positive_reaction_keywords if kw in user_reaction
         )
 
         if negative_count > positive_count:
@@ -355,15 +411,29 @@ class DimensionCollector:
             self._recall_history[stream_id] = []
         self._recall_history[stream_id].append(time.time())
 
+    def can_typo(self, stream_id: str) -> bool:
+        """当前窗口内是否还能继续打错字"""
+        now = time.time()
+        history = [
+            ts
+            for ts in self._typo_history.get(stream_id, [])
+            if now - ts < self._typo_window_seconds
+        ]
+        self._typo_history[stream_id] = history
+        return len(history) < self._typo_limit_per_window
+
+    def get_main_personality(self) -> str:
+        """提供给提示词层的基础人格描述"""
+        return self._default_main_personality
+
 
 _dimension_collector: Optional[DimensionCollector] = None
 
 
 def get_dimension_collector(
-    config_engine: Optional[ConfigEngine] = None,
 ) -> DimensionCollector:
     """获取维度收集器单例"""
     global _dimension_collector
     if _dimension_collector is None:
-        _dimension_collector = DimensionCollector(config_engine)
+        _dimension_collector = DimensionCollector()
     return _dimension_collector

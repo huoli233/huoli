@@ -150,6 +150,38 @@ default_patterns = [
 max_beliefs_tracked = 12
 reality_keywords = ["虚假", "欺骗"]
 
+[profile_mapping.semantic_domains.recall_post_send]
+analysis_interval_seconds = 6.0
+psychology_chaos_threshold = 8.5
+
+[profile_mapping.semantic_domains.recall_typo]
+max_typo_length = 66
+prompt_key = "typo_decision_custom"
+
+[profile_mapping.semantic_domains.recall_typo.wrong_char_map]
+"你" = "尼"
+
+[profile_mapping.semantic_domains.recall_self_behavior]
+min_samples = 4
+quick_learn_trigger_count = 5
+
+[profile_mapping.semantic_domains.recall_self_awareness]
+max_history = 88
+default_cleanup_max_age_seconds = 7200.0
+
+[profile_mapping.semantic_domains.recall_dimension]
+typo_limit_per_window = 4
+default_main_personality = "克制"
+
+[profile_mapping.semantic_domains.recall_correction]
+timeout_seconds = 166.0
+
+[profile_mapping.semantic_domains.recall_shuffle]
+probability = 0.22
+
+[profile_mapping.semantic_domains.recall_shuffle.wrong_word_map]
+"真" = "针"
+
 [profile_mapping.semantic_domains.skill]
 trial_to_active_invocations = 6
 runtime_skill_cost = 0.4
@@ -251,6 +283,27 @@ semantic_domains = ["trauma_triggers"]
 [profile_mapping.module_views.trauma_worldview]
 semantic_domains = ["trauma_worldview"]
 
+[profile_mapping.module_views.recall_post_send]
+semantic_domains = ["recall_post_send"]
+
+[profile_mapping.module_views.recall_typo]
+semantic_domains = ["recall_typo"]
+
+[profile_mapping.module_views.recall_self_behavior]
+semantic_domains = ["recall_self_behavior"]
+
+[profile_mapping.module_views.recall_self_awareness]
+semantic_domains = ["recall_self_awareness"]
+
+[profile_mapping.module_views.recall_dimension]
+semantic_domains = ["recall_dimension"]
+
+[profile_mapping.module_views.recall_correction]
+semantic_domains = ["recall_correction"]
+
+[profile_mapping.module_views.recall_shuffle]
+semantic_domains = ["recall_shuffle"]
+
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
 
@@ -323,6 +376,16 @@ def main() -> None:
         assert hub.resolve_module_view("trauma_triggers").values["keyword_confidence"] == 0.81
         assert hub.resolve_module_view("trauma_triggers").values["default_patterns"][0]["pattern_id"] == "echo"
         assert hub.resolve_module_view("trauma_worldview").values["max_beliefs_tracked"] == 12
+        assert hub.resolve_module_view("recall_post_send").values["analysis_interval_seconds"] == 6.0
+        assert hub.resolve_module_view("recall_typo").values["max_typo_length"] == 66
+        assert hub.resolve_module_view("recall_typo").values["wrong_char_map"]["你"] == "尼"
+        assert hub.resolve_module_view("recall_self_behavior").values["min_samples"] == 4
+        assert hub.resolve_module_view("recall_self_behavior").values["quick_learn_trigger_count"] == 5
+        assert hub.resolve_module_view("recall_self_awareness").values["max_history"] == 88
+        assert hub.resolve_module_view("recall_dimension").values["typo_limit_per_window"] == 4
+        assert hub.resolve_module_view("recall_correction").values["timeout_seconds"] == 166.0
+        assert hub.resolve_module_view("recall_shuffle").values["probability"] == 0.22
+        assert hub.resolve_module_view("recall_shuffle").values["wrong_word_map"]["真"] == "针"
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
         assert hub.resolve_module_view("adaptive_learning").values["expression_learn_temperature"] == 0.25
@@ -349,6 +412,8 @@ def main() -> None:
             "harassment_block_threshold": hub.resolve_module_view("harassment_detection").values["block_threshold"],
             "psych_irritated_threshold": hub.resolve_module_view("psychological_core").values["response_irritated_annoyance"],
             "trauma_query_limit": hub.resolve_module_view("trauma_timeline").values["default_query_limit"],
+            "recall_typo_limit": hub.resolve_module_view("recall_typo").values["max_typo_length"],
+            "recall_correction_timeout": hub.resolve_module_view("recall_correction").values["timeout_seconds"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "jargon_thresholds": hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"],

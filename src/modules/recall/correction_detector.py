@@ -2,8 +2,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.recall.runtime_config import recall_module_view
 
 logger = get_logger("纠正检测")
 
@@ -35,28 +35,29 @@ class CorrectionDetector:
 
     def __init__(
         self,
-        config_engine: Optional[ConfigEngine] = None,
         prompt_manager: Any = None,
         model_client: Any = None,
     ):
-        self._config = config_engine or ConfigEngine.get_instance()
         self._prompts = prompt_manager
         self._model = model_client
 
         self._history: Dict[str, List[CorrectionEvent]] = {}
-        self._history_limit = 12
-        self._timeout_sec = 150.0
         self._load_config()
         logger.info("纠正检测器初始化完成")
 
     def _load_config(self) -> None:
         """从配置加载参数"""
         try:
-            self._history_limit = self._config.get(
-                "correction", "history_limit", 12
+            config = recall_module_view("recall_correction")
+            self._history_limit = int(config.get("history_limit", 12))
+            self._timeout_sec = float(
+                config.get("timeout_seconds", 150.0)
             )
-            self._timeout_sec = self._config.get(
-                "correction", "timeout_seconds", 150.0
+            self._prompt_key = str(
+                config.get("prompt_key", "correction_detection")
+            )
+            self._model_task = str(
+                config.get("model_task", "correction_detection")
             )
         except Exception as exc:
             logger.debug(f"加载纠正检测配置失败: {exc}")
@@ -131,7 +132,9 @@ class CorrectionDetector:
             if hasattr(self._model, "generate"):
                 raw = await self._model.generate(prompt)
             elif hasattr(self._model, "analyze"):
-                raw = await self._model.analyze({"prompt": prompt})
+                raw = await self._model.analyze(
+                    {"task": self._model_task, "prompt": prompt}
+                )
             else:
                 return False, 0.0, "unsupported_model_interface"
 
@@ -156,7 +159,7 @@ class CorrectionDetector:
         if self._prompts is not None:
             try:
                 rendered = self._prompts.get(
-                    "correction_detection",
+                    self._prompt_key,
                     main_personality="理性、克制、不过度触发",
                     bot_content=bot_content,
                     user_message=user_message,
@@ -242,7 +245,6 @@ _correction_detector: Optional[CorrectionDetector] = None
 
 
 def get_correction_detector(
-    config_engine: Optional[ConfigEngine] = None,
     prompt_manager: Any = None,
     model_client: Any = None,
 ) -> CorrectionDetector:
@@ -250,6 +252,6 @@ def get_correction_detector(
     global _correction_detector
     if _correction_detector is None:
         _correction_detector = CorrectionDetector(
-            config_engine, prompt_manager, model_client
+            prompt_manager, model_client
         )
     return _correction_detector
