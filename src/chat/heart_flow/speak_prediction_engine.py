@@ -52,6 +52,7 @@ class SpeakPredictionEngine:
         tempo = domains.get("tempo", {}) if isinstance(domains, dict) else {}
         circadian = domains.get("circadian_rhythm", {}) if isinstance(domains, dict) else {}
         decision_runtime = domains.get("decision_runtime", {}) if isinstance(domains, dict) else {}
+        execution_runtime = domains.get("execution_runtime", {}) if isinstance(domains, dict) else {}
         pending = domains.get("pending_response", {}) if isinstance(domains, dict) else {}
         flow_runtime = domains.get("flow_runtime", {}) if isinstance(domains, dict) else {}
 
@@ -202,10 +203,25 @@ class SpeakPredictionEngine:
             suppression_score += 0.28
 
         probability = _clamp(drive_score - suppression_score + 0.14, 0.0, 1.0)
-        runtime_has_verdict = bool(decision_runtime.get("verdict_id"))
-        runtime_should_reply = bool(decision_runtime.get("should_reply", False))
-        runtime_model_path = str(decision_runtime.get("model_path", "") or "")
-        runtime_complexity_label = str(decision_runtime.get("complexity_label", "") or "")
+        runtime_verdict = execution_runtime if bool(execution_runtime.get("verdict_id")) else decision_runtime
+        runtime_has_verdict = bool(runtime_verdict.get("verdict_id"))
+        if execution_runtime.get("verdict_id"):
+            runtime_should_reply = bool(
+                execution_runtime.get("reply_sent", execution_runtime.get("should_act", False))
+            )
+        else:
+            runtime_should_reply = bool(runtime_verdict.get("should_reply", False))
+        runtime_model_path = str(runtime_verdict.get("model_path", "") or "")
+        runtime_complexity_label = str(runtime_verdict.get("complexity_label", "") or "")
+        runtime_reason = str(
+            runtime_verdict.get("execution_reason", runtime_verdict.get("decision_reason", "")) or ""
+        )
+        runtime_stage = str(
+            runtime_verdict.get("execution_stage", runtime_verdict.get("decision_stage", "")) or ""
+        )
+        runtime_action = str(
+            runtime_verdict.get("final_action", runtime_verdict.get("next_action", "")) or ""
+        )
         if runtime_has_verdict:
             if runtime_should_reply:
                 probability = max(probability, 0.56)
@@ -251,13 +267,20 @@ class SpeakPredictionEngine:
             decision_label = "继续观察"
         else:
             decision_label = "暂时不聊"
+        if runtime_has_verdict:
+            if runtime_should_reply and runtime_action == "reply":
+                decision_label = "可以接话"
+            elif runtime_should_reply:
+                decision_label = "准备行动"
+            else:
+                decision_label = "暂时不聊"
         decision_reason = (
             f"开口驱动 {drive_score:.2f} / 抑制压力 {suppression_score:.2f}，"
             f"主动意愿 {initiative_drive:.2f}，关系就绪 {readiness_score:.2f}，"
             f"昼夜状态 {night_phase_label}。"
         )
         if runtime_has_verdict:
-            runtime_reason = str(decision_runtime.get("decision_reason", "") or "")
+            runtime_reason = str(runtime_reason or "")
             decision_reason = f"统一裁定：{runtime_reason or decision_label}；{decision_reason}"
 
         driving_factors: List[str] = []
@@ -322,10 +345,12 @@ class SpeakPredictionEngine:
             "probability_percent": int(round(probability * 100)),
             "eta_seconds": eta_seconds,
             "eta_label": "立即" if eta_seconds <= 30 else f"约 {round(eta_seconds / 60)} 分钟后",
-            "shared_verdict_id": str(decision_runtime.get("verdict_id", "") or ""),
+            "shared_verdict_id": str(runtime_verdict.get("verdict_id", "") or ""),
             "model_path": runtime_model_path or "未裁定",
             "should_reply": runtime_should_reply if runtime_has_verdict else probability >= 0.55,
             "complexity_label": runtime_complexity_label or "普通",
+            "execution_stage": runtime_stage,
+            "execution_action": runtime_action,
             "decision_label": decision_label,
             "decision_reason": decision_reason,
             "content_direction": content_direction,

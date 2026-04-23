@@ -296,6 +296,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
     autonomy = domains.get("autonomy_runtime", {})
     attention_runtime = domains.get("attention_runtime", {})
     safety_runtime = domains.get("safety_runtime", {})
+    execution_runtime = domains.get("execution_runtime", {})
 
     signals: list[Dict[str, Any]] = []
 
@@ -681,6 +682,22 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
             )
         )
 
+    execution_blocker = str(execution_runtime.get("blocker", "") or execution_runtime.get("execution_reason", "") or "")
+    if bool(execution_runtime.get("verdict_id")) and not bool(execution_runtime.get("should_act", False)):
+        signals.append(
+            _signal_card(
+                key="execution_blocked",
+                label="执行裁定收口",
+                family="runtime",
+                severity="medium",
+                value=1.0,
+                display_value=execution_blocker or "本轮决定观察",
+                trend="holding",
+                source_domain="execution_runtime",
+                icon="🧭",
+            )
+        )
+
     memory_overload = memory_stack.get("overload", {}) if isinstance(memory_stack.get("overload"), dict) else {}
     load_ratio = _safe_float(memory_overload.get("load_ratio", 0.0))
     if bool(memory_overload.get("emergency_needed", False)) or load_ratio >= 0.8:
@@ -1003,6 +1020,7 @@ def _build_timeline(
     dashboard_snapshot: Dict[str, Any],
     active_signals: list[Dict[str, Any]],
 ) -> list[Dict[str, Any]]:
+    execution_runtime = domains.get("execution_runtime", {})
     change_events = dashboard_snapshot.get("change_events", []) if isinstance(dashboard_snapshot, dict) else []
     if change_events:
         timeline = []
@@ -1018,6 +1036,19 @@ def _build_timeline(
         return timeline
 
     generated = []
+    if bool(execution_runtime.get("verdict_id")):
+        generated.append(
+            {
+                "at": time.time(),
+                "label": "最终执行裁定",
+                "detail": str(
+                    execution_runtime.get("execution_reason", "")
+                    or execution_runtime.get("blocker", "")
+                    or "本轮已有执行裁定"
+                ),
+                "family": "执行",
+            }
+        )
     for signal in active_signals[:8]:
         generated.append(
             {
@@ -1130,6 +1161,7 @@ def _build_behavior_detail(
     dashboard_snapshot: Dict[str, Any],
 ) -> Dict[str, Any]:
     flow_runtime = domains.get("flow_runtime", {})
+    execution_runtime = domains.get("execution_runtime", {})
     reply_decision = {}
     if isinstance(dashboard_snapshot, dict) and dashboard_snapshot.get("available"):
         snapshot = dashboard_snapshot.get("snapshot", {})
@@ -1156,6 +1188,24 @@ def _build_behavior_detail(
             "suggested_tone": str(reply_decision.get("suggested_tone", "") or "正常回应"),
             "decision_stage": str(reply_decision.get("decision_stage", "") or ""),
             "confidence": round(_safe_float(reply_decision.get("confidence", 0.0)), 2),
+        },
+        "execution_runtime": {
+            "should_act": bool(execution_runtime.get("should_act", False)),
+            "reply_sent": bool(execution_runtime.get("reply_sent", False)),
+            "final_action": str(execution_runtime.get("final_action", "") or ""),
+            "execution_stage": str(execution_runtime.get("execution_stage", "") or ""),
+            "execution_reason": str(execution_runtime.get("execution_reason", "") or "暂无最终执行原因"),
+            "confidence": round(_safe_float(execution_runtime.get("confidence", 0.0)), 2),
+            "model_path": str(execution_runtime.get("model_path", "") or ""),
+            "source": str(execution_runtime.get("source", "") or ""),
+            "planner_action": str(execution_runtime.get("planner_action", "") or ""),
+            "blocker": str(execution_runtime.get("blocker", "") or ""),
+            "blocking_factors": [
+                str(item) for item in list(execution_runtime.get("blocking_factors", []) or []) if str(item).strip()
+            ],
+            "driving_factors": [
+                str(item) for item in list(execution_runtime.get("driving_factors", []) or []) if str(item).strip()
+            ],
         },
         "behavior_governor": {
             "reply_mode": str(getattr(behavior, "reply_mode", "observe") or "observe"),

@@ -84,6 +84,52 @@ class DecisionRuntimeVerdict:
         }
 
 
+@dataclass
+class ExecutionRuntimeVerdict:
+    """最终执行裁定快照：记录统一裁定在后半段是否真的落成了动作。"""
+
+    verdict_id: str = ""
+    initial_verdict_id: str = ""
+    initial_next_action: str = ""
+    should_act: bool = False
+    reply_sent: bool = False
+    final_action: str = "observe"
+    execution_stage: str = ""
+    execution_reason: str = ""
+    confidence: float = 0.5
+    model_path: str = "skip"
+    source: str = ""
+    planner_action: str = ""
+    blocker: str = ""
+    complexity_score: float = 0.0
+    complexity_label: str = "普通"
+    source_votes: Dict[str, Any] = field(default_factory=dict)
+    blocking_factors: List[str] = field(default_factory=list)
+    driving_factors: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "verdict_id": self.verdict_id,
+            "initial_verdict_id": self.initial_verdict_id,
+            "initial_next_action": self.initial_next_action,
+            "should_act": self.should_act,
+            "reply_sent": self.reply_sent,
+            "final_action": self.final_action,
+            "execution_stage": self.execution_stage,
+            "execution_reason": self.execution_reason,
+            "confidence": round(float(self.confidence or 0.0), 3),
+            "model_path": self.model_path,
+            "source": self.source,
+            "planner_action": self.planner_action,
+            "blocker": self.blocker,
+            "complexity_score": round(float(self.complexity_score or 0.0), 3),
+            "complexity_label": self.complexity_label,
+            "source_votes": dict(self.source_votes),
+            "blocking_factors": list(self.blocking_factors),
+            "driving_factors": list(self.driving_factors),
+        }
+
+
 _WATCH_LEVEL_BY_RANK = {
     0: WatchLevel.BLACKOUT,
     1: WatchLevel.PEEK,

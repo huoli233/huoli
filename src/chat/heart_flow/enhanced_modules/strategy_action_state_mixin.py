@@ -40,6 +40,7 @@ from src.chat.heart_flow.enhanced_modules.shared_runtime import (
     _WATCH_LEVEL_BY_RANK,
     BehaviorGovernorVerdict,
     DecisionRuntimeVerdict,
+    ExecutionRuntimeVerdict,
     RestGovernorVerdict,
     ModelGovernorVerdict,
 )
@@ -235,6 +236,86 @@ class StrategyActionStateMixin:
         )
         self._last_decision_runtime = verdict.to_dict()
         return verdict
+
+    def _store_execution_runtime(
+        self,
+        *,
+        initial_verdict: DecisionRuntimeVerdict | None,
+        should_act: bool,
+        reply_sent: bool,
+        final_action: str,
+        execution_stage: str,
+        execution_reason: str,
+        model_path: str = "",
+        source: str = "",
+        planner_decision: Any = None,
+        blocker: str = "",
+        confidence: float | None = None,
+        extra_votes: Dict[str, Any] | None = None,
+        extra_blocking: List[str] | None = None,
+        extra_driving: List[str] | None = None,
+    ) -> Dict[str, Any]:
+        planner_action = ""
+        if planner_decision is not None and hasattr(planner_decision, "action"):
+            planner_action = (
+                planner_decision.action.value
+                if hasattr(planner_decision.action, "value")
+                else str(planner_decision.action)
+            )
+
+        source_votes = dict(getattr(initial_verdict, "source_votes", {}) or {})
+        source_votes.update(
+            {
+                "execution_should_act": bool(should_act),
+                "reply_sent": bool(reply_sent),
+                "execution_stage": str(execution_stage or ""),
+                "execution_source": str(source or ""),
+            }
+        )
+        if planner_action:
+            source_votes["planner_action"] = planner_action
+        if isinstance(extra_votes, dict) and extra_votes:
+            source_votes.update(extra_votes)
+
+        blocking_factors = list(getattr(initial_verdict, "blocking_factors", []) or [])
+        if blocker:
+            blocking_factors.append(str(blocker))
+        if extra_blocking:
+            blocking_factors.extend(str(item) for item in extra_blocking if str(item).strip())
+
+        driving_factors = list(getattr(initial_verdict, "driving_factors", []) or [])
+        if extra_driving:
+            driving_factors.extend(str(item) for item in extra_driving if str(item).strip())
+
+        resolved_model_path = str(model_path or getattr(initial_verdict, "model_path", "") or "skip")
+        resolved_confidence = (
+            float(confidence)
+            if confidence is not None
+            else float(getattr(initial_verdict, "confidence", 0.5) or 0.5)
+        )
+        resolved_action = str(final_action or ("reply" if reply_sent else "observe"))
+        execution_verdict = ExecutionRuntimeVerdict(
+            verdict_id=f"{str(getattr(initial_verdict, 'verdict_id', '') or 'runtime')}-exec",
+            initial_verdict_id=str(getattr(initial_verdict, "verdict_id", "") or ""),
+            initial_next_action=str(getattr(initial_verdict, "next_action", "") or ""),
+            should_act=bool(should_act),
+            reply_sent=bool(reply_sent),
+            final_action=resolved_action,
+            execution_stage=str(execution_stage or ""),
+            execution_reason=str(execution_reason or ""),
+            confidence=resolved_confidence,
+            model_path=resolved_model_path,
+            source=str(source or ""),
+            planner_action=planner_action,
+            blocker=str(blocker or ""),
+            complexity_score=float(getattr(initial_verdict, "complexity_score", 0.0) or 0.0),
+            complexity_label=str(getattr(initial_verdict, "complexity_label", "普通") or "普通"),
+            source_votes=source_votes,
+            blocking_factors=blocking_factors,
+            driving_factors=driving_factors,
+        )
+        self._last_execution_runtime = execution_verdict.to_dict()
+        return self._last_execution_runtime
 
     def _decide_action(
         self,

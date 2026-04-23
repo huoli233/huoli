@@ -1305,6 +1305,17 @@ class LoopMainDriverMixin:
         if _final_skip:
             logger.info(f"{self.log_prefix} 🎯 最终决策: 跳过，直接观察")
             self._last_flow_blocker = self._last_flow_blocker or f"最终决策跳过 algo={_llm_call_level}"
+            self._store_execution_runtime(
+                initial_verdict=_decision_runtime,
+                should_act=False,
+                reply_sent=False,
+                final_action="observe",
+                execution_stage="decision_runtime_skip",
+                execution_reason=self._last_flow_blocker or _decision_runtime.decision_reason,
+                model_path="skip",
+                source="decision_runtime",
+                blocker=self._last_flow_blocker or _decision_runtime.decision_reason,
+            )
             self._apply_post_reply_state(did_reply=False, reason=self._last_flow_blocker)
             self._emit_flow_decision_summary("final_decision", "skip")
             self._emit_action_verdict("llm_skip", "LLM决策跳过", time.time() - _t0)
@@ -1650,6 +1661,8 @@ class LoopMainDriverMixin:
             _pre_reply_resource_snapshot = self._capture_pre_reply_resource_snapshot()
             self._apply_plan_drain()
             await self._deduct_shared_resources(incoming_batch)
+            _executed_planner_decision = planner_decision
+            _reply_source = "planner"
             self._last_proactive_intent_id = ""  # 每次行动前清空，避免误关联
             _voice_needs_upgrade = False
             if voice_conclusion is not None and hasattr(voice_conclusion, "needs_upgrade"):
@@ -1704,6 +1717,8 @@ class LoopMainDriverMixin:
                                 "target_user_id": "",
                             },
                         )()
+                        _executed_planner_decision = _upgrade_proactive
+                        _reply_source = "llm_autonomous"
                         actual_reply_made = await self._execute_planned_reply(
                             decision_messages=decision_messages,
                             planner_decision=_upgrade_proactive,
@@ -1719,6 +1734,7 @@ class LoopMainDriverMixin:
                         )
                 else:
                     try:
+                        _reply_source = "voice_driven"
                         actual_reply_made = await asyncio.wait_for(
                             self._execute_voice_driven_reply(
                                 voice_conclusion=voice_conclusion,
@@ -1758,6 +1774,7 @@ class LoopMainDriverMixin:
                     social_intention=self._llm_social_intention or "想主动聊几句",
                 )
                 try:
+                    _reply_source = "planner_proactive"
                     actual_reply_made = await asyncio.wait_for(
                         self._execute_proactive_reply(
                             llm_decision=_proactive_decision,
@@ -1778,6 +1795,7 @@ class LoopMainDriverMixin:
                     )
             else:
                 try:
+                    _reply_source = "planner"
                     actual_reply_made = await asyncio.wait_for(
                         self._execute_planned_reply(
                             decision_messages=decision_messages,
@@ -1804,6 +1822,19 @@ class LoopMainDriverMixin:
                     )
                 )
                 _was_proactive_reply = _reply_source == "planner_proactive"
+                self._store_execution_runtime(
+                    initial_verdict=_decision_runtime,
+                    should_act=True,
+                    reply_sent=True,
+                    final_action="reply",
+                    execution_stage="reply_sent",
+                    execution_reason="回复已发送",
+                    model_path="large" if _reply_source == "llm_autonomous" else _decision_runtime.model_path,
+                    source=_reply_source,
+                    planner_decision=_executed_planner_decision,
+                    confidence=getattr(_executed_planner_decision, "confidence", _decision_runtime.confidence),
+                    extra_votes={"actual_reply_made": True, "reply_source": _reply_source},
+                )
                 await self._finalize_reply_settlement(
                     incoming_batch=incoming_batch,
                     relation_result=relation_result,
@@ -1839,6 +1870,19 @@ class LoopMainDriverMixin:
                     _pre_reply_resource_snapshot,
                     reason=_no_reply_reason,
                 )
+                self._store_execution_runtime(
+                    initial_verdict=_decision_runtime,
+                    should_act=False,
+                    reply_sent=False,
+                    final_action="observe",
+                    execution_stage="reply_aborted",
+                    execution_reason=_no_reply_reason,
+                    model_path="skip",
+                    source=_reply_source or "execution",
+                    planner_decision=_executed_planner_decision,
+                    blocker=_no_reply_reason,
+                    extra_votes={"actual_reply_made": False, "reply_source": _reply_source or "execution"},
+                )
                 self._emit_action_verdict("no_reply", _no_reply_reason, time.time() - _t0)
                 logger.info(f"{self.log_prefix} ⏭️ 本轮未形成有效回复: {_no_reply_reason}")
                 self._apply_post_reply_state(did_reply=False, reason=_no_reply_reason)
@@ -1862,6 +1906,18 @@ class LoopMainDriverMixin:
                 _inaction_reason = f"规划器裁定={_pa}"
                 if hasattr(planner_decision, "reason") and planner_decision.reason:
                     _inaction_reason += f" {planner_decision.reason[:40]}"
+            self._store_execution_runtime(
+                initial_verdict=_decision_runtime,
+                should_act=False,
+                reply_sent=False,
+                final_action="observe",
+                execution_stage="final_no_action",
+                execution_reason=_inaction_reason,
+                model_path="skip",
+                source="final_gate",
+                planner_decision=planner_decision,
+                blocker=_inaction_reason,
+            )
             self._emit_action_verdict("no_action", _inaction_reason, time.time() - _t0)
             self._apply_post_reply_state(did_reply=False, reason=_inaction_reason)
             await self._emit_outcome_summary(False, relation_result)

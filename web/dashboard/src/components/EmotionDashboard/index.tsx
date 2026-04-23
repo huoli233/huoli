@@ -100,6 +100,8 @@ type Prediction = {
   model_path?: string;
   should_reply?: boolean;
   complexity_label?: string;
+  execution_stage?: string;
+  execution_action?: string;
   eta_seconds: number;
   eta_label: string;
   decision_label?: string;
@@ -185,6 +187,21 @@ type DecisionDetail = {
   confidence: number;
 };
 
+type ExecutionRuntimeDetail = {
+  should_act: boolean;
+  reply_sent: boolean;
+  final_action: string;
+  execution_stage: string;
+  execution_reason: string;
+  confidence: number;
+  model_path: string;
+  source: string;
+  planner_action: string;
+  blocker: string;
+  blocking_factors: string[];
+  driving_factors: string[];
+};
+
 type BehaviorGovernorDetail = {
   reply_mode: string;
   reply_mode_label: string;
@@ -228,6 +245,7 @@ type BehaviorDetail = {
   watch_state_label: string;
   flow_phase_label: string;
   reply_decision: DecisionDetail;
+  execution_runtime: ExecutionRuntimeDetail;
   behavior_governor: BehaviorGovernorDetail;
   rest_governor: RestGovernorDetail;
   model_governor: ModelGovernorDetail;
@@ -905,6 +923,14 @@ export function EmotionDashboard() {
               <strong>{behaviorDetail?.reply_decision.reply_urgency ?? "-"}</strong>
             </div>
             <div className="detail-row">
+              <span>最终执行</span>
+              <strong>{behaviorDetail?.execution_runtime.final_action || "-"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>执行阶段</span>
+              <strong>{behaviorDetail?.execution_runtime.execution_stage || "-"}</strong>
+            </div>
+            <div className="detail-row">
               <span>行为模式</span>
               <strong>{behaviorDetail?.behavior_governor.reply_mode_label ?? "-"}</strong>
             </div>
@@ -921,6 +947,10 @@ export function EmotionDashboard() {
               <strong>{behaviorDetail?.behavior_governor.model_tier_label ?? "-"}</strong>
             </div>
             <div className="detail-row">
+              <span>实际模型路径</span>
+              <strong>{modelPathLabel(behaviorDetail?.execution_runtime.model_path)}</strong>
+            </div>
+            <div className="detail-row">
               <span>休息姿态</span>
               <strong>{behaviorDetail?.rest_governor.posture_label ?? "-"}</strong>
             </div>
@@ -928,11 +958,25 @@ export function EmotionDashboard() {
               <span>当前语气</span>
               <strong>{behaviorDetail?.reply_decision.suggested_tone ?? "-"}</strong>
             </div>
+            <div className="detail-row">
+              <span>是否已发送</span>
+              <strong>{yesNo(behaviorDetail?.execution_runtime.reply_sent)}</strong>
+            </div>
           </div>
           <p className="panel-note">
-            {behaviorDetail?.reply_decision.decision_reason ?? "暂无行为裁定理由"}
+            {behaviorDetail?.execution_runtime.execution_reason || behaviorDetail?.reply_decision.decision_reason || "暂无行为裁定理由"}
           </p>
           <div className="topic-wrap">
+            {(behaviorDetail?.execution_runtime.blocking_factors ?? []).map((item) => (
+              <span className="topic-chip" key={`exec-block-${item}`}>
+                {item}
+              </span>
+            ))}
+            {(behaviorDetail?.execution_runtime.driving_factors ?? []).map((item) => (
+              <span className="topic-chip is-secondary" key={`exec-drive-${item}`}>
+                {item}
+              </span>
+            ))}
             {(behaviorDetail?.behavior_governor.reason_labels ?? []).map((item) => (
               <span className="topic-chip is-secondary" key={`bg-${item}`}>
                 {item}
@@ -1311,7 +1355,7 @@ export function EmotionDashboard() {
                 语气：{prediction?.tone ?? "正常回应"} · 长度：{prediction?.reply_length ?? "-"} · ETA：{prediction?.eta_label ?? "-"} · 模型路径：{modelPathLabel(prediction?.model_path)}
               </p>
               <p className="prediction-meta">
-                统一裁定：{prediction?.shared_verdict_id || "暂无"} · 是否回复：{yesNo(prediction?.should_reply)} · 复杂度：{prediction?.complexity_label ?? "普通"}
+                统一裁定：{prediction?.shared_verdict_id || "暂无"} · 是否回复：{yesNo(prediction?.should_reply)} · 执行阶段：{prediction?.execution_stage || "-"} · 复杂度：{prediction?.complexity_label ?? "普通"}
               </p>
               <p className="prediction-reason">{prediction?.decision_reason ?? "等待后端预测理由。"}</p>
             </div>
