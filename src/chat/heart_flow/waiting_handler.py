@@ -51,7 +51,7 @@ class PendingOrchestrator:
 
     def _timing_cfg(self) -> Dict[str, Any]:
         hub = get_core_config()
-        return hub.heartflow_timing()
+        return hub.resolve_module_view("phase_timing").values
 
     def initiate_watch(
         self, channel_id: str, anticipated: str = ""

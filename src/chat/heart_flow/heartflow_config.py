@@ -1,7 +1,7 @@
 import time as _tm
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Callable, Dict, List, Optional
+from typing import Callable, List, Optional
 
 from src.common.logger import get_logger
 
@@ -171,7 +171,7 @@ def _fresh_config_from_sources() -> HeartFlowCoreParams:
         from src.config.core_config_engine import get_core_config
 
         core = get_core_config()
-        hf_section = core.fetch_block("heart_flow") or {}
+        hf_section = core.resolve_module_view("heartflow_runtime").values
         if hf_section:
             cfg.initiative.initiative_interval_sec = hf_section.get(
                 "initiative_interval_sec",
@@ -250,9 +250,7 @@ def is_focused_mode_for_channel(channel_id: str) -> bool:
         from src.config.core_config_engine import get_core_config
 
         core = get_core_config()
-        focus_channels = (core.fetch_block("heart_flow") or {}).get(
-            "focus_channels", []
-        )
+        focus_channels = core.resolve_module_view("heartflow_runtime").values.get("focus_channels", [])
         return channel_id in focus_channels
     except Exception as _exc:
         logger.warning(f"焦点频道检查异常: {_exc}")

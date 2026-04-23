@@ -15,7 +15,7 @@
 import math
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from src.common.logger import get_logger
 
@@ -66,7 +66,7 @@ def _load_tuning_from_core_config() -> _DecisionTuning:
         from src.config.core_config_engine import get_core_config
 
         hub = get_core_config()
-        cfg = hub.fetch_block("proactive_decider")
+        cfg = hub.resolve_module_view("proactive_decider").values
         if not isinstance(cfg, dict):
             return default
 
@@ -513,11 +513,8 @@ class OutcomeRewardLedger:
         if target_user and abs(consequence.relationship_delta) > 0.01:
             try:
                 from src.chat.heart_flow.fondness_trust import FondnessTrustDimension
-                from src.chat.heart_flow.social_value_dim import SocialValueDimension
 
                 fuser = FondnessTrustDimension.get_instance()
-                relation = fuser.get_relation(target_user, channel_id)
-                current_score = relation.fondness_value
                 fuser.adjust_fondness(
                     target_user,
                     channel_id,

@@ -365,6 +365,7 @@ perception_max_tokens = 800
 perception_engagement_threshold = 0.45
 session_storage_dir = "data/memoir_vault"
 session_max_age_days = 30
+cleanup_chat_instances_interval_seconds = 300.0
 task_cancel_timeout_seconds = 5.0
 task_shutdown_timeout_seconds = 10.0
 cleanup_initial_delay_seconds = 60.0
@@ -565,6 +566,146 @@ mask_recovery_rate = 0.05
 mask_base_armor = 8.0
 chaos_natural_decay_per_hour = 0.1
 
+[profile_mapping.semantic_domains.phase_timing]
+max_idle_wait_seconds = 120
+reflect_interval_seconds = 30
+max_reflect_rounds = 3
+max_chase_count = 2
+rest_default_seconds = 300
+peek_chance_ratio = 0.05
+transition_cooldown_ms = 500
+auto_dormant_after_sec = 0
+max_engaged_duration_sec = 0
+pending_expire_sec = 0
+awaken_skip_threshold = 0
+phase_idle_timeout_seconds = 300.0
+
+[profile_mapping.semantic_domains.proactive_decider]
+wt_emotional_readiness = 0.17
+wt_vitality_reserve = 0.10
+wt_content_freshness = 0.08
+wt_social_standing = 0.07
+wt_inner_desire = 0.18
+wt_historical_reward = 0.08
+wt_intention_drive = 0.28
+activation_bar = 0.72
+reward_on_reply = 0.08
+penalty_on_ignore = -0.10
+penalty_on_negative = -0.25
+reward_decay_per_hour = 0.08
+reply_watch_window_sec = 300.0
+reply_grace_period_sec = 30.0
+max_pending_events = 64
+reward_floor = -1.0
+reward_ceiling = 1.0
+silence_full_score_sec = 1200.0
+
+[profile_mapping.semantic_domains.heartflow_decision]
+calm_slot_ttl = 5.0
+heated_slot_ttl = 2.0
+pulse_span_seconds = 60.0
+heated_pulse_limit = 5
+slot_capacity_cap = 120
+
+[profile_mapping.semantic_domains.heartflow_decision.dimension_weights]
+credibility = 0.24
+hazard = 0.18
+curiosity = 0.20
+immediacy = 0.16
+bond_strength = 0.12
+temperament = 0.10
+
+[profile_mapping.semantic_domains.heartflow_decision.mood_factors]
+happy = 0.82
+excited = 0.90
+neutral = 0.50
+sad = 0.30
+angry = 0.22
+tired = 0.28
+
+[profile_mapping.semantic_domains.heartflow_decision.barrier_seeds]
+respond_credibility = 0.6
+hazard_ceiling = 0.4
+curiosity_floor = 0.5
+inventiveness_bar = 0.3
+respond_cadence = 0.7
+rest_interval_sec = 30.0
+content_merit = 0.6
+topical_fit = 0.5
+mood_reactivity = 0.4
+mood_firmness = 0.7
+
+[profile_mapping.semantic_domains.heartflow_decision.barrier_tuning]
+sensitivity = 0.1
+cooldown_seconds = 45.0
+max_single_shift = 0.2
+firmness_window = 10
+perf_ring_capacity = 800
+
+[profile_mapping.semantic_domains.heartflow_decision.threat_weights]
+toxicity = 0.42
+turbulence = 0.22
+fragility = 0.16
+antisocial = 0.20
+
+[profile_mapping.semantic_domains.heartflow_decision.fusion]
+harmony_bonus_ceil = 0.12
+
+[profile_mapping.semantic_domains.heartflow_decision.immediacy]
+base_score = 0.45
+rush_boost = 0.28
+question_boost = 0.12
+daytime_boost = 0.06
+night_penalty = 0.10
+daytime_start_hour = 9
+daytime_end_hour = 17
+night_start_hour = 23
+night_end_hour = 5
+
+[profile_mapping.semantic_domains.heartflow_decision.credibility]
+base_score = 0.58
+short_content_penalty = 0.12
+long_content_bonus = 0.08
+relationship_scale = 0.22
+short_threshold = 8
+long_threshold = 80
+
+[profile_mapping.semantic_domains.heartflow_decision.bond]
+base_score = 0.45
+relationship_scale = 0.42
+activity_scale = 0.28
+
+[profile_mapping.semantic_domains.heartflow_decision.tactics]
+high_hazard_threshold = 0.75
+high_hazard_weight = 0.92
+hazard_penalty_factor = 0.42
+hit_bonus_unit = 0.018
+hit_bonus_cap = 0.08
+topic_base_factor = 0.68
+topic_novelty_factor = 0.12
+topic_hazard_penalty = 0.28
+silence_base = 0.42
+silence_hazard_boost = 0.38
+silence_credibility_penalty = 0.12
+
+[profile_mapping.semantic_domains.module_switches]
+heartflow_enabled = true
+proactive_enabled = true
+enhanced_focus_route_enabled = true
+emotion_stream_enabled = true
+energy_system_enabled = true
+inner_voice_enabled = true
+silence_watcher_enabled = true
+
+[profile_mapping.semantic_domains.heartflow_runtime]
+focus_channels = []
+initiative_interval_sec = 300.0
+initiative_probability = 0.3
+quiet_threshold_sec = 180.0
+max_initiative_per_hour = 5
+stamina_max = 100.0
+monitor_interval_sec = 5.0
+
 [profile_mapping.scenario_profiles.deep_sleep.model_routing]
 skip_non_urgent = true
 disable_thinking = true
@@ -659,3 +800,28 @@ profile_name = "heartfc_thresholds_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["personality"]
 profile_name = "personality_view"
+
+[profile_mapping.module_views.phase_timing]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["phase_timing"]
+profile_name = "phase_timing_view"
+
+[profile_mapping.module_views.proactive_decider]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["proactive_decider"]
+profile_name = "proactive_decider_view"
+
+[profile_mapping.module_views.heartflow_decision]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["heartflow_decision"]
+profile_name = "heartflow_decision_view"
+
+[profile_mapping.module_views.module_switches]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["module_switches"]
+profile_name = "module_switches_view"
+
+[profile_mapping.module_views.heartflow_runtime]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["heartflow_runtime"]
+profile_name = "heartflow_runtime_view"

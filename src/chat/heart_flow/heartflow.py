@@ -17,13 +17,19 @@ def _module_switch_on(name: str, default: bool = True) -> bool:
     try:
         from src.config.core_config_engine import get_core_config
 
-        return bool(get_core_config().is_module_on(name))
+        values = get_core_config().resolve_module_view("module_switches").values
+        return bool(values.get(name, default))
     except Exception:
         return default
 
 
 def _phase_idle_timeout_seconds() -> float:
-    return 300.0
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        return float(get_core_config().resolve_module_view("phase_timing").values.get("phase_idle_timeout_seconds", 300.0))
+    except Exception:
+        return 300.0
 
 
 class Heartflow:
@@ -611,7 +617,15 @@ class Heartflow:
 
     async def _periodic_cleanup_loop(self) -> None:
         """后台协程，巡检阶段过期并定期回收不活跃聊天实例。"""
-        next_cleanup_at = _tm.time() + 300.0
+        try:
+            from src.config.core_config_engine import get_core_config
+
+            cleanup_interval = float(
+                get_core_config().resolve_module_view("schedule").values.get("cleanup_chat_instances_interval_seconds", 300.0)
+            )
+        except Exception:
+            cleanup_interval = 300.0
+        next_cleanup_at = _tm.time() + cleanup_interval
         while True:
             try:
                 await asyncio.sleep(5.0)
@@ -619,7 +633,7 @@ class Heartflow:
                 now = _tm.time()
                 if now >= next_cleanup_at:
                     await self.cleanup_inactive()
-                    next_cleanup_at = now + 300.0
+                    next_cleanup_at = now + cleanup_interval
             except asyncio.CancelledError:
                 break
             except Exception as exc:

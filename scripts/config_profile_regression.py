@@ -51,6 +51,24 @@ task_cancel_timeout_seconds = 7.0
 telemetry_heartbeat_interval_seconds = 123.0
 expression_learning_interval_seconds = 456.0
 
+[profile_mapping.semantic_domains.phase_timing]
+max_idle_wait_seconds = 99
+phase_idle_timeout_seconds = 222.0
+
+[profile_mapping.semantic_domains.proactive_decider]
+activation_bar = 0.61
+max_pending_events = 12
+
+[profile_mapping.semantic_domains.heartflow_decision]
+heated_pulse_limit = 9
+
+[profile_mapping.semantic_domains.module_switches]
+heartflow_enabled = true
+
+[profile_mapping.semantic_domains.heartflow_runtime]
+initiative_probability = 0.44
+focus_channels = ["demo"]
+
 [profile_mapping.semantic_domains.skill]
 trial_to_active_invocations = 6
 runtime_skill_cost = 0.4
@@ -79,6 +97,21 @@ semantic_domains = ["model_routing"]
 
 [profile_mapping.module_views.schedule]
 semantic_domains = ["schedule"]
+
+[profile_mapping.module_views.phase_timing]
+semantic_domains = ["phase_timing"]
+
+[profile_mapping.module_views.proactive_decider]
+semantic_domains = ["proactive_decider"]
+
+[profile_mapping.module_views.heartflow_decision]
+semantic_domains = ["heartflow_decision"]
+
+[profile_mapping.module_views.module_switches]
+semantic_domains = ["module_switches"]
+
+[profile_mapping.module_views.heartflow_runtime]
+semantic_domains = ["heartflow_runtime"]
 
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
@@ -125,6 +158,11 @@ def main() -> None:
         assert hub.assemble_scheduler_config()["cooldown_sec"] == 45.0
         assert hub.assemble_scheduler_config()["task_cancel_timeout_sec"] == 7.0
         assert hub.resolve_module_view("model_routing").values["model_fail_threshold"] == 4
+        assert hub.resolve_module_view("phase_timing").values["max_idle_wait_seconds"] == 99
+        assert hub.resolve_module_view("proactive_decider").values["activation_bar"] == 0.61
+        assert hub.resolve_module_view("heartflow_decision").values["heated_pulse_limit"] == 9
+        assert hub.resolve_module_view("module_switches").values["heartflow_enabled"] is True
+        assert hub.resolve_module_view("heartflow_runtime").values["initiative_probability"] == 0.44
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
 
@@ -142,6 +180,7 @@ def main() -> None:
             "schedule_cooldown_sec": hub.assemble_scheduler_config()["cooldown_sec"],
             "model_fail_threshold": hub.resolve_module_view("model_routing").values["model_fail_threshold"],
             "context_reply_tokens": hub.resolve_module_view("context").values["reply_context_max_tokens"],
+            "phase_idle_timeout": hub.resolve_module_view("phase_timing").values["phase_idle_timeout_seconds"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "trace_layers": sorted({item.layer for item in vision.trace}),

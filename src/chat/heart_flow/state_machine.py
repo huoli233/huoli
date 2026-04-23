@@ -5,7 +5,6 @@ from src.config.core_config_engine import get_core_config
 from src.common.data_models.heartflow_models import (
     FlowPhase,
     PhaseTransitionRecord,
-    LEGAL_TRANSITIONS,
     is_transition_legal,
 )
 
@@ -43,7 +42,7 @@ class PhaseCoordinator:
     def _cfg_block(self) -> Dict[str, Any]:
         """读取心流时序配置段"""
         hub = get_core_config()
-        return hub.heartflow_timing()
+        return hub.resolve_module_view("phase_timing").values
 
     def register_channel(
         self, channel_id: str, initial: FlowPhase = FlowPhase.STANDBY

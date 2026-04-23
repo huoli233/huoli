@@ -176,32 +176,13 @@ class CoreSettingsHub:
 
     def assemble_decision_config(self) -> Dict[str, Any]:
         """组装心流决策的完整配置包"""
-        d = self._section("heartflow_decision")
-        return {
-            "calm_slot_ttl": float(d.get("calm_slot_ttl", 5.0)),
-            "heated_slot_ttl": float(d.get("heated_slot_ttl", 2.0)),
-            "pulse_span_seconds": float(d.get("pulse_span_seconds", 60.0)),
-            "heated_pulse_limit": int(d.get("heated_pulse_limit", 5)),
-            "slot_capacity_cap": int(d.get("slot_capacity_cap", 120)),
-            "dimension_weights": d.get("dimension_weights", {}),
-            "mood_factors": d.get("mood_factors", {}),
-            "barrier_seeds": d.get("barrier_seeds", {}),
-            "barrier_tuning": d.get("barrier_tuning", {}),
-            "threat_weights": d.get("threat_weights", {}),
-            "fusion": d.get("fusion", {}),
-            "immediacy": d.get("immediacy", {}),
-            "credibility": d.get("credibility", {}),
-            "bond": d.get("bond", {}),
-            "tactics": d.get("tactics", {}),
-        }
+        return self.resolve_module_view("heartflow_decision").values
 
     # ---- 聚合查询 ----
 
     def is_module_on(self, name: str) -> bool:
         """查询指定模块是否启用"""
-        switches = self._sections.get("module_switches")
-        if not isinstance(switches, dict):
-            return True
+        switches = self.resolve_module_view("module_switches").values
         return bool(switches.get(name, True))
 
     def energy_ceilings(self) -> Tuple[float, float]:
@@ -361,7 +342,7 @@ class CoreSettingsHub:
 
     def assemble_wait_config(self) -> Dict[str, Any]:
         """组装等待阶段的完整配置包"""
-        t = self._section("heartflow_timing")
+        t = self.resolve_module_view("phase_timing").values
         return {
             "max_wait_sec": int(t.get("max_idle_wait_seconds", 120)),
             "reflect_interval": int(t.get("reflect_interval_seconds", 30)),
@@ -371,7 +352,7 @@ class CoreSettingsHub:
 
     def assemble_rest_config(self) -> Dict[str, Any]:
         """组装休息阶段的完整配置包"""
-        t = self._section("heartflow_timing")
+        t = self.resolve_module_view("phase_timing").values
         return {
             "duration_sec": int(t.get("rest_default_seconds", 300)),
             "peek_chance": float(t.get("peek_chance_ratio", 0.05)),

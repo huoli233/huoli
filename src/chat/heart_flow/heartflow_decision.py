@@ -14,9 +14,9 @@ logger = get_logger("心流决策")
 
 
 def _load_decision_cfg() -> dict:
-    """从核心配置中枢读取 heartflow_decision 段落"""
+    """从核心配置中枢读取 heartflow_decision_view。"""
     try:
-        return get_core_config().assemble_decision_config()
+        return get_core_config().resolve_module_view("heartflow_decision").values
     except RuntimeError:
         return {}
 
