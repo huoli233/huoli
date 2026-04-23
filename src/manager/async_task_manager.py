@@ -42,12 +42,12 @@ class AsyncTaskManager:
         try:
             from src.config.core_config_engine import get_core_config
 
-            rt = get_core_config().runtime_tuning_block()
+            rt = get_core_config().resolve_module_view("schedule").values
             self._cancel_timeout = float(
-                rt.get("task_cancel_timeout_seconds", TIMEOUT_TASK_CANCEL)
+                rt.get("task_cancel_timeout_seconds", rt.get("task_cancel_timeout_sec", TIMEOUT_TASK_CANCEL))
             )
             self._shutdown_timeout = float(
-                rt.get("task_shutdown_timeout_seconds", TIMEOUT_TASK_SHUTDOWN)
+                rt.get("task_shutdown_timeout_seconds", rt.get("task_shutdown_timeout_sec", TIMEOUT_TASK_SHUTDOWN))
             )
         except Exception:
             self._cancel_timeout = TIMEOUT_TASK_CANCEL

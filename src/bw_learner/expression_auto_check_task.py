@@ -14,6 +14,21 @@ from src.manager.async_task_manager import AsyncTask
 logger = get_logger("表达自动检查")
 
 
+def _expression_check_interval() -> int:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        view = get_core_config().resolve_module_view("schedule").values
+        return int(
+            view.get(
+                "expression_learning_interval_seconds",
+                global_config.expression.expression_auto_check_interval,
+            )
+        )
+    except Exception:
+        return int(global_config.expression.expression_auto_check_interval)
+
+
 def create_evaluation_prompt(situation: str, style: str) -> str:
     """创建评估提示词"""
     base_criteria = [
@@ -92,16 +107,15 @@ class ExpressionAutoCheckTask(AsyncTask):
     """表达方式自动检查定时任务"""
 
     def __init__(self):
+        interval = _expression_check_interval()
         super().__init__(
             task_name="ExpressionAutoCheckTask",
             wait_before_start=60,
-            run_interval=global_config.expression.expression_auto_check_interval,
+            run_interval=interval,
         )
         self._running = False
         self._task: asyncio.Task = None
-        self.check_interval = (
-            global_config.expression.expression_auto_check_interval
-        )
+        self.check_interval = interval
         self.wait_before_start = 60
 
     async def run(self):

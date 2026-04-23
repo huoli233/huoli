@@ -48,7 +48,8 @@ def _health_cooldown_sec() -> float:
     try:
         from src.config.core_config_engine import get_core_config
 
-        return float(get_core_config().runtime_tuning_block().get("model_cooldown_seconds", 120.0))
+        view = get_core_config().resolve_module_view("model_routing")
+        return float(view.values.get("model_cooldown_seconds", 120.0))
     except Exception:
         return 120.0
 
@@ -57,7 +58,8 @@ def _health_fail_threshold() -> int:
     try:
         from src.config.core_config_engine import get_core_config
 
-        return int(get_core_config().runtime_tuning_block().get("model_fail_threshold", 3))
+        view = get_core_config().resolve_module_view("model_routing")
+        return int(view.values.get("model_fail_threshold", 3))
     except Exception:
         return 3
 
@@ -66,7 +68,8 @@ def _tool_incompat_cooldown_sec() -> float:
     try:
         from src.config.core_config_engine import get_core_config
 
-        return float(get_core_config().runtime_tuning_block().get("tool_incompat_cooldown_seconds", 600.0))
+        view = get_core_config().resolve_module_view("model_routing")
+        return float(view.values.get("tool_incompat_cooldown_seconds", 600.0))
     except Exception:
         return 600.0
 
@@ -306,6 +309,59 @@ class LLMRequest:
         }
         """模型使用量记录，用于进行负载均衡，对应为(total_tokens, penalty, usage_penalty)，惩罚值是为了能在某个模型请求不给力或正在被使用的时候进行调整"""
 
+    @staticmethod
+    def _model_routing_values() -> Dict[str, Any]:
+        try:
+            from src.config.core_config_engine import get_core_config
+
+            return get_core_config().resolve_module_view("model_routing").values
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _model_matches(model_info: ModelInfo, patterns: Any) -> bool:
+        if isinstance(patterns, str):
+            pattern_list = [patterns]
+        elif isinstance(patterns, list):
+            pattern_list = patterns
+        else:
+            pattern_list = []
+        haystack = " ".join(
+            str(item or "").lower()
+            for item in (
+                getattr(model_info, "name", ""),
+                getattr(model_info, "model_identifier", ""),
+                getattr(model_info, "api_provider", ""),
+                getattr(model_info, "client_type", ""),
+            )
+        )
+        return any(str(pattern).strip().lower() in haystack for pattern in pattern_list if str(pattern).strip())
+
+    def _should_suppress_reasoning(self, model_info: ModelInfo) -> bool:
+        routing = self._model_routing_values()
+        return bool(getattr(model_info, "suppress_reasoning", False)) or self._model_matches(
+            model_info,
+            routing.get("disable_thinking_for", []),
+        )
+
+    def _effective_extra_params(self, model_info: ModelInfo) -> Dict[str, Any]:
+        extra_params = dict(model_info.extra_params or {})
+        if self._should_suppress_reasoning(model_info):
+            extra_params.setdefault("enable_thinking", False)
+        return extra_params
+
+    def _finalize_response_content(self, content: str | None, reasoning_content: str | None, model_info: ModelInfo) -> Tuple[str, str]:
+        text = content or ""
+        reasoning = reasoning_content or ""
+        if self._should_suppress_reasoning(model_info):
+            if text:
+                text = self._strip_reasoning_blocks(text)
+            return text, ""
+        if not reasoning and text:
+            text, extracted_reasoning = self._extract_reasoning(text)
+            reasoning = extracted_reasoning
+        return text, reasoning
+
     def _filter_models_for_tools(self, model_names: List[str]) -> List[str]:
         """为工具调用任务过滤当前已知高风险不兼容模型。"""
         if not model_names:
@@ -402,12 +458,12 @@ class LLMRequest:
             temperature=temperature,
             max_tokens=max_tokens,
         )
-        content = response.content or ""
-        reasoning_content = response.reasoning_content or ""
+        content, reasoning_content = self._finalize_response_content(
+            response.content,
+            response.reasoning_content,
+            model_info,
+        )
         tool_calls = response.tool_calls
-        if not reasoning_content and content:
-            content, extracted_reasoning = self._extract_reasoning(content)
-            reasoning_content = extracted_reasoning
         time_cost = time.time() - start_time
         self._check_slow_request(time_cost, model_info.name)
         if usage := response.usage:
@@ -474,12 +530,12 @@ class LLMRequest:
         logger.debug(f"LLM请求总耗时: {time.time() - start_time}")
         logger.debug(f"LLM生成内容: {response}")
 
-        content = response.content
-        reasoning_content = response.reasoning_content or ""
+        content, reasoning_content = self._finalize_response_content(
+            response.content,
+            response.reasoning_content,
+            model_info,
+        )
         tool_calls = response.tool_calls
-        if not reasoning_content and content:
-            content, extracted_reasoning = self._extract_reasoning(content)
-            reasoning_content = extracted_reasoning
         if usage := response.usage:
             llm_usage_recorder.record_usage_to_database(
                 model_info=model_info,
@@ -489,7 +545,7 @@ class LLMRequest:
                 endpoint="/chat/completions",
                 time_cost=time.time() - start_time,
             )
-        return content or "", (reasoning_content, model_info.name, tool_calls)
+        return content, (reasoning_content, model_info.name, tool_calls)
 
     async def generate_response_with_message_async(
         self,
@@ -526,12 +582,12 @@ class LLMRequest:
         logger.debug(f"LLM请求总耗时: {time_cost}")
         logger.debug(f"LLM生成内容: {response}")
 
-        content = response.content
-        reasoning_content = response.reasoning_content or ""
+        content, reasoning_content = self._finalize_response_content(
+            response.content,
+            response.reasoning_content,
+            model_info,
+        )
         tool_calls = response.tool_calls
-        if not reasoning_content and content:
-            content, extracted_reasoning = self._extract_reasoning(content)
-            reasoning_content = extracted_reasoning
         self._check_slow_request(time_cost, model_info.name)
         if usage := response.usage:
             llm_usage_recorder.record_usage_to_database(
@@ -542,7 +598,7 @@ class LLMRequest:
                 endpoint="/chat/completions",
                 time_cost=time_cost,
             )
-        return content or "", (reasoning_content, model_info.name, tool_calls)
+        return content, (reasoning_content, model_info.name, tool_calls)
 
     async def get_embedding(self, embedding_input: str) -> Tuple[List[float], str]:
         """
@@ -697,7 +753,7 @@ class LLMRequest:
                             response_format=_active_response_format,
                             stream_response_handler=stream_response_handler,
                             async_response_parser=async_response_parser,
-                            extra_params=model_info.extra_params,
+                            extra_params=self._effective_extra_params(model_info),
                         ),
                         timeout=_call_timeout,
                     )
@@ -707,7 +763,7 @@ class LLMRequest:
                         client.get_embedding(
                             model_info=model_info,
                             embedding_input=embedding_input,
-                            extra_params=model_info.extra_params,
+                            extra_params=self._effective_extra_params(model_info),
                         ),
                         timeout=_call_timeout,
                     )
@@ -717,7 +773,7 @@ class LLMRequest:
                         client.get_audio_transcriptions(
                             model_info=model_info,
                             audio_base64=audio_base64,
-                            extra_params=model_info.extra_params,
+                            extra_params=self._effective_extra_params(model_info),
                         ),
                         timeout=_call_timeout,
                     )
@@ -1195,6 +1251,10 @@ class LLMRequest:
         content = re.sub(r"(?:<think>)?.*?</think>", "", content, flags=re.DOTALL, count=1).strip()
         reasoning = match.group(1).strip() if match and match.group(1) else ""
         return content, reasoning
+
+    @staticmethod
+    def _strip_reasoning_blocks(content: str) -> str:
+        return re.sub(r"<think>.*?</think>", "", content, flags=re.DOTALL).strip()
 
     @staticmethod
     def _get_original_error_info(e: Exception) -> str:

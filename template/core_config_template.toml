@@ -345,8 +345,21 @@ large_model_path = "large"
 backend_event_cooldown_seconds = 60.0
 proactive_reply_cooldown_seconds = 60.0
 memory_governance_interval_seconds = 300.0
-expression_learning_interval_seconds = 600.0
+expression_learning_interval_seconds = 3600.0
 skill_patrol_interval_seconds = 600.0
+telemetry_heartbeat_interval_seconds = 300.0
+task_cancel_timeout_seconds = 5.0
+task_shutdown_timeout_seconds = 10.0
+cleanup_initial_delay_seconds = 60.0
+cleanup_loop_interval_seconds = 60.0
+cleanup_error_backoff_seconds = 30.0
+active_user_cleanup_interval_seconds = 300
+chatter_cleanup_interval_seconds = 300
+session_cleanup_interval_seconds = 600
+context_cleanup_interval_seconds = 300
+memory_cleanup_interval_seconds = 1800
+cache_cleanup_interval_seconds = 600
+temp_files_cleanup_interval_seconds = 3600
 
 [profile_mapping.semantic_domains.memory]
 short_term_limit = 64

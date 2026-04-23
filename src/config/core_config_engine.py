@@ -350,15 +350,18 @@ class CoreSettingsHub:
 
     def proactive_cooldown_sec(self) -> float:
         """主动回复最小冷却秒数"""
-        return float(self.fetch_item("proactive_schedule", "min_cooldown_seconds", 60.0))
+        view = self.resolve_module_view("schedule")
+        return float(view.values.get("proactive_reply_cooldown_seconds", view.values.get("min_cooldown_seconds", 60.0)))
 
     def think_concurrency_limit(self) -> int:
         """主动思考最大并发"""
-        return int(self.fetch_item("proactive_schedule", "max_concurrent_thinks", 3))
+        view = self.resolve_module_view("schedule")
+        return int(view.values.get("max_concurrent_thinks", 3))
 
     def silence_idle_sec(self) -> float:
         """沉默检测触发秒数"""
-        return float(self.fetch_item("silence_detection", "idle_trigger_seconds", 180.0))
+        view = self.resolve_module_view("schedule")
+        return float(view.values.get("idle_trigger_seconds", 180.0))
 
     def emotion_annoy_count(self) -> int:
         """触发烦恼的重复次数"""
@@ -454,14 +457,21 @@ class CoreSettingsHub:
 
     def assemble_scheduler_config(self) -> Dict[str, Any]:
         """组装主动回复调度器的完整配置包"""
-        p = self.proactive_schedule()
+        p = self.resolve_module_view("schedule").values
         return {
-            "cooldown_sec": float(p.get("min_cooldown_seconds", 60.0)),
+            "cooldown_sec": float(p.get("proactive_reply_cooldown_seconds", p.get("min_cooldown_seconds", 60.0))),
             "concurrency": int(p.get("max_concurrent_thinks", 3)),
             "timeout_sec": float(p.get("think_timeout_seconds", 30.0)),
             "max_retry": int(p.get("retry_max_count", 2)),
             "queue_size": int(p.get("queue_capacity", 20)),
             "mention_boost": float(p.get("priority_boost_on_mention", 2.0)),
+            "backend_event_cooldown_sec": float(p.get("backend_event_cooldown_seconds", 60.0)),
+            "memory_governance_interval_sec": float(p.get("memory_governance_interval_seconds", 300.0)),
+            "expression_learning_interval_sec": float(p.get("expression_learning_interval_seconds", 3600.0)),
+            "skill_patrol_interval_sec": float(p.get("skill_patrol_interval_seconds", 600.0)),
+            "telemetry_heartbeat_interval_sec": float(p.get("telemetry_heartbeat_interval_seconds", 300.0)),
+            "task_cancel_timeout_sec": float(p.get("task_cancel_timeout_seconds", 5.0)),
+            "task_shutdown_timeout_sec": float(p.get("task_shutdown_timeout_seconds", 10.0)),
         }
 
     def assemble_silence_config(self) -> Dict[str, Any]:

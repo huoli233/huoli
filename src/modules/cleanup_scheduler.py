@@ -21,14 +21,18 @@ class CleanupScheduler:
         self._initialized = True
         self._running = False
         self._lock: Optional[asyncio.Lock] = None
+        schedule_view = self._schedule_view()
+        self._initial_delay = float(schedule_view.get("cleanup_initial_delay_seconds", 60.0))
+        self._loop_interval = float(schedule_view.get("cleanup_loop_interval_seconds", 60.0))
+        self._error_backoff = float(schedule_view.get("cleanup_error_backoff_seconds", 30.0))
         self._cleanup_intervals = {
-            "chatter": 300,
-            "session": 600,
-            "context": 300,
-            "memory": 1800,
-            "active_user": 300,
-            "cache": 600,
-            "temp_files": 3600,
+            "chatter": int(schedule_view.get("chatter_cleanup_interval_seconds", 300)),
+            "session": int(schedule_view.get("session_cleanup_interval_seconds", 600)),
+            "context": int(schedule_view.get("context_cleanup_interval_seconds", 300)),
+            "memory": int(schedule_view.get("memory_cleanup_interval_seconds", 1800)),
+            "active_user": int(schedule_view.get("active_user_cleanup_interval_seconds", 300)),
+            "cache": int(schedule_view.get("cache_cleanup_interval_seconds", 600)),
+            "temp_files": int(schedule_view.get("temp_files_cleanup_interval_seconds", 3600)),
         }
         self._last_cleanup_times = {
             "chatter": 0.0,
@@ -53,6 +57,15 @@ class CleanupScheduler:
         logger.info(
             f"CleanupScheduler 初始化: 间隔配置={self._cleanup_intervals}"
         )
+
+    @staticmethod
+    def _schedule_view() -> Dict[str, Any]:
+        try:
+            from src.config.core_config_engine import get_core_config
+
+            return get_core_config().resolve_module_view("schedule").values
+        except Exception:
+            return {}
 
     def register_cleanup_handler(self, name: str, handler) -> None:
         self._cleanup_handlers[name] = handler
@@ -85,16 +98,16 @@ class CleanupScheduler:
         logger.info("CleanupScheduler 已停止")
 
     async def _cleanup_loop(self):
-        await asyncio.sleep(60)
+        await asyncio.sleep(self._initial_delay)
         while self._running:
             try:
                 await self._run_cleanup_tasks()
-                await asyncio.sleep(60)
+                await asyncio.sleep(self._loop_interval)
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"清理循环错误: {e}")
-                await asyncio.sleep(30)
+                await asyncio.sleep(self._error_backoff)
 
     async def _run_cleanup_tasks(self):
         now = time.time()

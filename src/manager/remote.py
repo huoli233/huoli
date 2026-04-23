@@ -25,9 +25,9 @@ class TelemetryHeartBeatTask(AsyncTask):
         try:
             from src.config.core_config_engine import get_core_config
 
-            rt = get_core_config().runtime_tuning_block()
+            rt = get_core_config().resolve_module_view("schedule").values
             interval = int(
-                rt.get("heartbeat_interval_seconds", self.HEARTBEAT_INTERVAL)
+                rt.get("telemetry_heartbeat_interval_seconds", rt.get("heartbeat_interval_seconds", self.HEARTBEAT_INTERVAL))
             )
         except Exception:
             interval = self.HEARTBEAT_INTERVAL

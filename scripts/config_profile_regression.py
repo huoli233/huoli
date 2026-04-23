@@ -34,6 +34,17 @@ timeout_seconds = 30.0
 short_term_limit = 64
 importance_floor = 0.2
 
+[profile_mapping.semantic_domains.model_routing]
+model_cooldown_seconds = 77.0
+model_fail_threshold = 4
+disable_thinking_for = ["qwen"]
+
+[profile_mapping.semantic_domains.schedule]
+proactive_reply_cooldown_seconds = 45.0
+task_cancel_timeout_seconds = 7.0
+telemetry_heartbeat_interval_seconds = 123.0
+expression_learning_interval_seconds = 456.0
+
 [profile_mapping.scenario_profiles.image_high_risk.vision]
 reply_suppressed = true
 risk_score = {value}
@@ -45,6 +56,12 @@ long_term_limit = 4096
 [profile_mapping.module_views.vision]
 timeout_seconds = 12.0
 vlm_temperature = 0.2
+
+[profile_mapping.module_views.model_routing]
+semantic_domains = ["model_routing"]
+
+[profile_mapping.module_views.schedule]
+semantic_domains = ["schedule"]
 """.strip()
 
 
@@ -75,8 +92,11 @@ def main() -> None:
         assert vision.values["vlm_temperature"] == 0.2
 
         fallback = hub.resolve_module_view("schedule")
-        assert fallback.fallback_used is True
+        assert fallback.fallback_used is False
         assert fallback.values["min_cooldown_seconds"] == 60.0
+        assert hub.assemble_scheduler_config()["cooldown_sec"] == 45.0
+        assert hub.assemble_scheduler_config()["task_cancel_timeout_sec"] == 7.0
+        assert hub.resolve_module_view("model_routing").values["model_fail_threshold"] == 4
 
         sleep(1.1)
         _write(config_path, _config(0.35))
@@ -89,6 +109,8 @@ def main() -> None:
             "memory_keys": sorted(memory.values.keys()),
             "vision_risk_score": reloaded.values["risk_score"],
             "schedule_fallback_used": fallback.fallback_used,
+            "schedule_cooldown_sec": hub.assemble_scheduler_config()["cooldown_sec"],
+            "model_fail_threshold": hub.resolve_module_view("model_routing").values["model_fail_threshold"],
             "trace_layers": sorted({item.layer for item in vision.trace}),
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
