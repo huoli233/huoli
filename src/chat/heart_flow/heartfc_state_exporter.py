@@ -228,6 +228,8 @@ def _extract_runtime_snapshot(chat: Any) -> Dict[str, Any]:
         "cached_emotion_feedback_report": "_cached_emotion_feedback_report",
         "cached_awareness": "_cached_awareness",
         "cached_presence_verdict": "_cached_presence_verdict",
+        "cached_attention_snapshot": "_cached_attention_snapshot",
+        "cached_safety_assessment": "_cached_safety_assessment",
         "last_relation_snapshot": "_last_relation_snapshot",
         "participant_summary": "_cached_participant_summary",
         "last_user_id": "_last_user_id",
@@ -394,6 +396,49 @@ def _extract_group_climate(
         "atmosphere_label": atmosphere_label,
         "hot_count": _safe_int(participant_summary.get("hot_count", 0)),
         "warm_count": _safe_int(participant_summary.get("warm_count", 0)),
+    }
+
+
+def _extract_attention_runtime(channel_id: str, runtime: Dict[str, Any]) -> Dict[str, Any]:
+    snapshot = runtime.get("cached_attention_snapshot", {})
+    if not isinstance(snapshot, dict):
+        snapshot = {}
+    try:
+        from src.core.subjective_attention_flow import get_attention_flow_controller
+
+        controller = get_attention_flow_controller(channel_id)
+        live_snapshot = controller.get_snapshot()
+        if hasattr(live_snapshot, "to_dict"):
+            snapshot = dict(live_snapshot.to_dict() or {}) or snapshot
+    except Exception as exc:
+        logger.debug(f"注意力运行态导出失败，回退缓存: {exc}")
+    return {
+        "state": str(snapshot.get("state", "") or snapshot.get("attention_mode", "") or ""),
+        "state_label": str(snapshot.get("state_label", "") or ""),
+        "visibility_threshold": round(_safe_float(snapshot.get("visibility_threshold", 0.0)), 3),
+        "process_ratio": round(_safe_float(snapshot.get("process_ratio", 0.0)), 3),
+        "peek_desire": round(_safe_float(snapshot.get("peek_desire", 0.0)), 3),
+        "interrupt_tolerance": round(_safe_float(snapshot.get("interrupt_tolerance", 0.0)), 3),
+        "silence_tolerance": round(_safe_float(snapshot.get("silence_tolerance", 0.0)), 3),
+        "time_since_last_look": round(_safe_float(snapshot.get("since_last_look_sec", 0.0)), 2),
+        "consecutive_peeks_without_action": _safe_int(snapshot.get("consecutive_empty_peeks", 0)),
+        "look_budget_state": round(_safe_float(snapshot.get("look_budget_state", 0.0)), 3),
+        "process_budget_state": round(_safe_float(snapshot.get("process_budget_state", 0.0)), 3),
+        "openness": round(_safe_float(snapshot.get("openness", 0.0)), 3),
+    }
+
+
+def _extract_safety_runtime(runtime: Dict[str, Any]) -> Dict[str, Any]:
+    safety = runtime.get("cached_safety_assessment", {})
+    if not isinstance(safety, dict):
+        safety = {}
+    return {
+        "level": str(safety.get("level", "") or ""),
+        "score": round(_safe_float(safety.get("score", 0.0)), 4),
+        "dominant_threat": str(safety.get("dominant", "") or ""),
+        "blocked": bool(safety.get("block_reply", False)),
+        "bar_penalty": round(_safe_float(safety.get("bar_delta", 0.0)), 4),
+        "threat_evidence_summary": str(safety.get("action", "") or ""),
     }
 
 
@@ -798,6 +843,8 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
     relation = _extract_relationship_profile(chat, world_state)
     memory_stack = _extract_memory_stack(channel_id)
     autonomy_runtime = _extract_autonomy_runtime(chat, channel_id)
+    attention_runtime = _extract_attention_runtime(channel_id, runtime)
+    safety_runtime = _extract_safety_runtime(runtime)
     subject = world_state.get("subject", {}) if isinstance(world_state, dict) else {}
     scene = world_state.get("scene", {}) if isinstance(world_state, dict) else {}
     behavior = world_state.get("behavior", {}) if isinstance(world_state, dict) else {}
@@ -926,6 +973,8 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
         },
         "memory_stack": memory_stack,
         "autonomy_runtime": autonomy_runtime,
+        "attention_runtime": attention_runtime,
+        "safety_runtime": safety_runtime,
         "context_awareness": context_awareness,
         "relationship_profile": relation,
         "emergence_core": emergence,

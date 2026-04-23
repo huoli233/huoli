@@ -102,6 +102,8 @@ def _label_source(value: Any) -> str:
         "memory_stack": "记忆栈",
         "autonomy_runtime": "自主运行",
         "context_awareness": "上下文感知",
+        "attention_runtime": "注意力运行态",
+        "safety_runtime": "安全护盾",
     }.get(str(value or "").strip(), str(value or "") or "状态源")
 
 
@@ -290,6 +292,8 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
     circadian = domains.get("circadian_rhythm", {})
     memory_stack = domains.get("memory_stack", {})
     autonomy = domains.get("autonomy_runtime", {})
+    attention_runtime = domains.get("attention_runtime", {})
+    safety_runtime = domains.get("safety_runtime", {})
 
     signals: list[Dict[str, Any]] = []
 
@@ -756,6 +760,71 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
             )
         )
 
+    peek_desire = _safe_float(attention_runtime.get("peek_desire", 0.0))
+    if peek_desire >= 0.65:
+        signals.append(
+            _signal_card(
+                key="peek_desire_high",
+                label="窥屏欲望偏高",
+                family="runtime",
+                severity="info",
+                value=peek_desire,
+                display_value=_format_percent(peek_desire),
+                trend="rising",
+                source_domain="attention_runtime",
+                icon="👁️",
+            )
+        )
+
+    process_ratio = _safe_float(attention_runtime.get("process_ratio", 0.0))
+    visibility_threshold = _safe_float(attention_runtime.get("visibility_threshold", 0.0))
+    if process_ratio <= 0.12 and visibility_threshold >= 0.55:
+        signals.append(
+            _signal_card(
+                key="attention_suppressed",
+                label="注意力受抑",
+                family="runtime",
+                severity="medium",
+                value=1.0 - process_ratio,
+                display_value=_format_percent(1.0 - process_ratio),
+                trend="holding",
+                source_domain="attention_runtime",
+                icon="📡",
+            )
+        )
+
+    empty_peeks = _safe_float(attention_runtime.get("consecutive_peeks_without_action", 0.0))
+    if empty_peeks >= 3:
+        signals.append(
+            _signal_card(
+                key="consecutive_peeks_without_action",
+                label="连续窥屏未行动",
+                family="runtime",
+                severity="info" if empty_peeks < 5 else "medium",
+                value=empty_peeks,
+                display_value=f"{int(empty_peeks)}次",
+                trend="holding",
+                source_domain="attention_runtime",
+                icon="🫣",
+            )
+        )
+
+    safety_score = _safe_float(safety_runtime.get("score", 0.0))
+    if bool(safety_runtime.get("blocked", False)) or safety_score >= 0.45:
+        signals.append(
+            _signal_card(
+                key="safety_threat",
+                label="安全护盾收紧",
+                family="runtime",
+                severity="high" if safety_score < 0.75 else "critical",
+                value=safety_score,
+                display_value=str(safety_runtime.get("dominant_threat", "") or "已触发风险"),
+                trend="holding",
+                source_domain="safety_runtime",
+                icon="🛡️",
+            )
+        )
+
     if bool(circadian.get("is_burnthrough", False)):
         signals.append(
             _signal_card(
@@ -1182,6 +1251,9 @@ def _build_context_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     context = domains.get("context_awareness", {})
     if not isinstance(context, dict):
         context = {}
+    attention = domains.get("attention_runtime", {})
+    if not isinstance(attention, dict):
+        attention = {}
     return {
         "direct_target": bool(context.get("direct_target", False)),
         "quote_anchor": bool(context.get("quote_anchor", False)),
@@ -1206,6 +1278,15 @@ def _build_context_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
         "silence_policy_label": _label_silence_policy(context.get("silence_policy", "silent")),
         "behavior_reason_labels": [_label_behavior_reason(code) for code in list(context.get("behavior_reason_codes", []) or [])],
         "rest_reason_labels": [_label_behavior_reason(code) for code in list(context.get("rest_reason_codes", []) or [])],
+        "visibility_threshold": round(_safe_float(attention.get("visibility_threshold", 0.0)), 3),
+        "process_ratio": round(_safe_float(attention.get("process_ratio", 0.0)), 3),
+        "peek_desire": round(_safe_float(attention.get("peek_desire", 0.0)), 3),
+        "interrupt_tolerance": round(_safe_float(attention.get("interrupt_tolerance", 0.0)), 3),
+        "silence_tolerance": round(_safe_float(attention.get("silence_tolerance", 0.0)), 3),
+        "time_since_last_look": round(_safe_float(attention.get("time_since_last_look", 0.0)), 2),
+        "consecutive_peeks_without_action": int(_safe_float(attention.get("consecutive_peeks_without_action", 0), 0)),
+        "look_budget_state": round(_safe_float(attention.get("look_budget_state", 0.0)), 3),
+        "process_budget_state": round(_safe_float(attention.get("process_budget_state", 0.0)), 3),
     }
 
 
@@ -1253,6 +1334,40 @@ def _build_group_state_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
         "atmosphere_label": str(group_climate.get("atmosphere_label", "") or ""),
         "hot_count": int(_safe_float(group_climate.get("hot_count", 0), 0)),
         "warm_count": int(_safe_float(group_climate.get("warm_count", 0), 0)),
+    }
+
+
+def _build_attention_runtime_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
+    attention = domains.get("attention_runtime", {})
+    if not isinstance(attention, dict):
+        attention = {}
+    return {
+        "state": str(attention.get("state", "") or ""),
+        "state_label": str(attention.get("state_label", "") or "扫描模式"),
+        "visibility_threshold": round(_safe_float(attention.get("visibility_threshold", 0.0)), 3),
+        "process_ratio": round(_safe_float(attention.get("process_ratio", 0.0)), 3),
+        "peek_desire": round(_safe_float(attention.get("peek_desire", 0.0)), 3),
+        "interrupt_tolerance": round(_safe_float(attention.get("interrupt_tolerance", 0.0)), 3),
+        "silence_tolerance": round(_safe_float(attention.get("silence_tolerance", 0.0)), 3),
+        "time_since_last_look": round(_safe_float(attention.get("time_since_last_look", 0.0)), 2),
+        "consecutive_peeks_without_action": int(_safe_float(attention.get("consecutive_peeks_without_action", 0), 0)),
+        "look_budget_state": round(_safe_float(attention.get("look_budget_state", 0.0)), 3),
+        "process_budget_state": round(_safe_float(attention.get("process_budget_state", 0.0)), 3),
+        "openness": round(_safe_float(attention.get("openness", 0.0)), 3),
+    }
+
+
+def _build_safety_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
+    safety = domains.get("safety_runtime", {})
+    if not isinstance(safety, dict):
+        safety = {}
+    return {
+        "safety_level": str(safety.get("level", "") or "安全"),
+        "safety_score": round(_safe_float(safety.get("score", 0.0)), 4),
+        "blocked": bool(safety.get("blocked", False)),
+        "dominant_threat": str(safety.get("dominant_threat", "") or ""),
+        "bar_penalty": round(_safe_float(safety.get("bar_penalty", 0.0)), 4),
+        "threat_evidence_summary": str(safety.get("threat_evidence_summary", "") or "暂无显著风险"),
     }
 
 
@@ -1367,6 +1482,8 @@ def _build_presentation(
     context_detail = _build_context_detail(domains)
     group_state_detail = _build_group_state_detail(domains)
     current_user_detail = _build_current_user_detail(domains)
+    attention_runtime_detail = _build_attention_runtime_detail(domains)
+    safety_detail = _build_safety_detail(domains)
 
     active_signals = _build_active_signals(domains)
     resource_detail = _build_resource_detail(domains)
@@ -1494,6 +1611,8 @@ def _build_presentation(
         "emotion_detail": emotion_detail,
         "behavior_detail": behavior_detail,
         "context_detail": context_detail,
+        "attention_runtime_detail": attention_runtime_detail,
+        "safety_detail": safety_detail,
         "group_state_detail": group_state_detail,
         "current_user_detail": current_user_detail,
         "memory_detail": memory_detail,

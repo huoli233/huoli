@@ -1,9 +1,7 @@
 import time
-import math
-import random
 from enum import Enum
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from src.common.logger import get_logger
 from src.common.singleton import MultiInstanceManager
 
@@ -103,6 +101,8 @@ class AttentionFlowSnapshot:
     curiosity_level: float = 0.3
     social_hunger: float = 0.5
     withdrawal_depth: float = 0.0
+    look_budget_state: float = 0.0
+    process_budget_state: float = 0.0
     time_since_last_look: float = 0.0
     time_since_last_act: float = 0.0
     consecutive_peeks_without_action: int = 0
@@ -133,6 +133,8 @@ class AttentionFlowSnapshot:
             "curiosity_level": round(self.curiosity_level, 3),
             "social_hunger": round(self.social_hunger, 3),
             "withdrawal_depth": round(self.withdrawal_depth, 3),
+            "look_budget_state": round(self.look_budget_state, 3),
+            "process_budget_state": round(self.process_budget_state, 3),
             "since_last_look_sec": round(self.time_since_last_look, 1),
             "since_last_act_sec": round(self.time_since_last_act, 1),
             "consecutive_empty_peeks": self.consecutive_peeks_without_action,
@@ -318,6 +320,8 @@ class SubjectiveAttentionFlowController:
         self._peek_cooldown_sec = 60.0
         self._last_peek_at = 0.0
         self._max_history = 50
+        self._look_budget_accumulator = 0.0
+        self._process_budget_accumulator = 0.0
 
     # ═════════════════ 主入口：tick + 过滤 ═════════════════
 
@@ -405,8 +409,16 @@ class SubjectiveAttentionFlowController:
             if not passed_filter and (is_at or is_quote):
                 level += 0.25
                 passed_filter = level >= threshold
-            if passed_filter and random.random() > process_ratio:
-                passed_filter = False
+            if passed_filter:
+                self._process_budget_accumulator = min(
+                    2.0, self._process_budget_accumulator + process_ratio
+                )
+                self._snapshot.process_budget_state = self._process_budget_accumulator
+                if self._process_budget_accumulator >= 1.0:
+                    self._process_budget_accumulator -= 1.0
+                    self._snapshot.process_budget_state = self._process_budget_accumulator
+                else:
+                    passed_filter = False
             perceived = self._classify_perception(level, passed_filter, msg)
             result = MessageFilterResult(
                 message_id=mid,
@@ -437,20 +449,39 @@ class SubjectiveAttentionFlowController:
     def should_even_look(self, now: float) -> bool:
         state = self._snapshot.state
         if state == AttentionState.FULLY_ENGAGED:
+            self._snapshot.look_budget_state = 1.0
             return True
         if state == AttentionState.DEEP_WITHDRAWAL:
             if now - self._last_peek_at < self._peek_cooldown_sec * 3:
                 return False
-            if random.random() > 0.08:
+            self._look_budget_accumulator = min(1.2, self._look_budget_accumulator + 0.08)
+            self._snapshot.look_budget_state = self._look_budget_accumulator
+            if self._look_budget_accumulator < 1.0:
                 return False
+            self._look_budget_accumulator -= 1.0
+            self._snapshot.look_budget_state = self._look_budget_accumulator
             return True
         if state == AttentionState.WITHDRAWN:
             if now - self._last_peek_at < self._peek_cooldown_sec:
                 return False
             peek_prob = 0.15 + self._snapshot.peek_desire * 0.20
-            return random.random() < peek_prob
+            self._look_budget_accumulator = min(1.5, self._look_budget_accumulator + peek_prob)
+            self._snapshot.look_budget_state = self._look_budget_accumulator
+            if self._look_budget_accumulator < 1.0:
+                return False
+            self._look_budget_accumulator -= 1.0
+            self._snapshot.look_budget_state = self._look_budget_accumulator
+            return True
         if state == AttentionState.PEEKING:
-            return random.random() < (0.4 + self._snapshot.peek_desire * 0.3)
+            peek_prob = 0.4 + self._snapshot.peek_desire * 0.3
+            self._look_budget_accumulator = min(1.5, self._look_budget_accumulator + peek_prob)
+            self._snapshot.look_budget_state = self._look_budget_accumulator
+            if self._look_budget_accumulator < 1.0:
+                return False
+            self._look_budget_accumulator -= 1.0
+            self._snapshot.look_budget_state = self._look_budget_accumulator
+            return True
+        self._snapshot.look_budget_state = 1.0
         return True
 
     def get_snapshot(self) -> AttentionFlowSnapshot:
