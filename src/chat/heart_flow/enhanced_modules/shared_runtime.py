@@ -1,6 +1,6 @@
 import random
 from dataclasses import dataclass, field
-from typing import List
+from typing import Any, Dict, List
 
 from src.common.logger import get_logger
 from src.config.config import model_config
@@ -48,6 +48,40 @@ class ModelGovernorVerdict:
     fallback_to_small: bool = False
     dynamic_cooldown_sec: float = 0.0
     dynamic_hourly_cap: int = 0
+
+
+@dataclass
+class DecisionRuntimeVerdict:
+    """最终行动裁定快照：把多路 should_reply 收口成一个可追踪结果。"""
+
+    verdict_id: str = ""
+    should_reply: bool = False
+    next_action: str = "observe"
+    decision_stage: str = ""
+    decision_reason: str = ""
+    confidence: float = 0.5
+    model_path: str = "skip"
+    complexity_score: float = 0.0
+    complexity_label: str = "普通"
+    source_votes: Dict[str, Any] = field(default_factory=dict)
+    blocking_factors: List[str] = field(default_factory=list)
+    driving_factors: List[str] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "verdict_id": self.verdict_id,
+            "should_reply": self.should_reply,
+            "next_action": self.next_action,
+            "decision_stage": self.decision_stage,
+            "decision_reason": self.decision_reason,
+            "confidence": round(float(self.confidence or 0.0), 3),
+            "model_path": self.model_path,
+            "complexity_score": round(float(self.complexity_score or 0.0), 3),
+            "complexity_label": self.complexity_label,
+            "source_votes": dict(self.source_votes),
+            "blocking_factors": list(self.blocking_factors),
+            "driving_factors": list(self.driving_factors),
+        }
 
 
 _WATCH_LEVEL_BY_RANK = {

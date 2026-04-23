@@ -1270,123 +1270,35 @@ class LoopMainDriverMixin:
             _algo_wants_reply = True
             logger.info(f"{self.log_prefix} 试探性发牢骚触发: 沉默够久+害羞指数低，轻量试探")
 
-        _final_skip = False
-        _final_reply = False
-        _final_upgrade = False
-
-        if _is_voice_reluctant and not _force_direct_ping and not _is_gateway_force:
-            _takeover_tried = False
-            _takeover_by_model = False
-            try:
-                _takeover_result = await asyncio.wait_for(
-                    self._try_algo_takeover_request(
-                        now, incoming_batch, voice_conclusion, _thinking_text
-                    ),
-                    timeout=15.0,
-                )
-                if _takeover_result:
-                    _takeover_tried = True
-                    _takeover_by_model = _takeover_result.get("wants_to_takeover", False)
-                    if _takeover_by_model:
-                        _final_reply = True
-                        self._takeover_decision = _takeover_result.get("decision")
-                        self._takeover_action = _takeover_result.get("action", "接管")
-                        self._mark_decision_winner("model_takeover")
-                        logger.info(f"{self.log_prefix} 🎯 模型接管: 内心抗拒='{_thinking_text[:30]}...'，强制执行回复")
-            except asyncio.TimeoutError:
-                logger.debug(f"{self.log_prefix} 算法接管请求超时(15s)")
-            except Exception as _takeover_err:
-                logger.debug(f"{self.log_prefix} 算法接管请求异常: {_takeover_err}")
-            if not _takeover_tried or not _takeover_by_model:
-                if _is_admin_forced:
-                    _final_reply = True
-                    logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-穿透模型内心抗拒, 强制回复")
-                else:
-                    _final_skip = True
-                    logger.info(f"{self.log_prefix} 🎯 模型内心抗拒='{_thinking_text[:30]}...'，尊重意愿跳过")
-        elif _algo_wants_skip and _force_direct_ping:
-            if _model_should_reply is False:
-                _takeover_tried = False
-                _takeover_by_model = False
-                try:
-                    _takeover_result = await asyncio.wait_for(
-                        self._try_algo_takeover_request(
-                            now, incoming_batch, voice_conclusion, _thinking_text
-                        ),
-                        timeout=15.0,
-                    )
-                    if _takeover_result:
-                        _takeover_tried = True
-                        _takeover_by_model = _takeover_result.get("wants_to_takeover", False)
-                        if _takeover_by_model:
-                            _final_reply = True
-                            self._takeover_decision = _takeover_result.get("decision")
-                            self._takeover_action = _takeover_result.get("action", "接管")
-                            self._mark_decision_winner("model_takeover")
-                            logger.info(
-                                f"{self.log_prefix} 🎯 模型接管(被@但内心抗拒): '{_thinking_text[:30]}...'，强制执行回复"
-                            )
-                except asyncio.TimeoutError:
-                    logger.debug(f"{self.log_prefix} 算法接管请求超时(15s)")
-                except Exception as _takeover_err:
-                    logger.debug(f"{self.log_prefix} 算法接管请求异常: {_takeover_err}")
-                if not _takeover_tried or not _takeover_by_model:
-                    if _is_admin_forced or _is_gateway_force:
-                        _final_reply = True
-                        logger.info(
-                            f"{self.log_prefix} 👑 强制回复-穿透被@内心抗拒 (admin={_is_admin_forced}, gateway_force={_is_gateway_force})"
-                        )
-                    else:
-                        _final_skip = True
-                        logger.info(f"{self.log_prefix} 🎯 被@但内心强烈抗拒='{_thinking_text[:30]}...'，尊重意愿跳过")
-            else:
-                _rel_for_mention = self._resolve_relation_view()
-                _mention_annoy = float(_rel_for_mention.get("annoyance_value", 0.0) or 0.0)
-                _mention_press = float(_rel_for_mention.get("psychological_pressure", 0.0) or 0.0)
-                if _mention_annoy >= 55 or (_mention_annoy >= 35 and _mention_press >= 40):
-                    if _is_admin_forced or _is_gateway_force:
-                        _final_reply = True
-                        logger.info(
-                            f"{self.log_prefix} 💢 情绪高但强制回复(烦躁={_mention_annoy:.1f}) (admin={_is_admin_forced}, gateway_force={_is_gateway_force})"
-                        )
-                    else:
-                        _final_skip = True
-                        logger.info(
-                            f"{self.log_prefix} 🎯 被@但情绪门槛拦截 烦躁={_mention_annoy:.1f} 压力={_mention_press:.1f}，跳过"
-                        )
-                else:
-                    _final_upgrade = True
-                    self._mark_decision_winner("algo_upgrade")
-                    logger.info(f"{self.log_prefix} 🎯 被@且算法跳过，升级大模型决定")
-        elif _algo_wants_reply and _model_should_reply is True:
-            _final_reply = True
-            self._mark_decision_winner("algo_reply")
-            logger.info(f"{self.log_prefix} 🎯 算法+小模型共识回复")
-        elif _algo_wants_reply:
-            # algo=1（小模型建议回复）：尊重LLM决策，执行回复
-            _final_reply = True
-            self._mark_decision_winner("algo_reply")
-            logger.info(f"{self.log_prefix} 🎯 小模型建议回复(algo=1)，执行回复")
-        elif _algo_wants_upgrade:
-            _final_upgrade = True
-            self._mark_decision_winner("algo_upgrade")
-            logger.info(f"{self.log_prefix} 🎯 算法升级大模型")
-        elif _is_admin_forced or _is_gateway_force:
-            _final_reply = True
-            if _is_gateway_force:
-                self._mark_decision_winner("gateway_force")
-            else:
-                self._mark_decision_winner("algo_reply")
-            logger.info(
-                f"{self.log_prefix} 💬 强制回复-穿透算法跳过(algo={_llm_call_level}) (admin={_is_admin_forced}, gateway_force={_is_gateway_force})"
-            )
+        _decision_runtime = self._build_decision_runtime(
+            now=now,
+            source="reactive",
+            legacy_gate=legacy_gate,
+            llm_call_level=int(_llm_call_level or 0),
+            tentative=bool(_tentative),
+            voice_conclusion=voice_conclusion,
+            model_governor=_model_governor,
+            behavior_verdict=_behavior_for_model,
+            dashboard_verdict=(_dashboard_snap or {}).get("reply_decision", {}) if isinstance(_dashboard_snap, dict) else {},
+            relation_view=_relation_for_model,
+            direct_ping=bool(_force_direct_ping),
+            admin_forced=bool(_is_admin_forced),
+            gateway_force=bool(_is_gateway_force),
+        )
+        _final_reply = _decision_runtime.next_action == "reply"
+        _final_upgrade = _decision_runtime.next_action == "upgrade"
+        _final_skip = not (_final_reply or _final_upgrade)
+        if _final_upgrade:
+            self._mark_decision_winner("decision_runtime_upgrade")
+        elif _final_reply:
+            self._mark_decision_winner("decision_runtime_reply")
         else:
-            _final_skip = True
-            if legacy_gate == "block":
-                self._mark_decision_winner("gateway_block")
-            else:
-                self._mark_decision_winner("final_skip")
-            logger.info(f"{self.log_prefix} 🎯 默认跳过: algo={_llm_call_level}")
+            self._mark_decision_winner("decision_runtime_skip")
+        logger.info(
+            f"{self.log_prefix} [统一裁定] action={_decision_runtime.next_action} "
+            f"reply={_decision_runtime.should_reply} model={_decision_runtime.model_path} "
+            f"complexity={_decision_runtime.complexity_label} reason={_decision_runtime.decision_reason}"
+        )
 
         # 动态比例旁路已移除：是否回复完全由LLM内心独白+维度网关force_reply决定
 
@@ -1634,34 +1546,29 @@ class LoopMainDriverMixin:
                     )
                     should_act = False
                 elif _snap_annoyance >= 60 and _snap_pressure >= 40:
-                    import random as _emo_random
-
-                    if _emo_random.random() < 0.50:
+                    if _snap_annoyance >= 72 or _snap_pressure >= 55:
                         logger.info(
                             f"{self.log_prefix} ⚠️ 门控={legacy_gate}但情绪偏高"
-                            f"(烦躁{_snap_annoyance:.0f}/压力{_snap_pressure:.0f})，50%概率跳过"
+                            f"(烦躁{_snap_annoyance:.0f}/压力{_snap_pressure:.0f})，确定降级观察"
                         )
                         should_act = False
                     elif _has_strong_reply_evidence:
                         should_act = True
                         logger.info(
-                            f"{self.log_prefix} 统一结算 门控={legacy_gate}，强证据存在且情绪偏高但允许进入回复执行层"
+                            f"{self.log_prefix} 统一结算 门控={legacy_gate}，强证据存在且情绪未达硬拦截，允许进入回复执行层"
                         )
                 else:
                     if _intent_primary == "wait" and _intent_silence >= 1:
-                        import random as _int_random
-
-                        _skip_prob = min(0.75, 0.35 + _intent_silence * 0.15)
-                        if _int_random.random() < _skip_prob:
+                        if _intent_silence >= 3:
                             should_act = False
                             logger.info(
                                 f"{self.log_prefix} 🤐 意图池primary=wait(静默{_intent_silence}轮)"
-                                f"，{int(_skip_prob * 100):.0f}%概率跳过"
+                                f"，确定跳过"
                             )
                         elif _has_strong_reply_evidence:
                             should_act = True
                             logger.info(
-                                f"{self.log_prefix} 统一结算 门控={legacy_gate}，强证据存在且意图wait但掷骰通过，允许回复"
+                                f"{self.log_prefix} 统一结算 门控={legacy_gate}，强证据存在且意图wait未达硬拦截，允许回复"
                             )
                     elif _has_strong_reply_evidence:
                         should_act = True
@@ -1685,14 +1592,14 @@ class LoopMainDriverMixin:
                         should_act = False
                     elif should_act and not _voice_eager:
                         if _surface_mask >= 7.0:
-                            should_act = random.random() < 0.70
-                            logger.info(f"{self.log_prefix} 🎭 表层伪装偏高({_surface_mask:.1f})，收缩行动意愿")
+                            should_act = _surface_mask < 8.5
+                            logger.info(f"{self.log_prefix} 🎭 表层伪装偏高({_surface_mask:.1f})，确定性收缩行动意愿")
                         if should_act and _submission >= 6.0:
-                            should_act = random.random() < 0.75
-                            logger.info(f"{self.log_prefix} 🙈 顺从度偏高({_submission:.1f})，降低主动表达概率")
+                            should_act = _submission < 8.0
+                            logger.info(f"{self.log_prefix} 🙈 顺从度偏高({_submission:.1f})，确定性降低主动表达")
                         if should_act and _shyness >= 75.0 and legacy_gate not in {"force_reply"}:
-                            should_act = random.random() < 0.65
-                            logger.info(f"{self.log_prefix} 😳 害羞值偏高({_shyness:.1f})，非强制场景收缩回复概率")
+                            should_act = _shyness < 85.0
+                            logger.info(f"{self.log_prefix} 😳 害羞值偏高({_shyness:.1f})，非强制场景确定性收缩回复")
         except Exception as _psych_exc:
             logger.debug(f"{self.log_prefix} 心理特征门控异常: {_psych_exc}")
 
@@ -1733,14 +1640,11 @@ class LoopMainDriverMixin:
             else:
                 logger.info(f"{self.log_prefix} SOC-03 负面情绪回避: composite={_neg_composite:.1f}>85, 降级为不行动")
         elif should_act and _neg_composite > 60 and not _is_force and not _voice_eager:
-            if random.random() < 0.4:
-                if _is_admin_forced:
-                    logger.info(
-                        f"{self.log_prefix} 👑 管理员强制唤醒-穿透SOC-03概率回避(neg={_neg_emo:.1f}>60), 强制行动"
-                    )
-                else:
-                    should_act = False
-                    logger.info(f"{self.log_prefix} SOC-03 负面情绪概率回避: neg={_neg_emo:.1f}>60, 随机跳过")
+            if _neg_composite >= 72:
+                should_act = False
+                logger.info(f"{self.log_prefix} SOC-03 负面情绪确定回避: composite={_neg_composite:.1f}>=72")
+            else:
+                logger.info(f"{self.log_prefix} SOC-03 负面情绪提示: composite={_neg_composite:.1f}，未达硬拦截")
 
         if should_act:
             _pre_reply_resource_snapshot = self._capture_pre_reply_resource_snapshot()

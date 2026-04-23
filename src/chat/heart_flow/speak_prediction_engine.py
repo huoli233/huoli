@@ -51,6 +51,7 @@ class SpeakPredictionEngine:
         boundary = domains.get("boundary_guard", {}) if isinstance(domains, dict) else {}
         tempo = domains.get("tempo", {}) if isinstance(domains, dict) else {}
         circadian = domains.get("circadian_rhythm", {}) if isinstance(domains, dict) else {}
+        decision_runtime = domains.get("decision_runtime", {}) if isinstance(domains, dict) else {}
         pending = domains.get("pending_response", {}) if isinstance(domains, dict) else {}
         flow_runtime = domains.get("flow_runtime", {}) if isinstance(domains, dict) else {}
 
@@ -201,6 +202,15 @@ class SpeakPredictionEngine:
             suppression_score += 0.28
 
         probability = _clamp(drive_score - suppression_score + 0.14, 0.0, 1.0)
+        runtime_has_verdict = bool(decision_runtime.get("verdict_id"))
+        runtime_should_reply = bool(decision_runtime.get("should_reply", False))
+        runtime_model_path = str(decision_runtime.get("model_path", "") or "")
+        runtime_complexity_label = str(decision_runtime.get("complexity_label", "") or "")
+        if runtime_has_verdict:
+            if runtime_should_reply:
+                probability = max(probability, 0.56)
+            else:
+                probability = min(probability, 0.34)
 
         if probability >= 0.85:
             eta_seconds = 20
@@ -231,7 +241,9 @@ class SpeakPredictionEngine:
         if probability < 0.3 and tone == "正常回应":
             tone = "克制观察"
 
-        if probability >= 0.75:
+        if runtime_has_verdict:
+            decision_label = "可以接话" if runtime_should_reply else "暂时不聊"
+        elif probability >= 0.75:
             decision_label = "适合开口"
         elif probability >= 0.55:
             decision_label = "可以接话"
@@ -244,6 +256,9 @@ class SpeakPredictionEngine:
             f"主动意愿 {initiative_drive:.2f}，关系就绪 {readiness_score:.2f}，"
             f"昼夜状态 {night_phase_label}。"
         )
+        if runtime_has_verdict:
+            runtime_reason = str(decision_runtime.get("decision_reason", "") or "")
+            decision_reason = f"统一裁定：{runtime_reason or decision_label}；{decision_reason}"
 
         driving_factors: List[str] = []
         suppressing_factors: List[str] = []
@@ -307,6 +322,10 @@ class SpeakPredictionEngine:
             "probability_percent": int(round(probability * 100)),
             "eta_seconds": eta_seconds,
             "eta_label": "立即" if eta_seconds <= 30 else f"约 {round(eta_seconds / 60)} 分钟后",
+            "shared_verdict_id": str(decision_runtime.get("verdict_id", "") or ""),
+            "model_path": runtime_model_path or "未裁定",
+            "should_reply": runtime_should_reply if runtime_has_verdict else probability >= 0.55,
+            "complexity_label": runtime_complexity_label or "普通",
             "decision_label": decision_label,
             "decision_reason": decision_reason,
             "content_direction": content_direction,

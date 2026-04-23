@@ -184,6 +184,7 @@ def _extract_runtime_snapshot(chat: Any) -> Dict[str, Any]:
         "last_rest_governor": "_last_rest_governor_verdict",
         "last_behavior_governor": "_last_behavior_governor_verdict",
         "last_model_governor": "_last_model_governor_verdict",
+        "last_decision_runtime": "_last_decision_runtime",
         "cached_night_phase": "_cached_night_phase",
         "cached_night_summary": "_cached_night_summary",
         "cached_metabolism_constraints": "_cached_metabolism_constraints",
@@ -698,6 +699,7 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
             "trust_score": relation.get("trust_score", 0.0),
             "interaction_count": relation.get("interaction_count", 0),
         },
+        "decision_runtime": runtime.get("last_decision_runtime") or {},
         "pending_response": {
             "pending_active": pending_active,
             "pending_seconds": round(pending_seconds, 2),

@@ -39,6 +39,7 @@ from src.chat.heart_flow.enhanced_modules.shared_runtime import (
     _POST_MESSAGE_RETRY_SEC,
     _WATCH_LEVEL_BY_RANK,
     BehaviorGovernorVerdict,
+    DecisionRuntimeVerdict,
     RestGovernorVerdict,
     ModelGovernorVerdict,
 )
@@ -60,6 +61,180 @@ class StrategyActionStateMixin:
         if numeric > 1.0:
             numeric /= 100.0
         return max(0.0, min(1.0, numeric))
+
+    def _build_decision_runtime(
+        self,
+        *,
+        now: float,
+        source: str,
+        legacy_gate: str,
+        llm_call_level: int,
+        tentative: bool,
+        voice_conclusion: Any,
+        model_governor: Any,
+        behavior_verdict: Any,
+        dashboard_verdict: Dict[str, Any],
+        relation_view: Dict[str, Any],
+        direct_ping: bool = False,
+        admin_forced: bool = False,
+        gateway_force: bool = False,
+    ) -> DecisionRuntimeVerdict:
+        """统一最终行动裁定，避免多层 should_reply 各自散着拍板。"""
+        voice_action = str(getattr(voice_conclusion, "next_action", "") or "").strip().lower()
+        voice_should = getattr(voice_conclusion, "should_reply", None) if voice_conclusion else None
+        voice_desire = int(float(getattr(voice_conclusion, "reply_desire_level", 5) or 5)) if voice_conclusion else 5
+        voice_upgrade = bool(getattr(voice_conclusion, "needs_upgrade", False)) if voice_conclusion else False
+        model_tier = str(getattr(model_governor, "tier", "skip") or "skip")
+        model_limited = bool(getattr(model_governor, "rate_limited", False))
+        behavior_mode = str(getattr(behavior_verdict, "reply_mode", "observe") or "observe")
+        behavior_allow = bool(getattr(behavior_verdict, "allow_generation", True))
+        dashboard_reply = bool((dashboard_verdict or {}).get("reply", False))
+        dashboard_process = bool((dashboard_verdict or {}).get("should_process", True))
+        dashboard_urgency = str((dashboard_verdict or {}).get("reply_urgency", "") or "")
+        dashboard_confidence = float((dashboard_verdict or {}).get("confidence", 0.0) or 0.0)
+        annoyance_value = float((relation_view or {}).get("annoyance_value", 0.0) or 0.0)
+        pressure_value = float((relation_view or {}).get("psychological_pressure", 0.0) or 0.0)
+        blocked = bool((relation_view or {}).get("is_user_blocked", False))
+        force = bool(admin_forced or direct_ping or gateway_force or legacy_gate == "force_reply")
+
+        driving: List[str] = []
+        blocking: List[str] = []
+        complexity = 0.0
+        if voice_upgrade:
+            complexity += 0.35
+            driving.append("内心独白要求升级")
+        if llm_call_level >= 2:
+            complexity += 0.25
+            driving.append("算法要求深度判断")
+        if behavior_mode in {"reply", "proactive"}:
+            driving.append(f"行为层建议{behavior_mode}")
+        if dashboard_reply:
+            driving.append(f"仪表盘裁定{dashboard_urgency or '可回复'}")
+        if tentative:
+            driving.append("试探性表达条件满足")
+        if annoyance_value >= 55:
+            complexity += 0.12
+            blocking.append(f"烦躁偏高({annoyance_value:.0f})")
+        if pressure_value >= 45:
+            complexity += 0.12
+            blocking.append(f"压力偏高({pressure_value:.0f})")
+        if model_tier == "large":
+            complexity += 0.20
+        complexity = max(0.0, min(1.0, complexity))
+        if complexity >= 0.7:
+            complexity_label = "复杂"
+        elif complexity >= 0.35:
+            complexity_label = "中等"
+        else:
+            complexity_label = "普通"
+
+        next_action = "observe"
+        should_reply = False
+        stage = "observe"
+        reason = "默认观察"
+        confidence = 0.50
+        model_path = model_tier
+
+        if force:
+            should_reply = True
+            next_action = "reply"
+            stage = "force"
+            reason = "强制触发进入回复"
+            confidence = 0.96
+            model_path = "large" if model_tier == "large" else "small"
+        elif not dashboard_process:
+            next_action = "observe"
+            stage = "dashboard_block"
+            reason = str((dashboard_verdict or {}).get("decision_reason", "") or "仪表盘硬阻断")
+            confidence = max(0.75, dashboard_confidence)
+            blocking.append("仪表盘硬阻断")
+            model_path = "skip"
+        elif blocked or (annoyance_value >= 80 and pressure_value >= 60):
+            next_action = "observe"
+            stage = "relationship_block"
+            reason = f"关系压力过高，烦躁{annoyance_value:.0f}/压力{pressure_value:.0f}"
+            confidence = 0.90
+            blocking.append("关系压力过高")
+            model_path = "skip"
+        elif not behavior_allow:
+            next_action = "observe"
+            stage = "behavior_block"
+            reason = f"行为层阻断生成：{behavior_mode}"
+            confidence = 0.82
+            blocking.append("行为层阻断生成")
+            model_path = "skip"
+        elif voice_action in {"rest", "disengage", "lurk", "observe", "wait"} or voice_should is False:
+            next_action = voice_action or "observe"
+            stage = "inner_voice"
+            reason = f"内心独白选择{next_action or '观察'}"
+            confidence = 0.78 if voice_desire <= 4 else 0.62
+            blocking.append(reason)
+            model_path = "skip"
+        elif voice_upgrade or llm_call_level >= 2 or model_tier == "large":
+            if model_tier == "large" and not model_limited:
+                next_action = "upgrade"
+                should_reply = True
+                stage = "model_path"
+                reason = "统一裁定要求升级大模型"
+                confidence = 0.84
+                model_path = "large"
+            else:
+                next_action = "reply"
+                should_reply = True
+                stage = "model_path"
+                reason = "需要升级但大模型不可用，降级为小模型回复"
+                confidence = 0.66
+                model_path = "small_fallback"
+                blocking.append("大模型不可用或被限流")
+        elif voice_action in {"reply", "followup"} or voice_should is True:
+            next_action = "reply"
+            should_reply = True
+            stage = "inner_voice"
+            reason = "内心独白明确想回复"
+            confidence = 0.82
+            model_path = "small"
+        elif llm_call_level == 1 or dashboard_reply or behavior_mode == "reply" or tentative:
+            next_action = "reply"
+            should_reply = True
+            stage = "state_consensus"
+            reason = "状态链达成回复倾向"
+            confidence = max(0.62, dashboard_confidence)
+            model_path = "small"
+        elif dashboard_urgency in {"跳过", "不回复"} and dashboard_confidence >= 0.65:
+            next_action = "observe"
+            stage = "dashboard_skip"
+            reason = f"仪表盘裁定{dashboard_urgency}"
+            confidence = dashboard_confidence
+            model_path = "skip"
+
+        verdict = DecisionRuntimeVerdict(
+            verdict_id=f"{source}-{int(now * 1000)}",
+            should_reply=should_reply,
+            next_action=next_action,
+            decision_stage=stage,
+            decision_reason=reason,
+            confidence=confidence,
+            model_path=model_path,
+            complexity_score=complexity,
+            complexity_label=complexity_label,
+            source_votes={
+                "voice_action": voice_action,
+                "voice_should_reply": voice_should,
+                "voice_desire": voice_desire,
+                "voice_needs_upgrade": voice_upgrade,
+                "llm_call_level": llm_call_level,
+                "legacy_gate": legacy_gate,
+                "behavior_reply_mode": behavior_mode,
+                "behavior_allow_generation": behavior_allow,
+                "dashboard_urgency": dashboard_urgency,
+                "dashboard_reply": dashboard_reply,
+                "model_tier": model_tier,
+            },
+            blocking_factors=blocking,
+            driving_factors=driving,
+        )
+        self._last_decision_runtime = verdict.to_dict()
+        return verdict
 
     def _decide_action(
         self,
@@ -177,7 +352,14 @@ class StrategyActionStateMixin:
         if pinged_msg is None and getattr(self, "_defense_mode_active", False):
             combined_prob *= 0.65
         combined_prob = max(0.01, min(0.99, combined_prob))
-        return random.random() < combined_prob
+        threshold = 0.52
+        if dashboard_reply:
+            threshold -= 0.08
+        if pinged_msg is not None:
+            threshold -= 0.14
+        if annoyance_value >= 60.0 or pressure_value >= 55.0:
+            threshold += 0.12
+        return combined_prob >= max(0.12, min(0.88, threshold))
 
     def _shift_to_dormant(self, cause: str = "") -> None:
         """迁移至休息阶段"""
