@@ -115,6 +115,29 @@ LEGACY_EXTRA_HEADER_PREFIX_MAP = {
 }
 
 
+def _context_view() -> dict:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        return get_core_config().resolve_module_view("context").values
+    except Exception:
+        return {}
+
+
+def _context_int(key: str, fallback: int) -> int:
+    try:
+        return int(_context_view().get(key, fallback))
+    except Exception:
+        return fallback
+
+
+def _context_float(key: str, fallback: float) -> float:
+    try:
+        return float(_context_view().get(key, fallback))
+    except Exception:
+        return fallback
+
+
 def estimate_token_count(text: str) -> int:
     """估算文本 token 数（中文约1.5字/token，英文约4字符/token）"""
     if not text:
@@ -154,13 +177,15 @@ def budget_aware_trim(text: str, max_tokens: int, priority_keywords: List[str] =
         if accumulated_tokens + line_tokens <= max_tokens:
             selected_lines.append((line, original_idx, score))
             accumulated_tokens += line_tokens
-        elif accumulated_tokens >= max_tokens * 0.8:
+        elif accumulated_tokens >= max_tokens * _context_float("selection_saturation_ratio", 0.8):
             break
     selected_lines.sort(key=lambda x: x[1])
     return "\n".join(line for line, _, _ in selected_lines)
 
 
-def sanitize_extra_info(extra_info: str, max_tokens: int = 200) -> str:
+def sanitize_extra_info(extra_info: str, max_tokens: int | None = None) -> str:
+    if max_tokens is None:
+        max_tokens = _context_int("extra_info_max_tokens", 200)
     text = str(extra_info or "").strip()
     if not text:
         return ""
@@ -175,7 +200,7 @@ def sanitize_extra_info(extra_info: str, max_tokens: int = 200) -> str:
         if prefix:
             payload = _compact_context_text(
                 "\n".join(lines[1:]),
-                max_tokens=42,
+                max_tokens=_context_int("compact_line_max_tokens", 42),
                 priority_keywords=["重要", "当前", "别", "不要", "禁止"],
             )
             if payload:
@@ -188,7 +213,7 @@ def sanitize_extra_info(extra_info: str, max_tokens: int = 200) -> str:
                 if legacy_prefix:
                     inline_payload = _compact_context_text(
                         legacy_inline.group(2),
-                        max_tokens=42,
+                        max_tokens=_context_int("compact_line_max_tokens", 42),
                         priority_keywords=["重要", "当前", "别", "不要", "禁止"],
                     )
                     if inline_payload:
@@ -199,7 +224,7 @@ def sanitize_extra_info(extra_info: str, max_tokens: int = 200) -> str:
             ):
                 compact_line = _compact_context_text(
                     line,
-                    max_tokens=42,
+                    max_tokens=_context_int("compact_line_max_tokens", 42),
                     priority_keywords=["重要", "当前", "别", "不要", "禁止"],
                 )
                 if compact_line:
@@ -208,7 +233,7 @@ def sanitize_extra_info(extra_info: str, max_tokens: int = 200) -> str:
             if any(keyword in line for keyword in STYLE_GUIDANCE_KEYWORDS):
                 compact_line = _compact_context_text(
                     line,
-                    max_tokens=42,
+                    max_tokens=_context_int("compact_line_max_tokens", 42),
                     priority_keywords=["重要", "当前", "别", "不要", "禁止"],
                 )
                 if compact_line:
@@ -221,7 +246,7 @@ def sanitize_extra_info(extra_info: str, max_tokens: int = 200) -> str:
             continue
         seen.add(normalized)
         deduped.append(block)
-    result = "\n".join(deduped[:8])
+    result = "\n".join(deduped[: _context_int("max_extra_blocks", 8)])
     current_tokens = estimate_token_count(result)
     if current_tokens > max_tokens:
         priority_keywords = ["重要", "关键", "注意", "当前", "问题"]
@@ -292,9 +317,11 @@ def build_reply_context_block(
     relevant_context: str,
     extra_info: str,
     recent_reply_guard: str = "",
-    max_total_tokens: int = 180,
+    max_total_tokens: int | None = None,
 ) -> str:
     """构建轻量回复上下文块，避免拼成说明书。"""
+    if max_total_tokens is None:
+        max_total_tokens = _context_int("reply_context_max_tokens", 180)
     parts: List[Tuple[str, int]] = []
     priority_keywords = ["问题", "关键", "重要", "当前", "注意"]
     recent_text = str(recent_context or "").strip()
@@ -341,7 +368,7 @@ def build_reply_context_block(
         if accumulated_tokens + part_tokens <= max_total_tokens:
             selected_parts.append(part_text)
             accumulated_tokens += part_tokens
-        elif accumulated_tokens >= max_total_tokens * 0.8:
+        elif accumulated_tokens >= max_total_tokens * _context_float("selection_saturation_ratio", 0.8):
             break
     if not selected_parts:
         return ""

@@ -1,12 +1,21 @@
 import time
 from enum import Enum
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from dataclasses import dataclass
+from typing import Any, Dict, List
 from src.common.logger import get_logger
 
 logger = get_logger("mem_reactivation")
 
 _gate_instances: Dict[str, "MemoryReactivationGate"] = {}
+
+
+def _memory_view() -> Dict[str, Any]:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        return get_core_config().resolve_module_view("memory").values
+    except Exception:
+        return {}
 
 
 class ReactivationTrigger(Enum):
@@ -67,10 +76,17 @@ class MemoryReactivationGate:
     def __init__(self, channel_id: str):
         self._channel_id = channel_id
         self._recent_activations: List[ReactivationCandidate] = []
-        self._max_cache = 30
+        memory_view = _memory_view()
+        self._max_cache = int(memory_view.get("reactivation_cache_limit", 30))
         # 激活冷却：同一条消息在冷却期内不重复激活
         self._cooldown_map: Dict[str, float] = {}
-        self._cooldown_sec = 120.0
+        self._cooldown_sec = float(memory_view.get("reactivation_cooldown_seconds", 120.0))
+        self._topic_scan_limit = int(memory_view.get("reactivation_topic_scan_limit", 20))
+        self._visibility_scan_limit = int(memory_view.get("reactivation_visibility_scan_limit", 25))
+        self._max_candidates = int(memory_view.get("reactivation_max_candidates", 5))
+        self._emotion_threshold = float(memory_view.get("emotion_reactivation_threshold", 0.6))
+        self._boredom_threshold = float(memory_view.get("boredom_reactivation_threshold", 0.5))
+        self._boredom_high_threshold = float(memory_view.get("boredom_high_threshold", 0.7))
 
     def evaluate_topic_trigger(
         self,
@@ -82,7 +98,7 @@ class MemoryReactivationGate:
         if not current_topics or time_stream is None:
             return candidates
         stale_ids = time_stream.stale_message_ids()
-        for mid in stale_ids[:20]:
+        for mid in stale_ids[: self._topic_scan_limit]:
             if self._in_cooldown(mid):
                 continue
             record = time_stream._records.get(mid)
@@ -145,7 +161,7 @@ class MemoryReactivationGate:
     ) -> List[ReactivationCandidate]:
         """情绪激活触发：情绪波动大时回想相关旧消息"""
         candidates: List[ReactivationCandidate] = []
-        if emotion_intensity < 0.6 or time_stream is None:
+        if emotion_intensity < self._emotion_threshold or time_stream is None:
             return candidates
         # 情绪强度越高，激活幅度越大
         boost = min(0.5, emotion_intensity * 0.4)
@@ -181,7 +197,7 @@ class MemoryReactivationGate:
     ) -> List[ReactivationCandidate]:
         """无聊漫游触发：无聊时随机回想旧消息"""
         candidates: List[ReactivationCandidate] = []
-        if boredom < 0.5 or time_stream is None:
+        if boredom < self._boredom_threshold or time_stream is None:
             return candidates
         import random
 
@@ -189,7 +205,7 @@ class MemoryReactivationGate:
         if not stale_ids:
             return candidates
         # 无聊度越高，回想概率越高
-        pick_count = 1 if boredom < 0.7 else 2
+        pick_count = 1 if boredom < self._boredom_high_threshold else 2
         pick_ids = random.sample(stale_ids, min(pick_count, len(stale_ids)))
         for mid in pick_ids:
             if self._in_cooldown(mid):
@@ -233,7 +249,7 @@ class MemoryReactivationGate:
         if time_stream is None:
             return candidates
         stale_ids = time_stream.stale_message_ids()
-        for mid in stale_ids[:25]:
+        for mid in stale_ids[: self._visibility_scan_limit]:
             if self._in_cooldown(mid):
                 continue
             record = time_stream._records.get(mid)
@@ -279,7 +295,7 @@ class MemoryReactivationGate:
             )
             candidates.append(candidate)
             self._mark_cooldown(mid)
-            if len(candidates) >= 5:
+            if len(candidates) >= self._max_candidates:
                 break
         self._append_candidates(candidates)
         return candidates

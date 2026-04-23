@@ -428,7 +428,17 @@ long_term_batch_size = 12
 temporary_ttl_seconds = 1800.0
 memoir_timeout_seconds = 180.0
 overload_ratio_threshold = 0.85
+overload_amnesia_threshold = 0.65
+overload_assessment_ttl_seconds = 45.0
 reactivation_score_threshold = 0.55
+reactivation_cooldown_seconds = 120.0
+reactivation_cache_limit = 30
+reactivation_topic_scan_limit = 20
+reactivation_visibility_scan_limit = 25
+reactivation_max_candidates = 5
+emotion_reactivation_threshold = 0.6
+boredom_reactivation_threshold = 0.5
+boredom_high_threshold = 0.7
 
 [profile_mapping.semantic_domains.context]
 max_context_messages = 24
@@ -436,13 +446,22 @@ pollution_threshold = 0.72
 repeat_topic_threshold = 3
 compression_trigger_chars = 2400
 compressed_context_target_chars = 1200
+reply_context_max_tokens = 180
+extra_info_max_tokens = 200
+compact_line_max_tokens = 42
+max_extra_blocks = 8
+selection_saturation_ratio = 0.8
 
 [profile_mapping.semantic_domains.vision]
 image_recognition_enabled = true
 gif_convert_enabled = true
 gif_frame_limit = 6
+gif_similarity_threshold = 1000.0
 vlm_temperature = 0.2
 vlm_timeout_seconds = 30.0
+emoji_vlm_temperature = 0.4
+emoji_emotion_temperature = 0.3
+emoji_emotion_timeout_seconds = 20.0
 record_only_confidence_threshold = 0.35
 degrade_to_placeholder = true
 

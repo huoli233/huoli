@@ -5,7 +5,6 @@ import time
 import hashlib
 import uuid
 import io
-import threading
 import numpy as np
 
 from typing import Optional, Tuple
@@ -26,6 +25,15 @@ from src.common.singleton import _get_class_lock
 install(extra_lines=3)
 
 logger = get_logger("chat_image")
+
+
+def _vision_view(scenario: str | None = None) -> dict:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        return get_core_config().resolve_module_view("vision", scenario=scenario).values
+    except Exception:
+        return {}
 
 
 class ImageManager:
@@ -322,10 +330,23 @@ class ImageManager:
                 logger.debug(f"查询EmojiDescriptionCache时出错: {e}")
 
             # === 二步走识别流程 ===
+            vision = _vision_view()
+            if not bool(vision.get("image_recognition_enabled", True)):
+                logger.info("视觉识别已被 vision_view 配置关闭，表情包仅记录占位")
+                return "[表情包]"
+            vlm_temperature = float(vision.get("emoji_vlm_temperature", vision.get("vlm_temperature", 0.4)))
+            vlm_timeout = float(vision.get("vlm_timeout_seconds", 30.0))
 
             # 第一步：VLM视觉分析 - 生成详细描述
             if image_format in ["gif", "GIF"]:
-                image_base64_processed = self.transform_gif(image_base64)
+                if not bool(vision.get("gif_convert_enabled", True)):
+                    logger.info("GIF 转换已被 vision_view 配置关闭")
+                    return "[表情包(GIF未识别)]"
+                image_base64_processed = self.transform_gif(
+                    image_base64,
+                    similarity_threshold=float(vision.get("gif_similarity_threshold", 1000.0)),
+                    max_frames=int(vision.get("gif_frame_limit", 15)),
+                )
                 if image_base64_processed is None:
                     logger.warning("GIF转换失败，无法获取描述")
                     return "[表情包(GIF处理失败)]"
@@ -336,9 +357,9 @@ class ImageManager:
                             vlm_prompt,
                             image_base64_processed,
                             "jpg",
-                            temperature=0.4,
+                            temperature=vlm_temperature,
                         ),
-                        timeout=30.0,
+                        timeout=vlm_timeout,
                     )
                 )
             else:
@@ -346,9 +367,9 @@ class ImageManager:
                 detailed_description, _ = (
                     await asyncio.wait_for(
                         self.vlm.generate_response_for_image(
-                            vlm_prompt, image_base64, image_format, temperature=0.4
+                            vlm_prompt, image_base64, image_format, temperature=vlm_temperature
                         ),
-                        timeout=30.0,
+                        timeout=vlm_timeout,
                     )
                 )
 
@@ -381,8 +402,11 @@ class ImageManager:
                 request_type="emoji",
             )
             emotion_result, _ = await asyncio.wait_for(
-                emotion_llm.generate_response_async(emotion_prompt, temperature=0.3),
-                timeout=20.0,
+                emotion_llm.generate_response_async(
+                    emotion_prompt,
+                    temperature=float(vision.get("emoji_emotion_temperature", 0.3)),
+                ),
+                timeout=float(vision.get("emoji_emotion_timeout_seconds", 20.0)),
             )
 
             if not emotion_result:
@@ -506,15 +530,22 @@ class ImageManager:
             image_format = Image.open(
                 io.BytesIO(image_bytes)
             ).format.lower()  # type: ignore
+            vision = _vision_view()
+            if not bool(vision.get("image_recognition_enabled", True)):
+                logger.info("视觉识别已被 vision_view 配置关闭，图片仅记录占位")
+                return "[图片]"
             prompt = global_config.personality.visual_style
             logger.info(
                 f"[VLM调用] 为图片生成新描述 (Hash: {image_hash[:8]}...)"
             )
             description, _ = await asyncio.wait_for(
                 self.vlm.generate_response_for_image(
-                    prompt, image_base64, image_format, temperature=0.4
+                    prompt,
+                    image_base64,
+                    image_format,
+                    temperature=float(vision.get("vlm_temperature", 0.4)),
                 ),
-                timeout=30.0,
+                timeout=float(vision.get("vlm_timeout_seconds", 30.0)),
             )
 
             if description is None:
@@ -865,6 +896,12 @@ class ImageManager:
             image_format = Image.open(
                 io.BytesIO(image_bytes)
             ).format.lower()  # type: ignore
+            vision = _vision_view()
+            if not bool(vision.get("image_recognition_enabled", True)):
+                image.vlm_processed = False
+                image.save()
+                logger.info("视觉识别已被 vision_view 配置关闭，跳过后台 VLM 处理")
+                return
 
             # 构建prompt
             prompt = global_config.personality.visual_style
@@ -872,9 +909,12 @@ class ImageManager:
             # 获取VLM描述
             description, _ = await asyncio.wait_for(
                 self.vlm.generate_response_for_image(
-                    prompt, image_base64, image_format, temperature=0.4
+                    prompt,
+                    image_base64,
+                    image_format,
+                    temperature=float(vision.get("vlm_temperature", 0.4)),
                 ),
-                timeout=30.0,
+                timeout=float(vision.get("vlm_timeout_seconds", 30.0)),
             )
 
             if description is None:

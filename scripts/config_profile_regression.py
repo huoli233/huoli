@@ -33,6 +33,12 @@ timeout_seconds = 30.0
 [profile_mapping.semantic_domains.memory]
 short_term_limit = 64
 importance_floor = 0.2
+overload_ratio_threshold = 0.76
+reactivation_cooldown_seconds = 88.0
+
+[profile_mapping.semantic_domains.context]
+reply_context_max_tokens = 96
+extra_info_max_tokens = 72
 
 [profile_mapping.semantic_domains.model_routing]
 model_cooldown_seconds = 77.0
@@ -56,12 +62,16 @@ long_term_limit = 4096
 [profile_mapping.module_views.vision]
 timeout_seconds = 12.0
 vlm_temperature = 0.2
+gif_frame_limit = 4
 
 [profile_mapping.module_views.model_routing]
 semantic_domains = ["model_routing"]
 
 [profile_mapping.module_views.schedule]
 semantic_domains = ["schedule"]
+
+[profile_mapping.module_views.context]
+semantic_domains = ["context"]
 """.strip()
 
 
@@ -84,12 +94,15 @@ def main() -> None:
         assert memory.values["short_term_limit"] == 64
         assert memory.values["long_term_limit"] == 4096
         assert memory.values["hippocampus_min_importance"] == 0.2
+        assert memory.values["reactivation_cooldown_seconds"] == 88.0
         assert memory.fallback_used is False
 
         vision = hub.resolve_module_view("vision", scenario="image_high_risk")
         assert vision.values["reply_suppressed"] is True
         assert vision.values["risk_score"] == 0.8
         assert vision.values["vlm_temperature"] == 0.2
+        assert vision.values["gif_frame_limit"] == 4
+        assert hub.resolve_module_view("context").values["reply_context_max_tokens"] == 96
 
         fallback = hub.resolve_module_view("schedule")
         assert fallback.fallback_used is False
@@ -111,6 +124,7 @@ def main() -> None:
             "schedule_fallback_used": fallback.fallback_used,
             "schedule_cooldown_sec": hub.assemble_scheduler_config()["cooldown_sec"],
             "model_fail_threshold": hub.resolve_module_view("model_routing").values["model_fail_threshold"],
+            "context_reply_tokens": hub.resolve_module_view("context").values["reply_context_max_tokens"],
             "trace_layers": sorted({item.layer for item in vision.trace}),
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))

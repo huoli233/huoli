@@ -9,6 +9,15 @@ from src.common.logger import get_logger
 logger = get_logger("brain_load_monitor")
 
 
+def _memory_view() -> Dict[str, Any]:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        return get_core_config().resolve_module_view("memory").values
+    except Exception:
+        return {}
+
+
 # ==================== 认知负载水位 ====================
 
 
@@ -150,7 +159,10 @@ class CapacityPressureMonitor:
         self._latest_snapshot = BrainLoadSnapshot()
         self._history_trail: List[Tuple[float, float]] = []
         self._assessment_cache_ts: float = 0.0
-        self._assessment_ttl: float = 45.0
+        memory_view = _memory_view()
+        self._assessment_ttl: float = float(memory_view.get("overload_assessment_ttl_seconds", 45.0))
+        self._overload_ratio_threshold: float = float(memory_view.get("overload_ratio_threshold", 0.85))
+        self._overload_amnesia_threshold: float = float(memory_view.get("overload_amnesia_threshold", 0.65))
         self._adaptive_multiplier: float = 1.0
 
     def _resolve_memory_table(self):
@@ -303,7 +315,7 @@ class CapacityPressureMonitor:
     def requires_emergency_purge(self) -> bool:
         """判断是否需要紧急遗忘清理"""
         snap = self._latest_snapshot
-        return snap.load_ratio > 0.85 and snap.amnesia_pressure > 0.65
+        return snap.load_ratio > self._overload_ratio_threshold and snap.amnesia_pressure > self._overload_amnesia_threshold
 
     def apply_operation_dampening(
         self, operation: str, **kwargs
@@ -352,7 +364,7 @@ class CapacityPressureMonitor:
             f"体积={snap.volume_mb:.1f}MB | 负载比={snap.load_ratio:.3f} | "
             f"遗忘压力={snap.amnesia_pressure:.3f}"
         )
-        if snap.load_ratio > 0.85:
+        if snap.load_ratio > self._overload_ratio_threshold:
             logger.warning("大脑负载已临界，可能出现记忆模糊和学习困难")
         if self.requires_emergency_purge():
             logger.warning("已触及紧急清理阈值，建议立即执行智能遗忘")
