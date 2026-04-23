@@ -274,6 +274,7 @@ def _label_execution_stage(value: Any) -> str:
         "post_probability_block": "频率概率收缩",
         "post_burst_block": "连续发言保护",
         "post_negative_emotion_block": "负面情绪回避",
+        "pre_execution": "前置裁定阶段",
         "reply_sent": "已成功发送",
         "reply_aborted": "进入执行后中止",
         "final_no_action": "最终未执行动作",
