@@ -7,8 +7,11 @@ type OverviewChannel = {
   chat_type?: string;
   chat_type_label?: string;
   class_name?: string;
+  display_name?: string;
   idle_seconds?: number | null;
+  is_internal_webui?: boolean;
   platform?: string;
+  platform_label?: string;
   target_user_id?: string;
 };
 
@@ -445,6 +448,7 @@ type MonitorPacket = {
 type OverviewPayload = {
   updated_at: number;
   active_count: number;
+  hidden_internal_count?: number;
   channels: OverviewChannel[];
 };
 
@@ -533,6 +537,13 @@ function humanExecutionStage(value: string | undefined): string {
     reply_aborted: "进入执行后中止",
     final_no_action: "最终未执行动作",
   }[value ?? ""] ?? (value || "-");
+}
+
+function channelOptionLabel(channel: OverviewChannel): string {
+  const typeLabel = channel.chat_type_label ?? (channel.chat_type === "group" ? "群聊" : "私聊");
+  const platformLabel = channel.platform_label ?? (channel.platform === "webui" ? "本地测试" : channel.platform || "本地");
+  const name = channel.display_name || channel.channel_id.slice(0, 8);
+  return `${typeLabel} · ${platformLabel} · ${name}`;
 }
 
 function countText(value: number | undefined | null, unit: string): string {
@@ -764,14 +775,14 @@ export function EmotionDashboard() {
         </div>
         <div className="header-actions">
           <label className="channel-picker">
-            <span>群聊 / 私聊</span>
+            <span>选择群聊 / 私聊</span>
             <select
               value={selectedChannel}
               onChange={(event) => setSelectedChannel(event.target.value)}
             >
               {(overview?.channels ?? []).map((channel) => (
                 <option key={channel.channel_id} value={channel.channel_id}>
-                  {channel.chat_type_label ?? (channel.chat_type === "group" ? "群聊" : "私聊")} · {channel.platform || "本地"} · {channel.channel_id.slice(0, 8)}
+                  {channelOptionLabel(channel)}
                 </option>
               ))}
             </select>
@@ -785,9 +796,16 @@ export function EmotionDashboard() {
 
       <section className="command-grid">
         <article className="command-card">
-          <span>当前入口</span>
+          <span>当前群聊 / 私聊</span>
           <strong>{selectedOverview?.chat_type_label ?? "群聊 / 私聊"}</strong>
-          <p>{selectedOverview?.platform || "本地"} · {selectedChannel ? selectedChannel.slice(0, 12) : "暂无活跃会话"}</p>
+          <p>
+            {selectedOverview
+              ? `${selectedOverview.platform_label ?? selectedOverview.platform ?? "本地"} · ${
+                  selectedOverview.display_name || selectedOverview.channel_id.slice(0, 12)
+                }`
+              : "暂无活跃会话"}
+            {overview?.hidden_internal_count ? ` · 已隐藏 ${overview.hidden_internal_count} 个本地测试会话` : ""}
+          </p>
         </article>
         <article className="command-card is-score">
           <span>是否该聊</span>

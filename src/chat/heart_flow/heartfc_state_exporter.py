@@ -1190,27 +1190,59 @@ def list_heartfc_chats() -> Dict[str, Any]:
 
     now = time.time()
     streams = get_chat_manager()
-    chats = []
+    raw_chats = []
     for chat_id, chat in heartflow.heartflow_chat_list.items():
         stream = streams.get_stream(str(chat_id))
         last_active = float(heartflow._active_since.get(chat_id, 0.0) or 0.0)
         chat_type = "group" if stream and stream.group_info else "private"
-        chats.append(
+        platform = str(getattr(stream, "platform", "") if stream else "" or "").strip()
+        platform_label = {
+            "qq": "QQ",
+            "webui": "本地测试",
+        }.get(platform.lower(), platform.upper() if platform else "本地")
+        group_info = getattr(stream, "group_info", None) if stream else None
+        user_info = getattr(stream, "user_info", None) if stream else None
+        group_name = str(getattr(group_info, "group_name", "") or getattr(group_info, "group_id", "") or "")
+        user_name = str(
+            getattr(user_info, "user_nickname", "")
+            or getattr(user_info, "user_cardname", "")
+            or getattr(user_info, "user_id", "")
+            or ""
+        )
+        display_name = group_name if chat_type == "group" else user_name
+        is_internal_webui = platform.lower() == "webui"
+        raw_chats.append(
             {
                 "channel_id": str(chat_id),
                 "chat_type": chat_type,
                 "chat_type_label": "群聊" if chat_type == "group" else "私聊",
+                "display_name": display_name,
+                "platform_label": platform_label,
+                "is_internal_webui": is_internal_webui,
                 "class_name": chat.__class__.__name__,
                 "last_active": last_active,
                 "idle_seconds": round(max(0.0, now - last_active), 3) if last_active else None,
-                "platform": getattr(stream, "platform", "") if stream else "",
-                "group_id": getattr(getattr(stream, "group_info", None), "group_id", None) if stream else None,
-                "user_id": getattr(getattr(stream, "user_info", None), "user_id", None) if stream else None,
+                "platform": platform,
+                "group_id": getattr(group_info, "group_id", None) if group_info else None,
+                "group_name": group_name,
+                "user_id": getattr(user_info, "user_id", None) if user_info else None,
+                "user_name": user_name,
                 "target_user_id": str(getattr(chat, "_last_user_id", "") or ""),
             }
         )
+    public_chats = [item for item in raw_chats if not item.get("is_internal_webui")]
+    chats = public_chats or raw_chats
+    chats.sort(
+        key=lambda item: (
+            1 if item.get("is_internal_webui") else 0,
+            0 if item.get("chat_type") == "group" else 1,
+            str(item.get("platform_label", "")),
+            str(item.get("display_name", "")),
+        )
+    )
     return {
         "active_count": len(chats),
+        "hidden_internal_count": max(0, len(raw_chats) - len(chats)),
         "channels": chats,
     }
 
