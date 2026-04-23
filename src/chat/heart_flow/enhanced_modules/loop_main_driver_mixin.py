@@ -219,6 +219,15 @@ class LoopMainDriverMixin:
             self.last_read_time = now
             self._consecutive_skip_ticks = 0
             self._last_flow_blocker = "仅检测到自身消息回流"
+            self._store_gate_runtime(
+                now=now,
+                stage="self_echo_gate",
+                reason="仅检测到自身消息回流，跳过完整管线",
+                source="self_echo_gate",
+                final_action="observe",
+                next_action="observe",
+                blocker="仅检测到自身消息回流",
+            )
             self._emit_flow_decision_summary("self_echo_gate", "heartbeat_only")
             logger.debug(f"{self.log_prefix} 🪞 仅读到自身消息回流，跳过完整管线")
             await asyncio.sleep(_TICK_FLOOR_SEC)
@@ -251,6 +260,27 @@ class LoopMainDriverMixin:
             if idle_acted:
                 self._consecutive_skip_ticks = 0
                 return True
+            self._last_flow_blocker = (
+                f"消息未达动态阈值 {len(incoming_batch)}/{dynamic_threshold}"
+            )
+            self._store_gate_runtime(
+                now=now,
+                stage="short_batch_skip",
+                reason=(
+                    f"消息未达动态阈值 {len(incoming_batch)}/{dynamic_threshold}，"
+                    f"静默={silence_sec:.0f}s 意愿={eagerness_val:.2f}"
+                ),
+                source="short_batch_skip",
+                final_action="observe",
+                next_action="observe",
+                blocker=self._last_flow_blocker,
+                extra_votes={
+                    "incoming_batch_size": len(incoming_batch),
+                    "dynamic_threshold": int(dynamic_threshold),
+                    "silence_seconds": round(float(silence_sec or 0.0), 2),
+                    "eagerness_value": round(float(eagerness_val or 0.0), 3),
+                },
+            )
             await asyncio.sleep(_TICK_FLOOR_SEC)
             return True
 
@@ -292,6 +322,16 @@ class LoopMainDriverMixin:
                 if not _has_forced_ping:
                     logger.debug(f"{self.log_prefix} 🚫 黑屏态阻断完整管线，仅保留心跳追踪")
                     self._last_flow_blocker = "观看态=blackout，仅保留心跳追踪"
+                    self._store_gate_runtime(
+                        now=now,
+                        stage="watch_gate_blackout",
+                        reason="观看态=blackout，仅保留心跳追踪",
+                        source="watch_gate",
+                        final_action="observe",
+                        next_action="observe",
+                        blocker=self._last_flow_blocker,
+                        extra_votes={"watch_level": _wl_val, "forced_ping": False},
+                    )
                     self._emit_flow_decision_summary("watch_gate", "heartbeat_only")
                     await asyncio.sleep(_TICK_FLOOR_SEC * 3)
                     return True
@@ -316,6 +356,16 @@ class LoopMainDriverMixin:
                         self._cached_voice = None
                         logger.info(f"{self.log_prefix} 👁 窥屏态观察完成，内心无波澜")
                         self._last_flow_blocker = "窥屏态无明显波澜"
+                        self._store_gate_runtime(
+                            now=now,
+                            stage="peek_gate_observe",
+                            reason="窥屏态观察完成，内心无波澜",
+                            source="peek_gate",
+                            final_action="observe",
+                            next_action="observe",
+                            blocker=self._last_flow_blocker,
+                            extra_votes={"watch_level": _wl_val, "peek_upgrade": False},
+                        )
                         self._emit_flow_decision_summary("peek_gate", "observe")
                         return True
                     desire = getattr(peek_verdict, "reply_desire_level", 0)
@@ -345,6 +395,16 @@ class LoopMainDriverMixin:
                         self._cached_voice = None
                         logger.info(f"{self.log_prefix} 👁 窥屏态维持：{upgrade_reason}")
                         self._last_flow_blocker = f"窥屏Governor维持 {upgrade_reason}"
+                        self._store_gate_runtime(
+                            now=now,
+                            stage="peek_gate_observe",
+                            reason=f"窥屏Governor维持 {upgrade_reason}",
+                            source="peek_gate",
+                            final_action="observe",
+                            next_action="observe",
+                            blocker=self._last_flow_blocker,
+                            extra_votes={"watch_level": _wl_val, "peek_upgrade": False},
+                        )
                         self._emit_flow_decision_summary("peek_gate", "observe")
                         return True
                 else:
@@ -430,6 +490,16 @@ class LoopMainDriverMixin:
         _early_exit = self._check_pipeline_early_exit(incoming_batch, pinged_msg)
         if _early_exit:
             logger.debug(f"{self.log_prefix} ⏭️ 早退出: {_early_exit}")
+            self._last_flow_blocker = str(_early_exit or "输入内容被早退出规则拦截")
+            self._store_gate_runtime(
+                now=now,
+                stage="pipeline_early_exit",
+                reason=f"输入内容早退出：{_early_exit}",
+                source="pipeline_early_exit",
+                final_action="observe",
+                next_action="observe",
+                blocker=self._last_flow_blocker,
+            )
             await asyncio.sleep(_TICK_FLOOR_SEC)
             return True
 
@@ -514,6 +584,16 @@ class LoopMainDriverMixin:
                 if not self._is_force_wake_admin(incoming_batch, pinged_msg):
                     logger.info(f"{self.log_prefix} 🌙 夜间节律拦截: {_night_result.get('reason', _action)}")
                     self._last_flow_blocker = f"夜间节律拦截: {_night_result.get('reason', _action)}"
+                    self._store_gate_runtime(
+                        now=now,
+                        stage="night_gate_skip",
+                        reason=self._last_flow_blocker,
+                        source="night_gate",
+                        final_action="observe",
+                        next_action="observe",
+                        blocker=self._last_flow_blocker,
+                        extra_votes={"night_action": _action},
+                    )
                     self._emit_flow_decision_summary("night_gate", "skip")
                     await asyncio.sleep(_TICK_FLOOR_SEC)
                     return True
@@ -544,6 +624,17 @@ class LoopMainDriverMixin:
                 if _llm_action == "sleep_resist":
                     if not self._is_force_wake_admin(incoming_batch, pinged_msg):
                         logger.info(f"{self.log_prefix} 🌙 🧠 L2判定拦截: {_llm_decision.get('reason', _llm_action)}")
+                        self._last_flow_blocker = f"夜间L2拦截: {_llm_decision.get('reason', _llm_action)}"
+                        self._store_gate_runtime(
+                            now=now,
+                            stage="night_gate_skip",
+                            reason=self._last_flow_blocker,
+                            source="night_gate",
+                            final_action="observe",
+                            next_action="observe",
+                            blocker=self._last_flow_blocker,
+                            extra_votes={"night_action": _llm_action, "night_source": "llm_decide_l2"},
+                        )
                         await asyncio.sleep(_TICK_FLOOR_SEC)
                         return True
                 _llm_verdict = _llm_decision.get("llm_verdict", {})
@@ -586,6 +677,16 @@ class LoopMainDriverMixin:
             else:
                 logger.warning(f"{self.log_prefix} 🌙 夜间动作兜底收口: {_action}")
                 self._last_flow_blocker = f"夜间动作兜底: {_action}"
+                self._store_gate_runtime(
+                    now=now,
+                    stage="night_gate_skip",
+                    reason=self._last_flow_blocker,
+                    source="night_gate",
+                    final_action="observe",
+                    next_action="observe",
+                    blocker=self._last_flow_blocker,
+                    extra_votes={"night_action": _action, "night_source": "fallback"},
+                )
                 self._emit_flow_decision_summary("night_gate", "skip")
                 await asyncio.sleep(_TICK_FLOOR_SEC)
                 return True
@@ -596,6 +697,16 @@ class LoopMainDriverMixin:
             and not self._is_force_wake_admin(incoming_batch, pinged_msg)
         ):
             logger.info(f"{self.log_prefix} 🚧 群体模式硬路由拦截: {_pattern_route}")
+            self._last_flow_blocker = f"群体模式硬路由: {_pattern_route}"
+            self._store_gate_runtime(
+                now=now,
+                stage="pattern_route_skip",
+                reason=f"群体模式硬路由拦截：{_pattern_route}",
+                source="pattern_route",
+                final_action="observe",
+                next_action="observe",
+                blocker=self._last_flow_blocker,
+            )
             await self._run_peek_observe_loop(incoming_batch)
             await asyncio.sleep(_TICK_FLOOR_SEC)
             return True
@@ -611,6 +722,16 @@ class LoopMainDriverMixin:
             and not self._is_force_wake_admin(incoming_batch, pinged_msg)
         ):
             logger.info(f"{self.log_prefix} 🚫 群场景硬约束拦截: {_scene_block}")
+            self._last_flow_blocker = f"群场景硬约束: {_scene_block}"
+            self._store_gate_runtime(
+                now=now,
+                stage="scene_constraint_skip",
+                reason=f"群场景硬约束拦截：{_scene_block}",
+                source="scene_constraint",
+                final_action="observe",
+                next_action="observe",
+                blocker=self._last_flow_blocker,
+            )
             await asyncio.sleep(_TICK_FLOOR_SEC)
             return True
         if _scene_block and self._is_force_wake_admin(incoming_batch, pinged_msg):
@@ -650,6 +771,17 @@ class LoopMainDriverMixin:
             if _dash_verdict.get("should_process") is False:
                 logger.info(
                     f"{self.log_prefix} 🛑 仪表盘硬阻断: {_dash_verdict.get('decision_reason', '未知')} urgency={_dash_urgency}"
+                )
+                self._last_flow_blocker = str(_dash_verdict.get("decision_reason", "") or "仪表盘硬阻断")
+                self._store_gate_runtime(
+                    now=now,
+                    stage="dashboard_hard_block",
+                    reason=f"仪表盘硬阻断：{self._last_flow_blocker}",
+                    source="dashboard_gate",
+                    final_action="observe",
+                    next_action="observe",
+                    blocker=self._last_flow_blocker,
+                    extra_votes={"dashboard_urgency": _dash_urgency},
                 )
                 await asyncio.sleep(_TICK_FLOOR_SEC * 2)
                 return True
@@ -1132,6 +1264,16 @@ class LoopMainDriverMixin:
                 f"{self.log_prefix} 🚫 {autonomy_guard['reason']}，本轮不回复 | 管线耗时 {time.time() - _t0:.2f}s"
             )
             self._last_flow_blocker = autonomy_guard["reason"]
+            self._store_gate_runtime(
+                now=now,
+                stage="autonomy_guard_skip",
+                reason=str(autonomy_guard["reason"] or "自治守卫阻断"),
+                source="autonomy_guard",
+                final_action="observe",
+                next_action="observe",
+                blocker=self._last_flow_blocker,
+                extra_votes={"autonomy_source": str(autonomy_guard.get("source", "") or "")},
+            )
             self._mark_decision_winner("autonomy_guard")
             self._apply_post_reply_state(did_reply=False, reason=autonomy_guard["reason"])
             self._emit_flow_decision_summary("autonomy_guard", "skip")
@@ -1412,12 +1554,22 @@ class LoopMainDriverMixin:
         llm_triggered = False
         planner_triggered = False
         planner_decision = None
-        should_act = _final_reply
         _pact = ""
 
         if legacy_gate == "block":
             llm_triggered = False
-            should_act = False
+            _decision_runtime = self._persist_decision_runtime(
+                dataclass_replace(
+                    _decision_runtime,
+                    should_reply=False,
+                    next_action="observe",
+                    decision_stage="legacy_block",
+                    decision_reason="门控明确阻断回复",
+                    model_path="skip",
+                    blocking_factors=self._merge_runtime_labels(_decision_runtime.blocking_factors, "门控明确阻断回复"),
+                    source_votes={**dict(_decision_runtime.source_votes or {}), "legacy_gate_blocked": True},
+                )
+            )
         # hesitate 不再关闭决策，只作为风格约束传递到回复生成阶段
 
         if llm_decision:
@@ -1430,7 +1582,6 @@ class LoopMainDriverMixin:
                 f"内容规划={llm_decision.content_plan[:50] if llm_decision.content_plan else '无'}"
             )
             if not voice_driven_reply:
-                should_act = bool(llm_decision.should_act)
                 llm_triggered = bool(llm_decision.should_act)
                 if llm_decision.should_act:
                     from types import SimpleNamespace
@@ -1452,8 +1603,27 @@ class LoopMainDriverMixin:
                     logger.info(
                         f"{self.log_prefix} 🤖 LLM自主决策保持观察: {llm_decision.reasoning[:60] if llm_decision.reasoning else '无原因'}"
                     )
+                _decision_runtime = self._persist_decision_runtime(
+                    dataclass_replace(
+                        _decision_runtime,
+                        should_reply=bool(llm_decision.should_act),
+                        next_action="reply" if llm_decision.should_act else "observe",
+                        decision_stage="llm_autonomous_allow" if llm_decision.should_act else "llm_autonomous_hold",
+                        decision_reason=(
+                            llm_decision.reasoning
+                            or ("LLM自主决策允许行动" if llm_decision.should_act else "LLM自主决策保持观察")
+                        ),
+                        model_path=_decision_runtime.model_path if llm_decision.should_act else "skip",
+                        source_votes={
+                            **dict(_decision_runtime.source_votes or {}),
+                            "llm_autonomous_should_act": bool(llm_decision.should_act),
+                            "llm_autonomous_action": str(llm_decision.action_type or ""),
+                        },
+                    )
+                )
 
-        should_act = self._apply_inner_voice_priority(
+        should_act = bool(_decision_runtime.should_reply)
+        _precheck_should_act = self._apply_inner_voice_priority(
             should_act=should_act,
             voice_conclusion=voice_conclusion,
             pinged_msg=force_reply_message,
@@ -1461,6 +1631,21 @@ class LoopMainDriverMixin:
             planner_decision=planner_decision,
             is_admin_forced=_is_admin_forced,
         )
+        if bool(_decision_runtime.should_reply) != bool(_precheck_should_act):
+            _decision_runtime = self._persist_decision_runtime(
+                dataclass_replace(
+                    _decision_runtime,
+                    should_reply=bool(_precheck_should_act),
+                    next_action="reply" if _precheck_should_act else "observe",
+                    decision_stage="inner_voice_priority",
+                    decision_reason="内心优先规则调整了统一裁定",
+                    model_path=_decision_runtime.model_path if _precheck_should_act else "skip",
+                    source_votes={
+                        **dict(_decision_runtime.source_votes or {}),
+                        "inner_voice_priority_should_reply": bool(_precheck_should_act),
+                    },
+                )
+            )
         self._align_states_with_inner_voice(voice_conclusion, source="decision_precheck")
 
         # 非内心强驱动时，统一规划器始终作为主决策层
@@ -1474,6 +1659,15 @@ class LoopMainDriverMixin:
                 )
                 logger.debug(f"{self.log_prefix} 规划器冷却中({quiet_left}s)，跳过重复规划")
                 self._last_flow_blocker = f"规划器冷却中({quiet_left}s)"
+                self._store_gate_runtime(
+                    now=now,
+                    stage="planner_cooldown_skip",
+                    reason=f"规划器冷却中({quiet_left}s)，跳过重复规划",
+                    source="planner_cooldown",
+                    final_action="observe",
+                    next_action="observe",
+                    blocker=self._last_flow_blocker,
+                )
                 self._emit_flow_decision_summary("planner_cooldown", "skip")
                 await self._emit_outcome_summary(False, relation_result)
                 await asyncio.sleep(_POST_MESSAGE_RETRY_SEC)
@@ -1545,153 +1739,30 @@ class LoopMainDriverMixin:
                         )
                         cooldown = max(_POST_MESSAGE_RETRY_SEC, min(cooldown, 30.0))
                         self._planner_quiet_until = now + cooldown
-                logger.info(f"{self.log_prefix} 规划器决策={_pact} 门控={legacy_gate} 应行动={should_act}")
-
-        should_act = self._apply_inner_voice_priority(
-            should_act=should_act,
-            voice_conclusion=voice_conclusion,
-            pinged_msg=force_reply_message,
-            legacy_gate=legacy_gate,
-            planner_decision=planner_decision,
-            is_admin_forced=_is_admin_forced,
-        )
-        self._align_states_with_inner_voice(voice_conclusion, source="decision_finalize")
-
-        _voice_reluctant = (getattr(voice_conclusion, "should_reply", None) is False) if voice_conclusion else False
-        _voice_eager = bool(
-            voice_conclusion
-            and getattr(voice_conclusion, "should_reply", None) is True
-            and int(getattr(voice_conclusion, "reply_desire_level", 0) or 0) >= 6
-        )
-        _intent_primary = None
-        _intent_silence = 0
-        if voice_conclusion:
-            try:
-                _intent_primary = str(getattr(voice_conclusion, "primary_intent", None) or "")
-                _intent_silence = int(getattr(voice_conclusion, "silence_rounds", 0) or 0)
-            except Exception as _e:
-                logger.debug(f"{self.log_prefix} unknown异常: {_e}")
-        _has_strong_reply_evidence = bool(
-            _force_direct_ping or planner_decision is not None or voice_driven_reply or _is_admin_forced
-        )
-        if not should_act and legacy_gate in {"allow", "force_reply"}:
-            if _voice_reluctant:
-                logger.info(f"{self.log_prefix} ⚠️ 门控={legacy_gate}但独白显抗拒，降级为规划器决策")
-            elif not _has_strong_reply_evidence:
-                logger.info(f"{self.log_prefix} 🧊 门控={legacy_gate}但缺少强回复证据，保持不行动")
-            else:
-                _rel_snap = self._resolve_relation_view()
-                _snap_annoyance = float(_rel_snap.get("annoyance_value", 0.0) or 0.0)
-                _snap_pressure = float(_rel_snap.get("psychological_pressure", 0.0) or 0.0)
-                _snap_blocked = bool(_rel_snap.get("is_user_blocked", False))
-
-                if _snap_blocked or (_snap_annoyance >= 80 and _snap_pressure >= 60):
-                    logger.info(
-                        f"{self.log_prefix} 🛑 门控={legacy_gate}但情绪极端"
-                        f"(烦躁{_snap_annoyance:.0f}/压力{_snap_pressure:.0f}"
-                        f"{'/已屏蔽' if _snap_blocked else ''})，拒绝激活"
-                    )
-                    should_act = False
-                elif _snap_annoyance >= 60 and _snap_pressure >= 40:
-                    if _snap_annoyance >= 72 or _snap_pressure >= 55:
-                        logger.info(
-                            f"{self.log_prefix} ⚠️ 门控={legacy_gate}但情绪偏高"
-                            f"(烦躁{_snap_annoyance:.0f}/压力{_snap_pressure:.0f})，确定降级观察"
-                        )
-                        should_act = False
-                    elif _has_strong_reply_evidence:
-                        should_act = True
-                        logger.info(
-                            f"{self.log_prefix} 统一结算 门控={legacy_gate}，强证据存在且情绪未达硬拦截，允许进入回复执行层"
-                        )
-                else:
-                    if _intent_primary == "wait" and _intent_silence >= 1:
-                        if _intent_silence >= 3:
-                            should_act = False
-                            logger.info(
-                                f"{self.log_prefix} 🤐 意图池primary=wait(静默{_intent_silence}轮)"
-                                f"，确定跳过"
-                            )
-                        elif _has_strong_reply_evidence:
-                            should_act = True
-                            logger.info(
-                                f"{self.log_prefix} 统一结算 门控={legacy_gate}，强证据存在且意图wait未达硬拦截，允许回复"
-                            )
-                    elif _has_strong_reply_evidence:
-                        should_act = True
-                        logger.info(f"{self.log_prefix} 统一结算 门控={legacy_gate}，强证据存在，允许进入回复执行层")
-
-        try:
-            target_uid = str(getattr(self, "_last_user_id", "") or "").strip()
-            if target_uid:
-                from src.modules.modcore.dynamic_persona.emotion_tracker import (
-                    get_emotion_tracker,
-                )
-
-                _state = get_emotion_tracker(self.stream_id).get_user_state(target_uid, create_if_missing=False)
-                if _state is not None:
-                    _inner_chaos = float(getattr(_state, "inner_chaos", 0.0) or 0.0)
-                    _surface_mask = float(getattr(_state, "surface_mask", 0.0) or 0.0)
-                    _submission = float(getattr(_state, "submission_level", 0.0) or 0.0)
-                    _shyness = float(getattr(_state, "shyness_level", 50.0) or 50.0)
-                    if _inner_chaos >= 8.0:
-                        logger.info(f"{self.log_prefix} 🧠 内心混乱过高({_inner_chaos:.1f})，本轮拒绝行动")
-                        should_act = False
-                    elif should_act and not _voice_eager:
-                        if _surface_mask >= 7.0:
-                            should_act = _surface_mask < 8.5
-                            logger.info(f"{self.log_prefix} 🎭 表层伪装偏高({_surface_mask:.1f})，确定性收缩行动意愿")
-                        if should_act and _submission >= 6.0:
-                            should_act = _submission < 8.0
-                            logger.info(f"{self.log_prefix} 🙈 顺从度偏高({_submission:.1f})，确定性降低主动表达")
-                        if should_act and _shyness >= 75.0 and legacy_gate not in {"force_reply"}:
-                            should_act = _shyness < 85.0
-                            logger.info(f"{self.log_prefix} 😳 害羞值偏高({_shyness:.1f})，非强制场景确定性收缩回复")
-        except Exception as _psych_exc:
-            logger.debug(f"{self.log_prefix} 心理特征门控异常: {_psych_exc}")
-
-        # 非强制场景启用频率概率调制，防止过度密集发言
-        if should_act and not _is_admin_forced and not _force_direct_ping and not _voice_eager:
-            try:
-                _prob_allow = self._decide_action(
-                    pinged_msg=force_reply_message,
-                    eagerness=eagerness_val,
-                    awareness=awareness_snapshot,
-                    voice=voice_conclusion,
-                    messages=decision_messages,
-                )
-                if not _prob_allow:
-                    should_act = False
-                    logger.info(f"{self.log_prefix} 🎛️ 频率概率调制: 当前轮降级为观察，避免话痨")
-            except Exception as _freq_decide_exc:
-                logger.debug(f"{self.log_prefix} 频率概率调制异常(降级忽略): {_freq_decide_exc}")
-
-        _recent_reply_burst = sum(1 for t in self._bot_reply_timeline if time.time() - t < 180.0)
-        if should_act and _recent_reply_burst >= 4 and not _is_admin_forced and not _force_direct_ping and not _voice_eager:
-            should_act = False
-            logger.info(f"{self.log_prefix} 🧯 连续发言过多({_recent_reply_burst}/180s)，本轮先闭嘴避免像刷屏")
-
-        # SOC-03: 负面情绪影响决策 — 高负面情绪时触发回避/防御
-        _rel_snap_soc = self._resolve_relation_view()
-        _neg_emo = float(_rel_snap_soc.get("annoyance_value", 0.0) or 0.0)
-        _soc_pressure = float(_rel_snap_soc.get("psychological_pressure", 0.0) or 0.0)
-        _neg_composite = max(_neg_emo, _soc_pressure * 0.8)
-        _is_force = (force_reply_message is not None) or voice_driven_reply or _is_admin_forced
-        if should_act and _neg_composite > 85 and not _is_force and not _voice_eager:
-            should_act = False
-            if _is_admin_forced:
-                should_act = True
                 logger.info(
-                    f"{self.log_prefix} 👑 管理员强制唤醒-穿透SOC-03负面情绪回避(composite={_neg_composite:.1f}>85), 强制行动"
+                    f"{self.log_prefix} 规划器决策={_pact} 门控={legacy_gate} 应行动={bool(_decision_runtime.should_reply)}"
                 )
-            else:
-                logger.info(f"{self.log_prefix} SOC-03 负面情绪回避: composite={_neg_composite:.1f}>85, 降级为不行动")
-        elif should_act and _neg_composite > 60 and not _is_force and not _voice_eager:
-            if _neg_composite >= 72:
-                should_act = False
-                logger.info(f"{self.log_prefix} SOC-03 负面情绪确定回避: composite={_neg_composite:.1f}>=72")
-            else:
-                logger.info(f"{self.log_prefix} SOC-03 负面情绪提示: composite={_neg_composite:.1f}，未达硬拦截")
+
+        _decision_runtime = self._apply_execution_verdict_correction(
+            verdict=_decision_runtime,
+            planner_decision=planner_decision,
+            voice_conclusion=voice_conclusion,
+            force_reply_message=force_reply_message,
+            legacy_gate=legacy_gate,
+            is_admin_forced=_is_admin_forced,
+            force_direct_ping=_force_direct_ping,
+            voice_driven_reply=voice_driven_reply,
+            awareness_snapshot=awareness_snapshot,
+            eagerness_val=eagerness_val,
+            decision_messages=decision_messages,
+        )
+        should_act = bool(_decision_runtime.should_reply)
+        self._align_states_with_inner_voice(voice_conclusion, source="decision_finalize")
+        logger.info(
+            f"{self.log_prefix} [执行修正] action={_decision_runtime.next_action} "
+            f"reply={_decision_runtime.should_reply} stage={_decision_runtime.decision_stage} "
+            f"reason={_decision_runtime.decision_reason}"
+        )
 
         if should_act:
             _pre_reply_resource_snapshot = self._capture_pre_reply_resource_snapshot()

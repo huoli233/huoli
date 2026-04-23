@@ -237,6 +237,257 @@ class StrategyActionStateMixin:
         self._last_decision_runtime = verdict.to_dict()
         return verdict
 
+    def _persist_decision_runtime(
+        self,
+        verdict: DecisionRuntimeVerdict,
+    ) -> DecisionRuntimeVerdict:
+        self._last_decision_runtime = verdict.to_dict()
+        return verdict
+
+    @staticmethod
+    def _merge_runtime_labels(
+        current: List[str],
+        *extras: str,
+    ) -> List[str]:
+        merged = [str(item).strip() for item in list(current or []) if str(item).strip()]
+        for extra in extras:
+            value = str(extra or "").strip()
+            if value and value not in merged:
+                merged.append(value)
+        return merged
+
+    def _store_gate_runtime(
+        self,
+        *,
+        now: float,
+        stage: str,
+        reason: str,
+        source: str,
+        final_action: str = "observe",
+        next_action: str = "observe",
+        model_path: str = "skip",
+        blocker: str = "",
+        confidence: float = 0.78,
+        extra_votes: Dict[str, Any] | None = None,
+        extra_blocking: List[str] | None = None,
+        extra_driving: List[str] | None = None,
+    ) -> Dict[str, Any]:
+        resolved_reason = str(reason or blocker or stage or "状态门控跳过")
+        resolved_blocker = str(blocker or resolved_reason)
+        gate_verdict = DecisionRuntimeVerdict(
+            verdict_id=f"gate-{stage}-{int(now * 1000)}",
+            should_reply=final_action in {"reply", "upgrade"},
+            next_action=str(next_action or "observe"),
+            decision_stage=str(stage or "gate_skip"),
+            decision_reason=resolved_reason,
+            confidence=float(confidence or 0.78),
+            model_path=str(model_path or "skip"),
+            complexity_score=0.0,
+            complexity_label="普通",
+            source_votes={
+                "gate_stage": str(stage or ""),
+                "gate_source": str(source or ""),
+            },
+            blocking_factors=[resolved_blocker] if resolved_blocker else [],
+            driving_factors=[],
+        )
+        self._persist_decision_runtime(gate_verdict)
+        self._store_execution_runtime(
+            initial_verdict=gate_verdict,
+            should_act=bool(gate_verdict.should_reply),
+            reply_sent=False,
+            final_action=str(final_action or "observe"),
+            execution_stage=str(stage or "gate_skip"),
+            execution_reason=resolved_reason,
+            model_path=str(model_path or "skip"),
+            source=str(source or "gate"),
+            blocker=resolved_blocker,
+            confidence=float(confidence or 0.78),
+            extra_votes=extra_votes,
+            extra_blocking=extra_blocking,
+            extra_driving=extra_driving,
+        )
+        return self._last_execution_runtime
+
+    def _apply_execution_verdict_correction(
+        self,
+        *,
+        verdict: DecisionRuntimeVerdict,
+        planner_decision: Any,
+        voice_conclusion: Any,
+        force_reply_message: Any,
+        legacy_gate: str,
+        is_admin_forced: bool,
+        force_direct_ping: bool,
+        voice_driven_reply: bool,
+        awareness_snapshot: Any,
+        eagerness_val: float,
+        decision_messages: List[Any],
+    ) -> DecisionRuntimeVerdict:
+        should_reply = bool(verdict.should_reply)
+        next_action = str(verdict.next_action or "observe")
+        model_path = str(verdict.model_path or "skip")
+        decision_stage = str(verdict.decision_stage or "state_consensus")
+        decision_reason = str(verdict.decision_reason or "统一裁定")
+        confidence = float(verdict.confidence or 0.5)
+        source_votes = dict(verdict.source_votes or {})
+        blocking = list(verdict.blocking_factors or [])
+        driving = list(verdict.driving_factors or [])
+
+        def mark_skip(stage: str, reason: str, blocker: str = "") -> None:
+            nonlocal should_reply, next_action, model_path, decision_stage, decision_reason, confidence, blocking
+            should_reply = False
+            next_action = "observe"
+            model_path = "skip"
+            decision_stage = stage
+            decision_reason = str(reason or blocker or stage)
+            confidence = max(confidence, 0.74)
+            source_votes["post_correction_stage"] = stage
+            source_votes["post_correction_should_reply"] = False
+            blocking = self._merge_runtime_labels(blocking, blocker or reason)
+
+        def mark_reply(stage: str, reason: str) -> None:
+            nonlocal should_reply, next_action, model_path, decision_stage, decision_reason, confidence, driving
+            should_reply = True
+            if next_action not in {"reply", "upgrade"}:
+                next_action = "reply"
+            if model_path == "skip":
+                model_path = "small"
+            decision_stage = stage
+            decision_reason = str(reason or stage)
+            confidence = max(confidence, 0.66)
+            source_votes["post_correction_stage"] = stage
+            source_votes["post_correction_should_reply"] = True
+            driving = self._merge_runtime_labels(driving, reason)
+
+        voice_should_reply = getattr(voice_conclusion, "should_reply", None) if voice_conclusion else None
+        voice_desire = int(getattr(voice_conclusion, "reply_desire_level", 0) or 0) if voice_conclusion else 0
+        voice_reluctant = voice_should_reply is False
+        voice_eager = bool(voice_should_reply is True and voice_desire >= 6)
+        intent_primary = ""
+        intent_silence = 0
+        if voice_conclusion:
+            try:
+                intent_primary = str(getattr(voice_conclusion, "primary_intent", None) or "")
+                intent_silence = int(getattr(voice_conclusion, "silence_rounds", 0) or 0)
+            except Exception as exc:
+                logger.debug(f"{self.log_prefix} 读取内心意图异常: {exc}")
+
+        has_strong_reply_evidence = bool(
+            force_direct_ping or planner_decision is not None or voice_driven_reply or is_admin_forced
+        )
+
+        if not should_reply and legacy_gate in {"allow", "force_reply"}:
+            if voice_reluctant:
+                mark_skip("post_voice_reluctant", "门控放行但内心独白明确抗拒")
+            elif not has_strong_reply_evidence:
+                mark_skip("post_gate_hold", "门控放行但缺少强回复证据")
+            else:
+                relation_snapshot = self._resolve_relation_view() or {}
+                annoyance = float(relation_snapshot.get("annoyance_value", 0.0) or 0.0)
+                pressure = float(relation_snapshot.get("psychological_pressure", 0.0) or 0.0)
+                blocked = bool(relation_snapshot.get("is_user_blocked", False))
+                if blocked or (annoyance >= 80 and pressure >= 60):
+                    mark_skip(
+                        "post_relation_block",
+                        f"关系压力极高，烦躁{annoyance:.0f}/压力{pressure:.0f}",
+                        "关系压力极高",
+                    )
+                elif annoyance >= 60 and pressure >= 40:
+                    if annoyance >= 72 or pressure >= 55:
+                        mark_skip(
+                            "post_relation_guard",
+                            f"关系情绪偏高，烦躁{annoyance:.0f}/压力{pressure:.0f}",
+                            "关系情绪偏高",
+                        )
+                    else:
+                        mark_reply("post_gate_reply", "强证据存在且关系情绪未达硬拦截")
+                else:
+                    if intent_primary == "wait" and intent_silence >= 3:
+                        mark_skip(
+                            "post_wait_intent_block",
+                            f"意图池 wait 已静默 {intent_silence} 轮",
+                            "等待意图压制继续追问",
+                        )
+                    else:
+                        mark_reply("post_gate_reply", "门控放行且已具备强回复证据")
+
+        target_uid = str(getattr(self, "_last_user_id", "") or "").strip()
+        if should_reply and target_uid:
+            try:
+                from src.modules.modcore.dynamic_persona.emotion_tracker import get_emotion_tracker
+
+                state = get_emotion_tracker(self.stream_id).get_user_state(target_uid, create_if_missing=False)
+                if state is not None:
+                    inner_chaos = float(getattr(state, "inner_chaos", 0.0) or 0.0)
+                    surface_mask = float(getattr(state, "surface_mask", 0.0) or 0.0)
+                    submission = float(getattr(state, "submission_level", 0.0) or 0.0)
+                    shyness = float(getattr(state, "shyness_level", 50.0) or 50.0)
+                    source_votes.update(
+                        {
+                            "psychology_inner_chaos": round(inner_chaos, 3),
+                            "psychology_surface_mask": round(surface_mask, 3),
+                            "psychology_submission": round(submission, 3),
+                            "psychology_shyness": round(shyness, 3),
+                        }
+                    )
+                    if inner_chaos >= 8.0:
+                        mark_skip("post_psychology_block", f"内心混乱过高({inner_chaos:.1f})", "内心混乱过高")
+                    elif not voice_eager:
+                        if surface_mask >= 8.5:
+                            mark_skip("post_psychology_block", f"表层伪装过高({surface_mask:.1f})", "表层伪装过高")
+                        elif submission >= 8.0:
+                            mark_skip("post_psychology_block", f"顺从度过高({submission:.1f})", "顺从度过高")
+                        elif shyness >= 85.0 and legacy_gate != "force_reply":
+                            mark_skip("post_psychology_block", f"害羞值过高({shyness:.1f})", "害羞值过高")
+            except Exception as psych_exc:
+                logger.debug(f"{self.log_prefix} 心理特征修正异常: {psych_exc}")
+
+        if should_reply and not is_admin_forced and not force_direct_ping and not voice_eager:
+            try:
+                prob_allow = self._decide_action(
+                    pinged_msg=force_reply_message,
+                    eagerness=eagerness_val,
+                    awareness=awareness_snapshot,
+                    voice=voice_conclusion,
+                    messages=decision_messages,
+                )
+                source_votes["probability_gate_allow"] = bool(prob_allow)
+                if not prob_allow:
+                    mark_skip("post_probability_block", "频率概率调制要求本轮观察", "频率概率调制拦截")
+            except Exception as freq_exc:
+                logger.debug(f"{self.log_prefix} 频率概率修正异常: {freq_exc}")
+
+        recent_reply_burst = sum(1 for ts in getattr(self, "_bot_reply_timeline", []) if time.time() - ts < 180.0)
+        source_votes["recent_reply_burst"] = int(recent_reply_burst)
+        if should_reply and recent_reply_burst >= 4 and not is_admin_forced and not force_direct_ping and not voice_eager:
+            mark_skip("post_burst_block", f"连续发言过多({recent_reply_burst}/180s)", "连续发言过多")
+
+        relation_snapshot = self._resolve_relation_view() or {}
+        negative_emotion = float(relation_snapshot.get("annoyance_value", 0.0) or 0.0)
+        social_pressure = float(relation_snapshot.get("psychological_pressure", 0.0) or 0.0)
+        negative_composite = max(negative_emotion, social_pressure * 0.8)
+        source_votes["negative_composite"] = round(negative_composite, 3)
+        is_force = bool(force_reply_message is not None or voice_driven_reply or is_admin_forced)
+        if should_reply and negative_composite > 85 and not is_force and not voice_eager:
+            mark_skip("post_negative_emotion_block", f"SOC-03 负面情绪回避({negative_composite:.1f})", "SOC-03 负面情绪回避")
+        elif should_reply and negative_composite >= 72 and not is_force and not voice_eager:
+            mark_skip("post_negative_emotion_block", f"SOC-03 负面情绪确定回避({negative_composite:.1f})", "SOC-03 负面情绪确定回避")
+
+        corrected = dataclass_replace(
+            verdict,
+            should_reply=should_reply,
+            next_action=next_action,
+            decision_stage=decision_stage,
+            decision_reason=decision_reason,
+            confidence=confidence,
+            model_path=model_path,
+            source_votes=source_votes,
+            blocking_factors=blocking,
+            driving_factors=driving,
+        )
+        return self._persist_decision_runtime(corrected)
+
     def _store_execution_runtime(
         self,
         *,
