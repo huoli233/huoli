@@ -80,6 +80,12 @@ type Presentation = {
   context_detail?: ContextDetail;
   memory_detail?: MemoryDetail;
   autonomy_detail?: AutonomyDetail;
+  group_state_detail?: GroupStateDetail;
+  current_user_detail?: CurrentUserDetail;
+  attention_runtime_detail?: AttentionRuntimeDetail;
+  safety_detail?: SafetyDetail;
+  dynamic_trace?: DynamicTraceItem[];
+  value_deltas?: Record<string, DynamicTraceItem>;
   initiative_state?: InitiativeState;
   scene_context: SceneContext;
   participant_impacts: ParticipantImpact[];
@@ -309,6 +315,78 @@ type AutonomyDetail = {
   background_budget_remaining: number;
 };
 
+type GroupStateDetail = {
+  scene_heat_label: string;
+  scene_heat_score: number;
+  messages_per_minute: number;
+  active_user_count: number;
+  participant_diversity: number;
+  interaction_quality: number;
+  complexity_level: number;
+  social_density: number;
+  suitable_to_join: boolean;
+  join_unsuitable_reason: string;
+  dominant_speaker: string;
+  active_topic_count: number;
+  topic_focus: string[];
+  thread_count: number;
+  session_phase: string;
+  vexation: number;
+  weariness: number;
+  vitality: number;
+  atmosphere_label: string;
+  hot_count: number;
+  warm_count: number;
+};
+
+type CurrentUserDetail = {
+  user_id: string;
+  display_name: string;
+  relationship_label: string;
+  rapport_score: number;
+  trust_score: number;
+  irritation_load: number;
+  pressure_load: number;
+  trauma_load: number;
+  chaos_load: number;
+  mask_load: number;
+  interaction_count: number;
+  current_mood_hint: string;
+};
+
+type AttentionRuntimeDetail = {
+  state_label: string;
+  visibility_threshold: number;
+  process_ratio: number;
+  peek_desire: number;
+  interrupt_tolerance: number;
+  silence_tolerance: number;
+  time_since_last_look: number;
+  consecutive_peeks_without_action: number;
+  look_budget_state: number;
+  process_budget_state: number;
+  openness: number;
+};
+
+type SafetyDetail = {
+  safety_level: string;
+  safety_score: number;
+  blocked: boolean;
+  dominant_threat: string;
+  bar_penalty: number;
+  threat_evidence_summary: string;
+};
+
+type DynamicTraceItem = {
+  key: string;
+  label: string;
+  current: number;
+  previous: number;
+  delta: number;
+  trend_label: string;
+  last_change_reason: string;
+};
+
 type InitiativeState = {
   boredom_load: number;
   loneliness_load: number;
@@ -352,7 +430,7 @@ const severityRank: Record<string, number> = {
 const fallbackDisplayPolicy: DisplayPolicy = {
   resident: ["精力储备", "内在心情", "注意状态", "社交姿态", "安全护盾", "流转阶段", "场景热度", "发言预测"],
   active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "情绪低落/好奇心/社交欲显著变化", "浅睡/深睡/熬穿/黎明恢复/睡眠债", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/群聊升温"],
-  detail: ["资源账本的聊天值和思考值", "昼夜节律、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "群聊感知、话题焦点、活跃人数", "目标用户关系、好感、信任、压力", "发言预测的驱动和抑制因素"],
+  detail: ["资源账本的聊天值和思考值", "昼夜节律、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "群聊整体状态", "当前对象状态", "安全护盾细节", "值变化原因", "发言预测的驱动和抑制因素"],
   hidden: ["内部阈值", "调试原因", "缓存字段", "旧命名残留", "纯计数器原值"],
 };
 
@@ -461,6 +539,11 @@ export function EmotionDashboard() {
   const contextDetail = packet?.presentation?.context_detail;
   const memoryDetail = packet?.presentation?.memory_detail;
   const autonomyDetail = packet?.presentation?.autonomy_detail;
+  const groupStateDetail = packet?.presentation?.group_state_detail;
+  const currentUserDetail = packet?.presentation?.current_user_detail;
+  const attentionRuntimeDetail = packet?.presentation?.attention_runtime_detail;
+  const safetyDetail = packet?.presentation?.safety_detail;
+  const dynamicTrace = packet?.presentation?.dynamic_trace ?? [];
   const initiativeState = packet?.presentation?.initiative_state;
   const displayPolicy = packet?.presentation?.display_policy ?? fallbackDisplayPolicy;
   const selectedOverview = (overview?.channels ?? []).find(
@@ -894,6 +977,22 @@ export function EmotionDashboard() {
               <strong>{percent(contextDetail?.perception_engagement_pull)}</strong>
             </div>
             <div className="detail-row">
+              <span>可见阈值</span>
+              <strong>{percent(attentionRuntimeDetail?.visibility_threshold)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>处理比例</span>
+              <strong>{percent(attentionRuntimeDetail?.process_ratio)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>窥屏欲望</span>
+              <strong>{percent(attentionRuntimeDetail?.peek_desire)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>连续窥屏未行动</span>
+              <strong>{attentionRuntimeDetail?.consecutive_peeks_without_action ?? 0}</strong>
+            </div>
+            <div className="detail-row">
               <span>回忆录阶段</span>
               <strong>{contextDetail?.memoir_phase_label ?? "开放会话"}</strong>
             </div>
@@ -1051,34 +1150,49 @@ export function EmotionDashboard() {
 
         <section className="panel">
           <div className="panel-header">
-            <h2>群聊情境</h2>
-            <span>{sceneContext?.scene_heat_label ?? humanSceneHeat(sceneContext?.scene_heat)}</span>
+            <h2>群聊整体状态</h2>
+            <span>{groupStateDetail?.scene_heat_label ?? sceneContext?.scene_heat_label ?? humanSceneHeat(sceneContext?.scene_heat)}</span>
           </div>
           <div className="detail-grid">
             <div className="detail-row">
               <span>场景热度</span>
-              <strong>{sceneContext?.scene_heat_label ?? humanSceneHeat(sceneContext?.scene_heat)} · {percent(sceneContext?.scene_heat_score)}</strong>
+              <strong>{groupStateDetail?.scene_heat_label ?? "-"} · {percent(groupStateDetail?.scene_heat_score)}</strong>
             </div>
             <div className="detail-row">
               <span>活跃人数</span>
-              <strong>{sceneContext?.active_user_count ?? 0}</strong>
+              <strong>{groupStateDetail?.active_user_count ?? 0}</strong>
             </div>
             <div className="detail-row">
-              <span>会话阶段</span>
-              <strong>{sceneContext?.session_phase || "-"}</strong>
+              <span>每分钟消息</span>
+              <strong>{fixed(groupStateDetail?.messages_per_minute, 2)}</strong>
             </div>
             <div className="detail-row">
-              <span>热点用户</span>
-              <strong>{sceneContext?.hot_count ?? 0}</strong>
+              <span>线程数</span>
+              <strong>{groupStateDetail?.thread_count ?? 0}</strong>
             </div>
             <div className="detail-row">
-              <span>温热用户</span>
-              <strong>{sceneContext?.warm_count ?? 0}</strong>
+              <span>主导发言者</span>
+              <strong>{groupStateDetail?.dominant_speaker || "暂无"}</strong>
+            </div>
+            <div className="detail-row">
+              <span>适合插话</span>
+              <strong>{yesNo(groupStateDetail?.suitable_to_join)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>互动质量</span>
+              <strong>{percent(groupStateDetail?.interaction_quality)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>群聊烦躁 / 疲劳</span>
+              <strong>{fixed(groupStateDetail?.vexation)} / {fixed(groupStateDetail?.weariness)}</strong>
             </div>
           </div>
+          <p className="panel-note">
+            氛围：{groupStateDetail?.atmosphere_label || "暂无"} · 不适合插话原因：{groupStateDetail?.join_unsuitable_reason || "无"}
+          </p>
           <div className="topic-wrap">
-            {(sceneContext?.topic_focus ?? []).length > 0 ? (
-              sceneContext?.topic_focus.map((topic) => (
+            {(groupStateDetail?.topic_focus ?? []).length > 0 ? (
+              groupStateDetail?.topic_focus.map((topic) => (
                 <span className="topic-chip" key={topic}>
                   {topic}
                 </span>
@@ -1091,61 +1205,93 @@ export function EmotionDashboard() {
 
         <section className="panel">
           <div className="panel-header">
-            <h2>目标用户影响</h2>
-            <span>{participantImpacts.length > 0 ? participantImpacts[0].display_name : "暂无"}</span>
+            <h2>当前对象状态</h2>
+            <span>{currentUserDetail?.user_id ? currentUserDetail.display_name : "暂无"}</span>
           </div>
-          {participantImpacts.length === 0 ? (
+          {!currentUserDetail?.user_id ? (
             <div className="empty-state">当前没有明确焦点用户，用户影响区保持空状态。</div>
           ) : (
-            participantImpacts.map((user) => (
-              <article className="participant-card" key={user.user_id}>
-                <header>
-                  <div>
-                    <h3>{user.display_name}</h3>
-                    <p>{user.relationship_label}</p>
-                  </div>
-                  <strong>{user.impact_rank.toFixed(2)}</strong>
-                </header>
-                <div className="detail-grid compact">
-                  <div className="detail-row">
-                    <span>好感</span>
-                    <strong>{user.rapport_score.toFixed(1)}</strong>
-                  </div>
-                  <div className="detail-row">
-                    <span>信任</span>
-                    <strong>{user.trust_score.toFixed(1)}</strong>
-                  </div>
-                  <div className="detail-row">
-                    <span>烦躁</span>
-                    <strong>{user.irritation_load.toFixed(1)}</strong>
-                  </div>
-                  <div className="detail-row">
-                    <span>创伤</span>
-                    <strong>{user.trauma_load.toFixed(2)}</strong>
-                  </div>
-                  <div className="detail-row">
-                    <span>压力</span>
-                    <strong>{user.pressure_load.toFixed(1)}</strong>
-                  </div>
-                  <div className="detail-row">
-                    <span>互动次数</span>
-                    <strong>{user.interaction_count}</strong>
-                  </div>
+            <article className="participant-card">
+              <header>
+                <div>
+                  <h3>{currentUserDetail.display_name}</h3>
+                  <p>{currentUserDetail.relationship_label} · {currentUserDetail.current_mood_hint}</p>
                 </div>
-                <div className="topic-wrap">
-                  {user.active_signals.length > 0 ? (
-                    user.active_signals.map((signal) => (
-                      <span className="topic-chip is-secondary" key={signal}>
-                        {signal}
-                      </span>
-                    ))
-                  ) : (
-                    <span className="empty-state inline">当前没有用户向激活信号。</span>
-                  )}
+                <strong>{currentUserDetail.interaction_count}</strong>
+              </header>
+              <div className="detail-grid compact">
+                <div className="detail-row">
+                  <span>好感</span>
+                  <strong>{currentUserDetail.rapport_score.toFixed(1)}</strong>
                 </div>
-              </article>
-            ))
+                <div className="detail-row">
+                  <span>信任</span>
+                  <strong>{currentUserDetail.trust_score.toFixed(1)}</strong>
+                </div>
+                <div className="detail-row">
+                  <span>烦躁</span>
+                  <strong>{currentUserDetail.irritation_load.toFixed(1)}</strong>
+                </div>
+                <div className="detail-row">
+                  <span>压力</span>
+                  <strong>{currentUserDetail.pressure_load.toFixed(1)}</strong>
+                </div>
+                <div className="detail-row">
+                  <span>创伤</span>
+                  <strong>{currentUserDetail.trauma_load.toFixed(2)}</strong>
+                </div>
+                <div className="detail-row">
+                  <span>混乱 / 伪装</span>
+                  <strong>{currentUserDetail.chaos_load.toFixed(1)} / {currentUserDetail.mask_load.toFixed(1)}</strong>
+                </div>
+              </div>
+            </article>
           )}
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <h2>安全护盾</h2>
+            <span>{safetyDetail?.safety_level ?? "安全"}</span>
+          </div>
+          <div className="metric-wall">
+            <div className={`metric-tile tone-${metricTone(1 - (safetyDetail?.safety_score ?? 0))}`}>
+              <span>安全风险</span>
+              <strong>{percent(safetyDetail?.safety_score)}</strong>
+              <p>{safetyDetail?.blocked ? "已阻断回复" : "未阻断"}</p>
+            </div>
+            <div className="metric-tile">
+              <span>主导威胁</span>
+              <strong>{safetyDetail?.dominant_threat || "无"}</strong>
+              <p>护盾惩罚 {fixed(safetyDetail?.bar_penalty, 2)}</p>
+            </div>
+          </div>
+          <p className="panel-note">{safetyDetail?.threat_evidence_summary ?? "暂无显著风险"}</p>
+        </section>
+
+        <section className="panel panel-policy">
+          <div className="panel-header">
+            <h2>值变化原因</h2>
+            <span>{dynamicTrace.length} 项</span>
+          </div>
+          <div className="signal-list">
+            {dynamicTrace.map((item) => (
+              <article className="signal-card" key={item.key}>
+                <div className="signal-head">
+                  <span className="signal-icon">{item.delta > 0 ? "↗" : item.delta < 0 ? "↘" : "→"}</span>
+                  <div>
+                    <h3>{item.label}</h3>
+                    <p>{item.trend_label} {item.delta >= 0 ? "+" : ""}{item.delta.toFixed(3)}</p>
+                  </div>
+                </div>
+                <div className="signal-meta">
+                  <span>当前 {item.current.toFixed(3)}</span>
+                  <span>之前 {item.previous.toFixed(3)}</span>
+                </div>
+                <p className="panel-note">{item.last_change_reason}</p>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section className="panel">

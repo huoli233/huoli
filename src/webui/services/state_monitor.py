@@ -4,6 +4,8 @@ from typing import Any, Dict, Optional, Tuple
 from src.chat.heart_flow.heartfc_state_exporter import export_heartfc_state, list_heartfc_chats
 from src.chat.heart_flow.speak_prediction_engine import get_speak_prediction_engine
 
+_DYNAMIC_TRACE_CACHE: Dict[str, Dict[str, float]] = {}
+
 
 def _find_active_chat(channel_id: str) -> Tuple[Optional[Any], Optional[Any]]:
     from src.chat.heart_flow.heartflow import heartflow
@@ -1389,6 +1391,89 @@ def _build_current_user_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _trace_item(
+    *,
+    key: str,
+    label: str,
+    current: float,
+    previous: float,
+    reason: str,
+) -> Dict[str, Any]:
+    delta = current - previous
+    if abs(delta) < 0.001:
+        trend = "平稳"
+    elif delta > 0:
+        trend = "上升"
+    else:
+        trend = "下降"
+    return {
+        "key": key,
+        "label": label,
+        "current": round(current, 4),
+        "previous": round(previous, 4),
+        "delta": round(delta, 4),
+        "trend_label": trend,
+        "last_change_reason": reason,
+    }
+
+
+def _build_dynamic_trace(
+    *,
+    channel_id: str,
+    domains: Dict[str, Any],
+    resource_detail: Dict[str, Any],
+    group_state_detail: Dict[str, Any],
+    safety_detail: Dict[str, Any],
+) -> tuple[list[Dict[str, Any]], Dict[str, Dict[str, Any]]]:
+    emergence = domains.get("emergence_core", {})
+    current_values = {
+        "boredom_load": _safe_float(emergence.get("boredom_load", 0.0)),
+        "loneliness_load": _safe_float(emergence.get("loneliness_load", 0.0)),
+        "environment_fatigue_load": _safe_float(emergence.get("environment_fatigue_load", 0.0)),
+        "initiative_drive": _safe_float(emergence.get("initiative_drive", 0.0)),
+        "scene_heat_score": _safe_float(group_state_detail.get("scene_heat_score", 0.0)),
+        "safety_score": _safe_float(safety_detail.get("safety_score", 0.0)),
+        "chat_percent": _safe_float(resource_detail.get("chat_percent", 0.0)),
+        "thinking_percent": _safe_float(resource_detail.get("thinking_percent", 0.0)),
+    }
+    labels = {
+        "boredom_load": "无聊负荷",
+        "loneliness_load": "孤独负荷",
+        "environment_fatigue_load": "环境疲劳",
+        "initiative_drive": "主动意愿",
+        "scene_heat_score": "群聊热度",
+        "safety_score": "安全风险",
+        "chat_percent": "聊天值",
+        "thinking_percent": "思考值",
+    }
+    reasons = {
+        "boredom_load": "静默时间、内容丰富度和心情共同影响",
+        "loneliness_load": "未回应次数与群聊活跃度共同影响",
+        "environment_fatigue_load": "话题重复度、静默时长和精力共同影响",
+        "initiative_drive": "内在时钟、情绪驱动、好奇心和疲劳共同影响",
+        "scene_heat_score": "群聊消息频率、活跃人数、互动质量和氛围共同影响",
+        "safety_score": "安全边界融合的威胁信号共同影响",
+        "chat_percent": "聊天资源账本的消耗与恢复事件共同影响",
+        "thinking_percent": "思考资源账本的消耗与恢复事件共同影响",
+    }
+    previous = _DYNAMIC_TRACE_CACHE.get(channel_id, {})
+    trace = []
+    trace_map: Dict[str, Dict[str, Any]] = {}
+    for key, value in current_values.items():
+        prev_value = previous.get(key, value)
+        item = _trace_item(
+            key=key,
+            label=labels[key],
+            current=value,
+            previous=prev_value,
+            reason=reasons[key],
+        )
+        trace.append(item)
+        trace_map[key] = item
+    _DYNAMIC_TRACE_CACHE[channel_id] = current_values
+    return trace, trace_map
+
+
 def _build_initiative_state(domains: Dict[str, Any], prediction: Dict[str, Any]) -> Dict[str, Any]:
     emergence = domains.get("emergence_core", {})
     boredom = _safe_float(emergence.get("boredom_load", 0.0))
@@ -1488,6 +1573,13 @@ def _build_presentation(
     active_signals = _build_active_signals(domains)
     resource_detail = _build_resource_detail(domains)
     initiative_state = _build_initiative_state(domains, prediction)
+    dynamic_trace, value_deltas = _build_dynamic_trace(
+        channel_id=channel_id,
+        domains=domains,
+        resource_detail=resource_detail,
+        group_state_detail=group_state_detail,
+        safety_detail=safety_detail,
+    )
     energy_ratio = _safe_float(domains.get("resource_ledger", {}).get("energy_reserve_ratio", 0.0))
     vitality_percent = _safe_float(vitality.get("percent", energy_ratio * 100), energy_ratio * 100)
 
@@ -1615,6 +1707,8 @@ def _build_presentation(
         "safety_detail": safety_detail,
         "group_state_detail": group_state_detail,
         "current_user_detail": current_user_detail,
+        "dynamic_trace": dynamic_trace,
+        "value_deltas": value_deltas,
         "memory_detail": memory_detail,
         "autonomy_detail": autonomy_detail,
         "initiative_state": initiative_state,
