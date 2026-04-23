@@ -231,6 +231,30 @@ def _label_behavior_reason(code: Any) -> str:
     return mapping.get(payload, payload or "未命名原因")
 
 
+def _label_final_action(value: Any) -> str:
+    return {
+        "reply": "已回复",
+        "upgrade": "升级处理",
+        "observe": "继续观察",
+        "rest": "转入休息",
+        "disengage": "放下会话",
+        "lurk": "退回潜水",
+        "skip": "本轮跳过",
+    }.get(str(value or "").strip().lower(), str(value or "") or "继续观察")
+
+
+def _label_execution_stage(value: Any) -> str:
+    return {
+        "decision_runtime_skip": "初裁直接跳过",
+        "voice_action_rest": "内心要求休息",
+        "voice_action_disengage": "内心要求放下会话",
+        "voice_action_lurk": "内心要求潜水观察",
+        "reply_sent": "已成功发送",
+        "reply_aborted": "进入执行后中止",
+        "final_no_action": "最终未执行动作",
+    }.get(str(value or "").strip().lower(), str(value or "") or "执行中")
+
+
 def _signal_card(
     *,
     key: str,
@@ -1193,7 +1217,9 @@ def _build_behavior_detail(
             "should_act": bool(execution_runtime.get("should_act", False)),
             "reply_sent": bool(execution_runtime.get("reply_sent", False)),
             "final_action": str(execution_runtime.get("final_action", "") or ""),
+            "final_action_label": _label_final_action(execution_runtime.get("final_action", "")),
             "execution_stage": str(execution_runtime.get("execution_stage", "") or ""),
+            "execution_stage_label": _label_execution_stage(execution_runtime.get("execution_stage", "")),
             "execution_reason": str(execution_runtime.get("execution_reason", "") or "暂无最终执行原因"),
             "confidence": round(_safe_float(execution_runtime.get("confidence", 0.0)), 2),
             "model_path": str(execution_runtime.get("model_path", "") or ""),
@@ -1441,6 +1467,106 @@ def _build_current_user_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _build_participant_impacts(
+    domains: Dict[str, Any],
+    active_signals: list[Dict[str, Any]],
+) -> list[Dict[str, Any]]:
+    relationship = domains.get("relationship_profile", {})
+    relationship_population = domains.get("relationship_population", {})
+    raw_participants = []
+    if isinstance(relationship_population, dict):
+        raw_participants = list(relationship_population.get("participants", []) or [])
+
+    impacts: list[Dict[str, Any]] = []
+    focus_user_id = str(relationship.get("user_id", "") or "")
+    focus_signal_labels = [
+        signal["label"]
+        for signal in active_signals
+        if signal.get("source_domain") in {"relationship_profile", "trauma_load", "surface_mask"}
+    ]
+
+    for participant in raw_participants:
+        if not isinstance(participant, dict):
+            continue
+        user_id = str(participant.get("user_id", "") or "")
+        if not user_id:
+            continue
+        labels: list[str] = []
+        if bool(participant.get("is_current_target", False)):
+            labels.append("当前焦点")
+        if _safe_float(participant.get("irritation_load", 0.0)) >= 15:
+            labels.append("烦躁偏高")
+        if _safe_float(participant.get("pressure_load", 0.0)) >= 15:
+            labels.append("压力偏高")
+        if _safe_float(participant.get("trauma_load", 0.0)) >= 0.8:
+            labels.append("创伤警惕")
+        if _safe_float(participant.get("chaos_load", 0.0)) >= 1.0:
+            labels.append("内心混乱")
+        if _safe_float(participant.get("mask_load", 0.0)) >= 1.0:
+            labels.append("表层伪装")
+        if bool(participant.get("is_blocked", False)):
+            labels.append("已阻断")
+        if bool(participant.get("is_protected", False)):
+            labels.append("保护中")
+        if user_id == focus_user_id:
+            labels.extend(focus_signal_labels)
+        deduped_labels = list(dict.fromkeys(label for label in labels if str(label).strip()))
+        impacts.append(
+            {
+                "user_id": user_id,
+                "display_name": str(participant.get("display_name", "当前目标") or "当前目标"),
+                "relationship_label": str(participant.get("relationship_label", "陌生人") or "陌生人"),
+                "rapport_score": round(_safe_float(participant.get("rapport_score", 0.0)), 2),
+                "trust_score": round(_safe_float(participant.get("trust_score", 0.0)), 2),
+                "irritation_load": round(_safe_float(participant.get("irritation_load", 0.0)), 2),
+                "trauma_load": round(_safe_float(participant.get("trauma_load", 0.0)), 2),
+                "pressure_load": round(_safe_float(participant.get("pressure_load", 0.0)), 2),
+                "chaos_load": round(_safe_float(participant.get("chaos_load", 0.0)), 2),
+                "mask_load": round(_safe_float(participant.get("mask_load", 0.0)), 2),
+                "interaction_count": int(_safe_float(participant.get("interaction_count", 0), 0)),
+                "current_mood_hint": str(participant.get("current_mood_hint", "") or "状态平稳"),
+                "active_signals": deduped_labels,
+                "impact_rank": round(_safe_float(participant.get("impact_rank", 0.0)), 3),
+                "is_current_target": bool(participant.get("is_current_target", False)),
+            }
+        )
+
+    if not impacts and (relationship.get("user_id") or relationship.get("display_name")):
+        impacts.append(
+            {
+                "user_id": relationship.get("user_id", ""),
+                "display_name": relationship.get("display_name", "当前目标"),
+                "relationship_label": relationship.get("relationship_label", "陌生人"),
+                "rapport_score": relationship.get("rapport_score", 0.0),
+                "trust_score": relationship.get("trust_score", 0.0),
+                "irritation_load": relationship.get("irritation_load", 0.0),
+                "trauma_load": relationship.get("trauma_load", 0.0),
+                "pressure_load": relationship.get("pressure_load", 0.0),
+                "chaos_load": relationship.get("chaos_load", 0.0),
+                "mask_load": relationship.get("mask_load", 0.0),
+                "interaction_count": relationship.get("interaction_count", 0),
+                "current_mood_hint": _derive_current_user_mood_hint(relationship),
+                "active_signals": list(dict.fromkeys(focus_signal_labels)),
+                "impact_rank": round(
+                    _safe_float(relationship.get("rapport_score", 0.0)) * 0.2
+                    + _safe_float(relationship.get("trust_score", 0.0)) * 0.15
+                    - _safe_float(relationship.get("irritation_load", 0.0)) * 0.1,
+                    3,
+                ),
+                "is_current_target": True,
+            }
+        )
+
+    impacts.sort(
+        key=lambda item: (
+            0 if item.get("is_current_target") else 1,
+            -_safe_float(item.get("impact_rank", 0.0)),
+            -int(_safe_float(item.get("interaction_count", 0), 0)),
+        )
+    )
+    return impacts[:6]
+
+
 def _trace_item(
     *,
     key: str,
@@ -1608,7 +1734,6 @@ def _build_presentation(
 
     flow_runtime = domains.get("flow_runtime", {})
     group_climate = domains.get("group_climate", {})
-    relationship = domains.get("relationship_profile", {})
     circadian_detail = _build_circadian_detail(domains)
     emotion_detail = _build_emotion_detail(domains)
     behavior_detail = _build_behavior_detail(chat, domains, dashboard_snapshot)
@@ -1717,31 +1842,7 @@ def _build_presentation(
         "warm_count": int(_safe_float(group_climate.get("warm_count", 0), 0)),
     }
 
-    participant_impacts = []
-    if relationship.get("user_id") or relationship.get("display_name"):
-        active_labels = [
-            signal["label"]
-            for signal in active_signals
-            if signal["source_domain"] in {"relationship_profile", "trauma_load", "surface_mask"}
-        ]
-        impact_rank = _safe_float(relationship.get("rapport_score", 0.0)) * 0.2 + _safe_float(
-            relationship.get("trust_score", 0.0)
-        ) * 0.15 - _safe_float(relationship.get("irritation_load", 0.0)) * 0.1
-        participant_impacts.append(
-            {
-                "user_id": relationship.get("user_id", ""),
-                "display_name": relationship.get("display_name", "当前目标"),
-                "relationship_label": relationship.get("relationship_label", "陌生人"),
-                "rapport_score": relationship.get("rapport_score", 0.0),
-                "trust_score": relationship.get("trust_score", 0.0),
-                "irritation_load": relationship.get("irritation_load", 0.0),
-                "trauma_load": relationship.get("trauma_load", 0.0),
-                "pressure_load": relationship.get("pressure_load", 0.0),
-                "interaction_count": relationship.get("interaction_count", 0),
-                "active_signals": active_labels,
-                "impact_rank": round(impact_rank, 3),
-            }
-        )
+    participant_impacts = _build_participant_impacts(domains, active_signals)
 
     timeline = _build_timeline(domains, dashboard_snapshot, active_signals)
 

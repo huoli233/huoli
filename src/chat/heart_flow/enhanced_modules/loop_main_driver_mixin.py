@@ -1224,52 +1224,6 @@ class LoopMainDriverMixin:
         )
         _is_gateway_force = legacy_gate == "force_reply"
         _strong_force_reply = bool(_is_admin_forced or _force_direct_ping or _is_gateway_force)
-        if _voice_action == "rest":
-            if _strong_force_reply:
-                logger.info(f"{self.log_prefix} 💭 强制回复场景，忽略内心'rest'指令，继续执行决策")
-            else:
-                logger.info(f"{self.log_prefix} LLM决定歇一会: '{_thinking_text[:40]}'")
-                self._enter_dynamic_rest(
-                    cause=f"内心想休息({_thinking_text[:30]})",
-                    trigger="内心想休息",
-                    blackout=False,
-                )
-                self._mark_decision_winner("voice_action")
-                self._emit_flow_decision_summary("voice_action", "rest")
-                return
-        if _voice_action == "disengage":
-            if _strong_force_reply:
-                logger.info(f"{self.log_prefix} 💭 强制回复场景，忽略内心'disengage'指令，继续执行决策")
-            else:
-                logger.info(f"{self.log_prefix} LLM决定放下手机: '{_thinking_text[:40]}'")
-                self._enter_dynamic_rest(
-                    cause=f"放下手机({_thinking_text[:30]})",
-                    trigger="放下手机",
-                    blackout=True,
-                )
-                self._mark_decision_winner("voice_action")
-                self._emit_flow_decision_summary("voice_action", "disengage")
-                return
-        if _voice_action == "lurk":
-            if _strong_force_reply:
-                logger.info(f"{self.log_prefix} 💭 强制回复场景，忽略内心'lurk'指令，继续执行决策")
-            else:
-                logger.info(f"{self.log_prefix} LLM决定潜水: '{_thinking_text[:40]}'")
-                self._align_states_with_inner_voice(voice_conclusion, source="voice_action")
-                self._last_flow_blocker = "模型选择潜水，退回窥屏"
-                self._mark_decision_winner("voice_action")
-                self._emit_flow_decision_summary("voice_action", "lurk")
-                return
-
-        _algo_wants_skip = _llm_call_level == 0
-        _algo_wants_reply = _llm_call_level == 1
-        _algo_wants_upgrade = _llm_call_level == 2
-        # R1修复：试探性发牢骚——算法判定跳过但试探条件满足，且模型未明确抗拒
-        if _tentative and _algo_wants_skip and not _is_voice_reluctant:
-            _algo_wants_skip = False
-            _algo_wants_reply = True
-            logger.info(f"{self.log_prefix} 试探性发牢骚触发: 沉默够久+害羞指数低，轻量试探")
-
         _decision_runtime = self._build_decision_runtime(
             now=now,
             source="reactive",
@@ -1285,6 +1239,88 @@ class LoopMainDriverMixin:
             admin_forced=bool(_is_admin_forced),
             gateway_force=bool(_is_gateway_force),
         )
+        if _voice_action == "rest":
+            if _strong_force_reply:
+                logger.info(f"{self.log_prefix} 💭 强制回复场景，忽略内心'rest'指令，继续执行决策")
+            else:
+                logger.info(f"{self.log_prefix} LLM决定歇一会: '{_thinking_text[:40]}'")
+                self._enter_dynamic_rest(
+                    cause=f"内心想休息({_thinking_text[:30]})",
+                    trigger="内心想休息",
+                    blackout=False,
+                )
+                self._store_execution_runtime(
+                    initial_verdict=_decision_runtime,
+                    should_act=False,
+                    reply_sent=False,
+                    final_action="rest",
+                    execution_stage="voice_action_rest",
+                    execution_reason=str(_thinking_text or "内心判断当前更适合休息"),
+                    source="voice_action",
+                    blocker="内心独白要求休息",
+                    extra_votes={"voice_action": "rest"},
+                    extra_blocking=["当前回合转入休息姿态"],
+                )
+                self._mark_decision_winner("voice_action")
+                self._emit_flow_decision_summary("voice_action", "rest")
+                return
+        if _voice_action == "disengage":
+            if _strong_force_reply:
+                logger.info(f"{self.log_prefix} 💭 强制回复场景，忽略内心'disengage'指令，继续执行决策")
+            else:
+                logger.info(f"{self.log_prefix} LLM决定放下手机: '{_thinking_text[:40]}'")
+                self._enter_dynamic_rest(
+                    cause=f"放下手机({_thinking_text[:30]})",
+                    trigger="放下手机",
+                    blackout=True,
+                )
+                self._store_execution_runtime(
+                    initial_verdict=_decision_runtime,
+                    should_act=False,
+                    reply_sent=False,
+                    final_action="disengage",
+                    execution_stage="voice_action_disengage",
+                    execution_reason=str(_thinking_text or "内心判断当前应该放下手机"),
+                    source="voice_action",
+                    blocker="内心独白要求脱离当前会话",
+                    extra_votes={"voice_action": "disengage"},
+                    extra_blocking=["当前回合转入黑屏休息"],
+                )
+                self._mark_decision_winner("voice_action")
+                self._emit_flow_decision_summary("voice_action", "disengage")
+                return
+        if _voice_action == "lurk":
+            if _strong_force_reply:
+                logger.info(f"{self.log_prefix} 💭 强制回复场景，忽略内心'lurk'指令，继续执行决策")
+            else:
+                logger.info(f"{self.log_prefix} LLM决定潜水: '{_thinking_text[:40]}'")
+                self._align_states_with_inner_voice(voice_conclusion, source="voice_action")
+                self._last_flow_blocker = "模型选择潜水，退回窥屏"
+                self._store_execution_runtime(
+                    initial_verdict=_decision_runtime,
+                    should_act=False,
+                    reply_sent=False,
+                    final_action="lurk",
+                    execution_stage="voice_action_lurk",
+                    execution_reason=str(_thinking_text or "内心判断当前只窥屏不介入"),
+                    source="voice_action",
+                    blocker="内心独白要求潜水观察",
+                    extra_votes={"voice_action": "lurk"},
+                    extra_blocking=["当前回合只保留窥屏观察"],
+                )
+                self._mark_decision_winner("voice_action")
+                self._emit_flow_decision_summary("voice_action", "lurk")
+                return
+
+        _algo_wants_skip = _llm_call_level == 0
+        _algo_wants_reply = _llm_call_level == 1
+        _algo_wants_upgrade = _llm_call_level == 2
+        # R1修复：试探性发牢骚——算法判定跳过但试探条件满足，且模型未明确抗拒
+        if _tentative and _algo_wants_skip and not _is_voice_reluctant:
+            _algo_wants_skip = False
+            _algo_wants_reply = True
+            logger.info(f"{self.log_prefix} 试探性发牢骚触发: 沉默够久+害羞指数低，轻量试探")
+
         _final_reply = _decision_runtime.next_action == "reply"
         _final_upgrade = _decision_runtime.next_action == "upgrade"
         _final_skip = not (_final_reply or _final_upgrade)

@@ -1,7 +1,7 @@
 import enum
 import time
 from dataclasses import asdict, is_dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.chat.heart_flow.heartfc_thresholds import get_heartfc_thresholds
 from src.common.logger import get_logger
@@ -760,6 +760,85 @@ def _extract_context_awareness(
     }
 
 
+def _dominant_emotion_label(state: Any) -> str:
+    try:
+        emotion_name, intensity = state.get_dominant_emotion()
+    except Exception:
+        return "状态平稳"
+    emotion_key = str(emotion_name or "neutral").strip().lower()
+    intensity_value = abs(_safe_float(intensity, 0.0))
+    if intensity_value < 0.15:
+        return "状态平稳"
+    return {
+        "joy": "明显愉快",
+        "anticipation": "期待偏高",
+        "surprise": "注意被勾起",
+        "sadness": "情绪低落",
+        "disgust": "排斥增强",
+        "anger": "烦躁升高",
+        "fear": "警惕紧张",
+        "trust": "信任放松",
+        "pride": "自我肯定",
+        "guilt": "内疚波动",
+        "shame": "羞耻防御",
+        "envy": "比较心起伏",
+        "gratitude": "感激放松",
+    }.get(emotion_key, "情绪波动")
+
+
+def _relationship_entry_from_state(
+    user_id: str,
+    state: Any,
+    *,
+    target_user_id: str = "",
+) -> Dict[str, Any]:
+    rapport_score = _safe_float(getattr(state, "affection", 0.0))
+    trust_score = _safe_float(getattr(state, "trust_value", getattr(state, "trust_score", 0.0)))
+    irritation_load = _safe_float(getattr(state, "annoyance", 0.0))
+    trauma_load = _safe_float(getattr(state, "trauma_score", 0.0))
+    pressure_load = _safe_float(getattr(state, "psychological_pressure", 0.0))
+    chaos_load = _safe_float(getattr(state, "inner_chaos", 0.0))
+    mask_load = _safe_float(getattr(state, "surface_mask", 0.0))
+    interaction_count = _safe_int(getattr(state, "interaction_count", 0))
+    last_interaction = _safe_float(getattr(state, "last_interaction", 0.0))
+    last_seen_age = 999999.0
+    if last_interaction > 0:
+        last_seen_age = max(0.0, time.time() - last_interaction)
+    recency_score = _clamp(1.0 - (last_seen_age / 3600.0), 0.0, 1.0)
+    emotional_pressure = (
+        abs(rapport_score) * 0.16
+        + abs(trust_score) * 0.14
+        + irritation_load * 0.20
+        + pressure_load * 0.18
+        + trauma_load * 4.0
+        + chaos_load * 0.35
+        + mask_load * 0.20
+        + interaction_count * 0.08
+        + recency_score * 8.0
+    )
+    if str(user_id) == str(target_user_id):
+        emotional_pressure += 120.0
+    return {
+        "user_id": str(user_id or ""),
+        "display_name": str(getattr(state, "nickname", "") or user_id or "用户"),
+        "relationship_label": str(getattr(state, "relationship", "陌生人") or "陌生人"),
+        "rapport_score": round(rapport_score, 2),
+        "trust_score": round(trust_score, 2),
+        "irritation_load": round(irritation_load, 2),
+        "pressure_load": round(pressure_load, 2),
+        "trauma_load": round(trauma_load, 2),
+        "chaos_load": round(chaos_load, 2),
+        "mask_load": round(mask_load, 2),
+        "interaction_count": interaction_count,
+        "current_mood_hint": _dominant_emotion_label(state),
+        "last_interaction_age_sec": round(last_seen_age, 1),
+        "is_current_target": bool(str(user_id) == str(target_user_id)),
+        "is_blocked": bool(getattr(state, "is_blocked", False)),
+        "is_protected": bool(getattr(state, "is_protected", False)),
+        "impact_rank": round(emotional_pressure, 3),
+    }
+
+
 def _extract_relationship_profile(chat: Any, world_state: Dict[str, Any]) -> Dict[str, Any]:
     world_target = world_state.get("target", {}) if isinstance(world_state, dict) else {}
     runtime = _extract_runtime_snapshot(chat)
@@ -836,12 +915,48 @@ def _extract_relationship_profile(chat: Any, world_state: Dict[str, Any]) -> Dic
     }
 
 
+def _extract_relationship_population(chat: Any, target_user_id: str) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "total_users": 0,
+        "relationship_distribution": {},
+        "participants": [],
+    }
+    if chat is None or not getattr(chat, "stream_id", ""):
+        return payload
+    try:
+        from src.modules.modcore.dynamic_persona.emotion_tracker import get_emotion_tracker
+
+        tracker = get_emotion_tracker(str(getattr(chat, "stream_id", "") or ""))
+        stats = tracker.get_statistics()
+        all_states = tracker.get_all_user_states()
+        payload["total_users"] = _safe_int(stats.get("total", 0))
+        payload["relationship_distribution"] = dict(stats.get("relationship_distribution", {}) or {})
+        participants: List[Dict[str, Any]] = []
+        for user_id, state in list(all_states.items()):
+            entry = _relationship_entry_from_state(str(user_id or ""), state, target_user_id=target_user_id)
+            if not entry.get("user_id"):
+                continue
+            participants.append(entry)
+        participants.sort(
+            key=lambda item: (
+                0 if item.get("is_current_target") else 1,
+                -_safe_float(item.get("impact_rank", 0.0)),
+                _safe_float(item.get("last_interaction_age_sec", 999999.0)),
+            )
+        )
+        payload["participants"] = participants[:6]
+    except Exception as exc:
+        logger.debug(f"关系群体导出失败: {exc}")
+    return payload
+
+
 def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
     world_state = _extract_world_snapshot(chat)
     runtime = _extract_runtime_snapshot(chat)
     energy = _extract_energy_domain(channel_id)
     emergence = _extract_emergence_state(channel_id)
     relation = _extract_relationship_profile(chat, world_state)
+    relationship_population = _extract_relationship_population(chat, relation.get("user_id", ""))
     memory_stack = _extract_memory_stack(channel_id)
     autonomy_runtime = _extract_autonomy_runtime(chat, channel_id)
     attention_runtime = _extract_attention_runtime(channel_id, runtime)
@@ -979,6 +1094,7 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
         "safety_runtime": safety_runtime,
         "context_awareness": context_awareness,
         "relationship_profile": relation,
+        "relationship_population": relationship_population,
         "emergence_core": emergence,
         "circadian_rhythm": circadian,
         "flow_runtime": {

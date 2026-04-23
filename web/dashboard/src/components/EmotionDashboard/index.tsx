@@ -46,9 +46,13 @@ type ParticipantImpact = {
   irritation_load: number;
   trauma_load: number;
   pressure_load: number;
+  chaos_load: number;
+  mask_load: number;
   interaction_count: number;
+  current_mood_hint: string;
   active_signals: string[];
   impact_rank: number;
+  is_current_target?: boolean;
 };
 
 type SceneContext = {
@@ -191,7 +195,9 @@ type ExecutionRuntimeDetail = {
   should_act: boolean;
   reply_sent: boolean;
   final_action: string;
+  final_action_label?: string;
   execution_stage: string;
+  execution_stage_label?: string;
   execution_reason: string;
   confidence: number;
   model_path: string;
@@ -486,6 +492,18 @@ function humanSceneHeat(value: string | undefined): string {
   }[value ?? ""] ?? (value || "-");
 }
 
+function humanExecutionStage(value: string | undefined): string {
+  return {
+    decision_runtime_skip: "初裁直接跳过",
+    voice_action_rest: "内心要求休息",
+    voice_action_disengage: "内心要求放下会话",
+    voice_action_lurk: "内心要求潜水观察",
+    reply_sent: "已成功发送",
+    reply_aborted: "进入执行后中止",
+    final_no_action: "最终未执行动作",
+  }[value ?? ""] ?? (value || "-");
+}
+
 function countText(value: number | undefined | null, unit: string): string {
   return `${Math.round(Number(value ?? 0))}${unit}`;
 }
@@ -548,6 +566,9 @@ export function EmotionDashboard() {
 
   const sceneContext = packet?.presentation?.scene_context;
   const participantImpacts = packet?.presentation?.participant_impacts ?? [];
+  const secondaryParticipantImpacts = useMemo(() => {
+    return participantImpacts.filter((item) => !item.is_current_target);
+  }, [participantImpacts]);
   const timeline = packet?.presentation?.timeline ?? [];
   const prediction = packet?.prediction;
   const resourceDetail = packet?.presentation?.resource_detail;
@@ -924,11 +945,11 @@ export function EmotionDashboard() {
             </div>
             <div className="detail-row">
               <span>最终执行</span>
-              <strong>{behaviorDetail?.execution_runtime.final_action || "-"}</strong>
+              <strong>{behaviorDetail?.execution_runtime.final_action_label || behaviorDetail?.execution_runtime.final_action || "-"}</strong>
             </div>
             <div className="detail-row">
               <span>执行阶段</span>
-              <strong>{behaviorDetail?.execution_runtime.execution_stage || "-"}</strong>
+              <strong>{behaviorDetail?.execution_runtime.execution_stage_label || behaviorDetail?.execution_runtime.execution_stage || "-"}</strong>
             </div>
             <div className="detail-row">
               <span>行为模式</span>
@@ -1295,6 +1316,70 @@ export function EmotionDashboard() {
 
         <section className="panel">
           <div className="panel-header">
+            <h2>多用户影响</h2>
+            <span>{secondaryParticipantImpacts.length} 人</span>
+          </div>
+          {secondaryParticipantImpacts.length === 0 ? (
+            <div className="empty-state">当前还没有其它高影响用户进入关系面板，系统暂时只锁定当前对象。</div>
+          ) : (
+            <div className="signal-list">
+              {secondaryParticipantImpacts.map((impact) => (
+                <article className="participant-card" key={impact.user_id}>
+                  <header>
+                    <div>
+                      <h3>{impact.display_name}</h3>
+                      <p>{impact.relationship_label} · {impact.current_mood_hint}</p>
+                    </div>
+                    <strong>{impact.interaction_count}</strong>
+                  </header>
+                  <div className="detail-grid compact">
+                    <div className="detail-row">
+                      <span>好感</span>
+                      <strong>{impact.rapport_score.toFixed(1)}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>信任</span>
+                      <strong>{impact.trust_score.toFixed(1)}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>烦躁</span>
+                      <strong>{impact.irritation_load.toFixed(1)}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>压力</span>
+                      <strong>{impact.pressure_load.toFixed(1)}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>创伤</span>
+                      <strong>{impact.trauma_load.toFixed(2)}</strong>
+                    </div>
+                    <div className="detail-row">
+                      <span>混乱 / 伪装</span>
+                      <strong>{impact.chaos_load.toFixed(1)} / {impact.mask_load.toFixed(1)}</strong>
+                    </div>
+                  </div>
+                  <div className="topic-wrap">
+                    {(impact.active_signals ?? []).length > 0 ? (
+                      impact.active_signals.map((label) => (
+                        <span className="topic-chip is-secondary" key={`${impact.user_id}-${label}`}>
+                          {label}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="empty-state inline">当前没有额外激活信号。</span>
+                    )}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+          <p className="panel-note">
+            这里只展示除当前对象之外、对本轮关系判断影响更大的用户，便于区分“单人状态”和“群聊里其他人的影响”。
+          </p>
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
             <h2>安全护盾</h2>
             <span>{safetyDetail?.safety_level ?? "安全"}</span>
           </div>
@@ -1355,7 +1440,7 @@ export function EmotionDashboard() {
                 语气：{prediction?.tone ?? "正常回应"} · 长度：{prediction?.reply_length ?? "-"} · ETA：{prediction?.eta_label ?? "-"} · 模型路径：{modelPathLabel(prediction?.model_path)}
               </p>
               <p className="prediction-meta">
-                统一裁定：{prediction?.shared_verdict_id || "暂无"} · 是否回复：{yesNo(prediction?.should_reply)} · 执行阶段：{prediction?.execution_stage || "-"} · 复杂度：{prediction?.complexity_label ?? "普通"}
+                统一裁定：{prediction?.shared_verdict_id || "暂无"} · 是否回复：{yesNo(prediction?.should_reply)} · 执行阶段：{humanExecutionStage(prediction?.execution_stage)} · 复杂度：{prediction?.complexity_label ?? "普通"}
               </p>
               <p className="prediction-reason">{prediction?.decision_reason ?? "等待后端预测理由。"}</p>
             </div>
