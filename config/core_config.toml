@@ -374,3 +374,164 @@ heartfc_legacy_gate_harass_factor = 55.0
 heartfc_legacy_gate_distrust_penalty = 16.0
 # legacy gate：深度不信任惩罚
 heartfc_legacy_gate_deep_distrust_penalty = 10.0
+
+# ---------------------------------------------------------------------------
+#  四层配置画像映射
+# ---------------------------------------------------------------------------
+[profile_mapping.base_parameters.defaults]
+enabled = true
+fallback_enabled = true
+config_version = 1
+
+[profile_mapping.base_parameters.runtime_defaults]
+cooldown_seconds = 60.0
+timeout_seconds = 30.0
+probability_floor = 0.0
+probability_ceiling = 1.0
+
+[profile_mapping.base_parameters.model_defaults]
+small_model_tasks = ["chat_short", "style_polish", "jargon_explain"]
+large_model_tasks = ["planner", "knowledge_reasoning", "memory_summary"]
+disable_thinking_for = ["local_qwen", "qwen"]
+skip_when_disabled = true
+
+[profile_mapping.semantic_domains.model_routing]
+complexity_threshold = 0.65
+high_risk_threshold = 0.75
+skip_low_value_threshold = 0.18
+default_model_path = "small"
+large_model_path = "large"
+
+[profile_mapping.semantic_domains.schedule]
+backend_event_cooldown_seconds = 60.0
+proactive_reply_cooldown_seconds = 60.0
+memory_governance_interval_seconds = 300.0
+expression_learning_interval_seconds = 600.0
+skill_patrol_interval_seconds = 600.0
+
+[profile_mapping.semantic_domains.memory]
+short_term_limit = 64
+long_term_batch_size = 12
+temporary_ttl_seconds = 1800.0
+memoir_timeout_seconds = 180.0
+overload_ratio_threshold = 0.85
+reactivation_score_threshold = 0.55
+
+[profile_mapping.semantic_domains.context]
+max_context_messages = 24
+pollution_threshold = 0.72
+repeat_topic_threshold = 3
+compression_trigger_chars = 2400
+compressed_context_target_chars = 1200
+
+[profile_mapping.semantic_domains.vision]
+image_recognition_enabled = true
+gif_convert_enabled = true
+gif_frame_limit = 6
+vlm_temperature = 0.2
+vlm_timeout_seconds = 30.0
+record_only_confidence_threshold = 0.35
+degrade_to_placeholder = true
+
+[profile_mapping.semantic_domains.skill]
+trigger_threshold = 0.55
+cooldown_seconds = 60.0
+failure_backoff_seconds = 300.0
+priority_boost_from_learning = 0.08
+execution_truth_required = true
+
+[profile_mapping.semantic_domains.adaptive_learning]
+expression_check_interval_seconds = 600.0
+jargon_check_interval_seconds = 900.0
+behavior_check_interval_seconds = 1200.0
+auto_check_batch_size = 32
+priority_feedback_enabled = true
+
+[profile_mapping.semantic_domains.chat_emotion]
+annoyance_repeat_threshold = 3
+emotion_refresh_interval_seconds = 60.0
+social_delta_scale = 0.02
+reply_eagerness_floor = 0.2
+
+[profile_mapping.scenario_profiles.deep_sleep.model_routing]
+skip_non_urgent = true
+disable_thinking = true
+model_path = "small_or_skip"
+
+[profile_mapping.scenario_profiles.deep_sleep.schedule]
+proactive_reply_cooldown_seconds = 900.0
+skill_patrol_interval_seconds = 1800.0
+
+[profile_mapping.scenario_profiles.image_high_risk.vision]
+record_only = true
+reply_suppressed = true
+vlm_temperature = 0.1
+vlm_timeout_seconds = 20.0
+
+[profile_mapping.scenario_profiles.memory_overload.memory]
+short_term_limit = 32
+overload_ratio_threshold = 0.75
+reactivation_score_threshold = 0.7
+
+[profile_mapping.scenario_profiles.busy_chat.context]
+max_context_messages = 16
+compression_trigger_chars = 1600
+repeat_topic_threshold = 2
+
+[profile_mapping.scenario_profiles.skill_failure.skill]
+cooldown_seconds = 300.0
+failure_backoff_seconds = 900.0
+priority_boost_from_learning = 0.0
+
+[profile_mapping.scenario_profiles.learning_cooldown.adaptive_learning]
+expression_check_interval_seconds = 1800.0
+jargon_check_interval_seconds = 1800.0
+behavior_check_interval_seconds = 2400.0
+
+[profile_mapping.module_views.model_routing]
+base_refs = ["runtime_defaults", "model_defaults"]
+semantic_domains = ["model_routing"]
+legacy_blocks = ["runtime_tuning"]
+profile_name = "model_routing_view"
+
+[profile_mapping.module_views.schedule]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["schedule"]
+legacy_blocks = ["proactive_schedule", "silence_detection", "runtime_tuning"]
+profile_name = "schedule_view"
+
+[profile_mapping.module_views.memory]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["memory"]
+legacy_blocks = ["message_processor", "runtime_tuning"]
+profile_name = "memory_view"
+
+[profile_mapping.module_views.context]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["context"]
+legacy_blocks = ["message_processor", "frequency_control"]
+profile_name = "context_view"
+
+[profile_mapping.module_views.vision]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["vision"]
+legacy_blocks = ["message_processor", "runtime_tuning"]
+profile_name = "vision_view"
+
+[profile_mapping.module_views.skill]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["skill"]
+legacy_blocks = ["module_switches", "runtime_tuning"]
+profile_name = "skill_view"
+
+[profile_mapping.module_views.adaptive_learning]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["adaptive_learning"]
+legacy_blocks = ["proactive_decider", "frequency_control", "runtime_tuning"]
+profile_name = "adaptive_learning_view"
+
+[profile_mapping.module_views.chat_emotion]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["chat_emotion"]
+legacy_blocks = ["emotion_stream", "personality_sliders", "proactive_decider"]
+profile_name = "chat_emotion_view"

@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 from src.common.logger import get_logger
 from src.common.singleton import _get_class_lock
+from src.config.config_profile import ConfigProfileResolver, ModuleConfigView
 
 logger = get_logger("核心设置")
 _SCRIPT_DIR = Path(__file__).resolve().parent
@@ -41,8 +42,19 @@ class CoreSettingsHub:
             "personality_sliders",
             "heartfc_thresholds",
             "runtime_tuning",
+            "profile_mapping",
         }
     )
+    _DEFAULT_PROFILE_FALLBACKS = {
+        "model_routing": ("runtime_tuning",),
+        "schedule": ("proactive_schedule", "silence_detection", "runtime_tuning"),
+        "memory": ("message_processor", "runtime_tuning"),
+        "context": ("message_processor", "frequency_control"),
+        "vision": ("message_processor", "runtime_tuning"),
+        "skill": ("module_switches", "runtime_tuning"),
+        "adaptive_learning": ("proactive_decider", "frequency_control", "runtime_tuning"),
+        "chat_emotion": ("emotion_stream", "personality_sliders", "proactive_decider"),
+    }
 
     @classmethod
     def boot(
@@ -223,6 +235,21 @@ class CoreSettingsHub:
     def runtime_tuning_block(self) -> Dict[str, Any]:
         """运行时调优参数"""
         return self.fetch_block("runtime_tuning")
+
+    def profile_mapping_block(self) -> Dict[str, Any]:
+        """四层配置画像映射。"""
+        return self.fetch_block("profile_mapping")
+
+    def resolve_module_view(self, module_name: str, scenario: Optional[str] = None) -> ModuleConfigView:
+        """解析指定模块在当前场景下的配置视图。"""
+        legacy_blocks = {}
+        for block_name in self._DEFAULT_PROFILE_FALLBACKS.get(module_name, ()):
+            block = self.fetch_block(block_name)
+            if block:
+                legacy_blocks[block_name] = block
+        profile = self.profile_mapping_block()
+        resolver = ConfigProfileResolver(profile_mapping=profile, legacy_blocks=legacy_blocks)
+        return resolver.resolve(module_name, scenario=scenario)
 
     def assemble_decision_config(self) -> Dict[str, Any]:
         """组装心流决策的完整配置包"""
