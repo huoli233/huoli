@@ -1,10 +1,130 @@
+import copy
 import time
 from typing import Any, Dict, Optional, Tuple
 
 from src.chat.heart_flow.heartfc_state_exporter import export_heartfc_state, list_heartfc_chats
 from src.chat.heart_flow.speak_prediction_engine import get_speak_prediction_engine
+from src.webui.runtime_config import webui_module_view
 
 _DYNAMIC_TRACE_CACHE: Dict[str, Dict[str, float]] = {}
+_STATE_MONITOR_DEFAULTS: Dict[str, Dict[str, float]] = {
+    "emotion": {
+        "boredom_show": 0.35,
+        "boredom_high": 0.70,
+        "loneliness_show": 0.35,
+        "loneliness_high": 0.70,
+        "fatigue_show": 0.35,
+        "fatigue_high": 0.75,
+        "withdrawal_show": 0.25,
+        "withdrawal_high": 0.55,
+        "initiative_high": 0.70,
+        "initiative_low": 0.25,
+        "curiosity_show": 0.65,
+        "mood_low": 0.25,
+        "social_desire_high": 0.75,
+        "social_desire_low": 0.25,
+        "mood_happy": 0.72,
+        "mood_positive": 0.55,
+        "mood_calm": 0.40,
+        "mood_low_label": 0.25,
+    },
+    "relationship": {
+        "irritation_show": 15.0,
+        "irritation_high": 45.0,
+        "pressure_show": 15.0,
+        "pressure_high": 45.0,
+        "rapport_high": 30.0,
+        "rapport_low": -10.0,
+        "trust_high": 70.0,
+        "trust_low": 25.0,
+        "overstep_show": 5.0,
+        "intimacy_show": 5.0,
+        "compliance_show": 5.0,
+        "compliance_high": 25.0,
+        "conditioning_show": 5.0,
+        "conditioning_high": 25.0,
+        "resistance_delta_show": 10.0,
+        "resistance_low": 90.0,
+        "authority_show": 5.0,
+        "authority_high": 25.0,
+        "current_user_irritation_high": 60.0,
+        "current_user_pressure_high": 45.0,
+        "current_user_trauma_high": 1.2,
+        "current_user_rapport_warm": 35.0,
+        "current_user_trust_warm": 35.0,
+        "current_user_rapport_steady": 15.0,
+        "current_user_trust_steady": 20.0,
+    },
+    "trauma": {
+        "trauma_show": 0.8,
+        "trauma_critical": 2.5,
+        "chaos_show": 1.0,
+        "chaos_critical": 4.5,
+        "flashback_show": 0.15,
+        "flashback_high": 0.45,
+        "cognitive_drag_show": 0.15,
+        "cognitive_drag_high": 0.45,
+        "mask_show": 1.0,
+        "mask_high": 4.0,
+    },
+    "scene": {
+        "scene_heat_show": 0.55,
+        "scene_heat_high": 0.78,
+    },
+    "pending": {
+        "pending_seconds_medium": 120.0,
+    },
+    "memory": {
+        "overload_show": 0.8,
+        "overload_critical": 0.92,
+        "memoir_timeout_show": 3.0,
+        "memoir_timeout_high": 5.0,
+    },
+    "autonomy": {
+        "intention_show": 0.70,
+        "intention_high": 0.90,
+        "pending_proactive_medium": 3.0,
+    },
+    "attention": {
+        "peek_desire_show": 0.65,
+        "process_low": 0.12,
+        "visibility_threshold": 0.55,
+        "empty_peeks_show": 3.0,
+        "empty_peeks_high": 5.0,
+    },
+    "safety": {
+        "safety_show": 0.45,
+        "safety_critical": 0.75,
+    },
+    "circadian": {
+        "drowsiness_show": 60.0,
+        "drowsiness_high": 80.0,
+        "sleep_debt_show": 0.45,
+        "sleep_debt_high": 0.75,
+        "sleep_reserve_low": 25.0,
+    },
+    "prediction": {
+        "probability_high": 0.70,
+        "probability_medium": 0.45,
+    },
+}
+
+
+def _overlay_dicts(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
+    merged = copy.deepcopy(base)
+    for key, value in patch.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = _overlay_dicts(merged[key], value)
+        else:
+            merged[key] = copy.deepcopy(value)
+    return merged
+
+
+def _state_monitor_thresholds() -> Dict[str, Dict[str, float]]:
+    override = webui_module_view("webui_state_monitor_thresholds")
+    if not isinstance(override, dict):
+        override = {}
+    return _overlay_dicts(_STATE_MONITOR_DEFAULTS, override)
 
 
 def _find_active_chat(channel_id: str) -> Tuple[Optional[Any], Optional[Any]]:
@@ -347,17 +467,28 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
     attention_runtime = domains.get("attention_runtime", {})
     safety_runtime = domains.get("safety_runtime", {})
     execution_runtime = domains.get("execution_runtime", {})
+    thresholds = _state_monitor_thresholds()
+    emotion_cfg = thresholds["emotion"]
+    relationship_cfg = thresholds["relationship"]
+    trauma_cfg = thresholds["trauma"]
+    scene_cfg = thresholds["scene"]
+    pending_cfg = thresholds["pending"]
+    memory_cfg = thresholds["memory"]
+    autonomy_cfg = thresholds["autonomy"]
+    attention_cfg = thresholds["attention"]
+    safety_cfg = thresholds["safety"]
+    circadian_cfg = thresholds["circadian"]
 
     signals: list[Dict[str, Any]] = []
 
     boredom = _safe_float(emergence.get("boredom_load", 0.0))
-    if boredom >= 0.35:
+    if boredom >= emotion_cfg["boredom_show"]:
         signals.append(
             _signal_card(
                 key="boredom_load",
                 label="无聊负荷",
                 family="emotion",
-                severity="medium" if boredom < 0.7 else "high",
+                severity="medium" if boredom < emotion_cfg["boredom_high"] else "high",
                 value=boredom,
                 display_value=_format_percent(boredom),
                 trend="rising",
@@ -367,13 +498,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     loneliness = _safe_float(emergence.get("loneliness_load", 0.0))
-    if loneliness >= 0.35:
+    if loneliness >= emotion_cfg["loneliness_show"]:
         signals.append(
             _signal_card(
                 key="loneliness_load",
                 label="孤独负荷",
                 family="emotion",
-                severity="medium" if loneliness < 0.7 else "high",
+                severity="medium" if loneliness < emotion_cfg["loneliness_high"] else "high",
                 value=loneliness,
                 display_value=_format_percent(loneliness),
                 trend="rising",
@@ -383,13 +514,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     fatigue = _safe_float(emergence.get("environment_fatigue_load", 0.0))
-    if fatigue >= 0.35:
+    if fatigue >= emotion_cfg["fatigue_show"]:
         signals.append(
             _signal_card(
                 key="environment_fatigue_load",
                 label="环境疲劳",
                 family="emotion",
-                severity="medium" if fatigue < 0.75 else "high",
+                severity="medium" if fatigue < emotion_cfg["fatigue_high"] else "high",
                 value=fatigue,
                 display_value=_format_percent(fatigue),
                 trend="rising",
@@ -399,13 +530,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     withdrawal = _safe_float(emergence.get("withdrawal_drive", 0.0))
-    if withdrawal >= 0.25:
+    if withdrawal >= emotion_cfg["withdrawal_show"]:
         signals.append(
             _signal_card(
                 key="withdrawal_drive",
                 label="撤离倾向",
                 family="emotion",
-                severity="medium" if withdrawal < 0.55 else "high",
+                severity="medium" if withdrawal < emotion_cfg["withdrawal_high"] else "high",
                 value=withdrawal,
                 display_value=_format_percent(withdrawal),
                 trend="rising",
@@ -415,29 +546,29 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     initiative = _safe_float(emergence.get("initiative_drive", 0.0))
-    if initiative >= 0.70 or initiative <= 0.25:
+    if initiative >= emotion_cfg["initiative_high"] or initiative <= emotion_cfg["initiative_low"]:
         signals.append(
             _signal_card(
                 key="initiative_drive",
                 label="主动意愿",
                 family="drive",
-                severity="high" if initiative >= 0.70 else "low",
+                severity="high" if initiative >= emotion_cfg["initiative_high"] else "low",
                 value=initiative,
                 display_value=_format_percent(initiative),
-                trend="rising" if initiative >= 0.70 else "falling",
+                trend="rising" if initiative >= emotion_cfg["initiative_high"] else "falling",
                 source_domain="emergence_core",
-                icon="🗣️" if initiative >= 0.70 else "🤐",
+                icon="🗣️" if initiative >= emotion_cfg["initiative_high"] else "🤐",
             )
         )
 
     irritation = _safe_float(relationship.get("irritation_load", 0.0))
-    if irritation >= 15:
+    if irritation >= relationship_cfg["irritation_show"]:
         signals.append(
             _signal_card(
                 key="irritation_load",
                 label="烦躁负荷",
                 family="relationship",
-                severity="medium" if irritation < 45 else "high",
+                severity="medium" if irritation < relationship_cfg["irritation_high"] else "high",
                 value=irritation,
                 display_value=f"{irritation:.1f}",
                 trend="rising",
@@ -447,13 +578,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     pressure = _safe_float(relationship.get("pressure_load", 0.0))
-    if pressure >= 15:
+    if pressure >= relationship_cfg["pressure_show"]:
         signals.append(
             _signal_card(
                 key="pressure_load",
                 label="心理压力",
                 family="relationship",
-                severity="medium" if pressure < 45 else "high",
+                severity="medium" if pressure < relationship_cfg["pressure_high"] else "high",
                 value=pressure,
                 display_value=f"{pressure:.1f}",
                 trend="rising",
@@ -463,13 +594,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     trauma_load = _safe_float(trauma.get("trauma_load", 0.0))
-    if trauma_load >= 0.8:
+    if trauma_load >= trauma_cfg["trauma_show"]:
         signals.append(
             _signal_card(
                 key="trauma_load",
                 label="创伤负荷",
                 family="trauma",
-                severity="high" if trauma_load < 2.5 else "critical",
+                severity="high" if trauma_load < trauma_cfg["trauma_critical"] else "critical",
                 value=trauma_load,
                 display_value=f"{trauma_load:.2f}",
                 trend="persistent",
@@ -479,13 +610,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     chaos_load = _safe_float(trauma.get("chaos_load", 0.0))
-    if chaos_load >= 1.0:
+    if chaos_load >= trauma_cfg["chaos_show"]:
         signals.append(
             _signal_card(
                 key="chaos_load",
                 label="内心混乱",
                 family="trauma",
-                severity="medium" if chaos_load < 4.5 else "critical",
+                severity="medium" if chaos_load < trauma_cfg["chaos_critical"] else "critical",
                 value=chaos_load,
                 display_value=f"{chaos_load:.2f}",
                 trend="rising",
@@ -495,13 +626,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     flashback = _safe_float(trauma.get("flashback_probability", 0.0))
-    if flashback >= 0.15:
+    if flashback >= trauma_cfg["flashback_show"]:
         signals.append(
             _signal_card(
                 key="flashback_probability",
                 label="闪回风险",
                 family="trauma",
-                severity="medium" if flashback < 0.45 else "high",
+                severity="medium" if flashback < trauma_cfg["flashback_high"] else "high",
                 value=flashback,
                 display_value=_format_percent(flashback),
                 trend="volatile",
@@ -511,13 +642,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     cognitive_drag = _safe_float(trauma.get("cognitive_drag", 0.0))
-    if cognitive_drag >= 0.15:
+    if cognitive_drag >= trauma_cfg["cognitive_drag_show"]:
         signals.append(
             _signal_card(
                 key="cognitive_drag",
                 label="认知拖拽",
                 family="trauma",
-                severity="medium" if cognitive_drag < 0.45 else "high",
+                severity="medium" if cognitive_drag < trauma_cfg["cognitive_drag_high"] else "high",
                 value=cognitive_drag,
                 display_value=_format_percent(cognitive_drag),
                 trend="persistent",
@@ -527,13 +658,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     mask_load = _safe_float(surface_mask.get("mask_load", 0.0))
-    if mask_load >= 1.0:
+    if mask_load >= trauma_cfg["mask_show"]:
         signals.append(
             _signal_card(
                 key="mask_load",
                 label="伪装负荷",
                 family="mask",
-                severity="medium" if mask_load < 4 else "high",
+                severity="medium" if mask_load < trauma_cfg["mask_high"] else "high",
                 value=mask_load,
                 display_value=f"{mask_load:.2f}",
                 trend="persistent",
@@ -543,13 +674,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     compliance = _safe_float(relationship.get("compliance_index", 0.0))
-    if compliance >= 5:
+    if compliance >= relationship_cfg["compliance_show"]:
         signals.append(
             _signal_card(
                 key="compliance_index",
                 label="顺从指数",
                 family="conditioning",
-                severity="low" if compliance < 25 else "medium",
+                severity="low" if compliance < relationship_cfg["compliance_high"] else "medium",
                 value=compliance,
                 display_value=f"{compliance:.1f}",
                 trend="rising",
@@ -559,13 +690,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     conditioning = _safe_float(relationship.get("conditioning_progress", 0.0))
-    if conditioning >= 5:
+    if conditioning >= relationship_cfg["conditioning_show"]:
         signals.append(
             _signal_card(
                 key="conditioning_progress",
                 label="调教进度",
                 family="conditioning",
-                severity="low" if conditioning < 25 else "medium",
+                severity="low" if conditioning < relationship_cfg["conditioning_high"] else "medium",
                 value=conditioning,
                 display_value=f"{conditioning:.1f}%",
                 trend="rising",
@@ -591,13 +722,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     authority = _safe_float(relationship.get("authority_imprint", 0.0))
-    if authority >= 5:
+    if authority >= relationship_cfg["authority_show"]:
         signals.append(
             _signal_card(
                 key="authority_imprint",
                 label="权威印记",
                 family="conditioning",
-                severity="low" if authority < 25 else "medium",
+                severity="low" if authority < relationship_cfg["authority_high"] else "medium",
                 value=authority,
                 display_value=f"{authority:.1f}",
                 trend="rising",
@@ -607,7 +738,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     intimacy = _safe_float(relationship.get("intimacy_depth", 0.0))
-    if intimacy >= 5:
+    if intimacy >= relationship_cfg["intimacy_show"]:
         signals.append(
             _signal_card(
                 key="intimacy_depth",
@@ -623,39 +754,39 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     rapport = _safe_float(relationship.get("rapport_score", 0.0))
-    if rapport >= 30 or rapport <= -10:
+    if rapport >= relationship_cfg["rapport_high"] or rapport <= relationship_cfg["rapport_low"]:
         signals.append(
             _signal_card(
                 key="rapport_score",
                 label="好感关系",
                 family="relationship",
-                severity="info" if rapport >= 30 else "medium",
+                severity="info" if rapport >= relationship_cfg["rapport_high"] else "medium",
                 value=rapport,
                 display_value=f"{rapport:.1f}",
-                trend="warm" if rapport >= 30 else "cold",
+                trend="warm" if rapport >= relationship_cfg["rapport_high"] else "cold",
                 source_domain="relationship_profile",
-                icon="🤝" if rapport >= 30 else "🧊",
+                icon="🤝" if rapport >= relationship_cfg["rapport_high"] else "🧊",
             )
         )
 
     trust = _safe_float(relationship.get("trust_score", 0.0))
-    if trust >= 70 or (0 < trust <= 25):
+    if trust >= relationship_cfg["trust_high"] or (0 < trust <= relationship_cfg["trust_low"]):
         signals.append(
             _signal_card(
                 key="trust_score",
                 label="信任关系",
                 family="relationship",
-                severity="info" if trust >= 70 else "high",
+                severity="info" if trust >= relationship_cfg["trust_high"] else "high",
                 value=trust,
                 display_value=f"{trust:.1f}",
-                trend="stable" if trust >= 70 else "fragile",
+                trend="stable" if trust >= relationship_cfg["trust_high"] else "fragile",
                 source_domain="relationship_profile",
-                icon="🟢" if trust >= 70 else "🟠",
+                icon="🟢" if trust >= relationship_cfg["trust_high"] else "🟠",
             )
         )
 
     overstep = _safe_float(relationship.get("boundary_overstep_index", 0.0))
-    if overstep >= 5:
+    if overstep >= relationship_cfg["overstep_show"]:
         signals.append(
             _signal_card(
                 key="boundary_overstep_index",
@@ -686,13 +817,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     scene_heat_score = _safe_float(group_climate.get("scene_heat_score", 0.0))
-    if scene_heat_score >= 0.55:
+    if scene_heat_score >= scene_cfg["scene_heat_show"]:
         signals.append(
             _signal_card(
                 key="scene_heat_score",
                 label="群聊升温",
                 family="scene",
-                severity="medium" if scene_heat_score < 0.78 else "high",
+                severity="medium" if scene_heat_score < scene_cfg["scene_heat_high"] else "high",
                 value=scene_heat_score,
                 display_value=_format_percent(scene_heat_score),
                 trend="rising",
@@ -708,7 +839,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
                 key="pending_seconds",
                 label="等待时长",
                 family="runtime",
-                severity="info" if pending_seconds < 120 else "medium",
+                severity="info" if pending_seconds < pending_cfg["pending_seconds_medium"] else "medium",
                 value=pending_seconds,
                 display_value=f"{round(pending_seconds)}秒",
                 trend="rising",
@@ -750,13 +881,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
 
     memory_overload = memory_stack.get("overload", {}) if isinstance(memory_stack.get("overload"), dict) else {}
     load_ratio = _safe_float(memory_overload.get("load_ratio", 0.0))
-    if bool(memory_overload.get("emergency_needed", False)) or load_ratio >= 0.8:
+    if bool(memory_overload.get("emergency_needed", False)) or load_ratio >= memory_cfg["overload_show"]:
         signals.append(
             _signal_card(
                 key="memory_overload",
                 label="记忆过载",
                 family="runtime",
-                severity="high" if load_ratio < 0.92 else "critical",
+                severity="high" if load_ratio < memory_cfg["overload_critical"] else "critical",
                 value=load_ratio,
                 display_value=_format_percent(load_ratio),
                 trend="rising",
@@ -766,13 +897,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     memoir_timeouts = _safe_float(memory_stack.get("memoir_consecutive_timeouts", 0.0))
-    if memoir_timeouts >= 3:
+    if memoir_timeouts >= memory_cfg["memoir_timeout_show"]:
         signals.append(
             _signal_card(
                 key="memoir_consecutive_timeouts",
                 label="连续未回应",
                 family="runtime",
-                severity="medium" if memoir_timeouts < 5 else "high",
+                severity="medium" if memoir_timeouts < memory_cfg["memoir_timeout_high"] else "high",
                 value=memoir_timeouts,
                 display_value=f"{int(memoir_timeouts)}次",
                 trend="rising",
@@ -782,13 +913,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     intention_drive = _safe_float(autonomy.get("intention_drive", 0.0))
-    if intention_drive >= 0.7:
+    if intention_drive >= autonomy_cfg["intention_show"]:
         signals.append(
             _signal_card(
                 key="intention_drive",
                 label="主动意图堆积",
                 family="drive",
-                severity="medium" if intention_drive < 0.9 else "high",
+                severity="medium" if intention_drive < autonomy_cfg["intention_high"] else "high",
                 value=intention_drive,
                 display_value=_format_percent(intention_drive),
                 trend="rising",
@@ -804,7 +935,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
                 key="pending_proactive_events",
                 label="主动事件待结算",
                 family="runtime",
-                severity="info" if pending_proactive < 3 else "medium",
+                severity="info" if pending_proactive < autonomy_cfg["pending_proactive_medium"] else "medium",
                 value=pending_proactive,
                 display_value=f"{int(pending_proactive)}条",
                 trend="holding",
@@ -830,7 +961,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     peek_desire = _safe_float(attention_runtime.get("peek_desire", 0.0))
-    if peek_desire >= 0.65:
+    if peek_desire >= attention_cfg["peek_desire_show"]:
         signals.append(
             _signal_card(
                 key="peek_desire_high",
@@ -847,7 +978,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
 
     process_ratio = _safe_float(attention_runtime.get("process_ratio", 0.0))
     visibility_threshold = _safe_float(attention_runtime.get("visibility_threshold", 0.0))
-    if process_ratio <= 0.12 and visibility_threshold >= 0.55:
+    if process_ratio <= attention_cfg["process_low"] and visibility_threshold >= attention_cfg["visibility_threshold"]:
         signals.append(
             _signal_card(
                 key="attention_suppressed",
@@ -863,13 +994,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     empty_peeks = _safe_float(attention_runtime.get("consecutive_peeks_without_action", 0.0))
-    if empty_peeks >= 3:
+    if empty_peeks >= attention_cfg["empty_peeks_show"]:
         signals.append(
             _signal_card(
                 key="consecutive_peeks_without_action",
                 label="连续窥屏未行动",
                 family="runtime",
-                severity="info" if empty_peeks < 5 else "medium",
+                severity="info" if empty_peeks < attention_cfg["empty_peeks_high"] else "medium",
                 value=empty_peeks,
                 display_value=f"{int(empty_peeks)}次",
                 trend="holding",
@@ -879,13 +1010,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     safety_score = _safe_float(safety_runtime.get("score", 0.0))
-    if bool(safety_runtime.get("blocked", False)) or safety_score >= 0.45:
+    if bool(safety_runtime.get("blocked", False)) or safety_score >= safety_cfg["safety_show"]:
         signals.append(
             _signal_card(
                 key="safety_threat",
                 label="安全护盾收紧",
                 family="runtime",
-                severity="high" if safety_score < 0.75 else "critical",
+                severity="high" if safety_score < safety_cfg["safety_critical"] else "critical",
                 value=safety_score,
                 display_value=str(safety_runtime.get("dominant_threat", "") or "已触发风险"),
                 trend="holding",
@@ -952,13 +1083,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     drowsiness = _safe_float(circadian.get("drowsiness_value", 0.0))
-    if drowsiness >= 60:
+    if drowsiness >= circadian_cfg["drowsiness_show"]:
         signals.append(
             _signal_card(
                 key="drowsiness_value",
                 label="困意过高",
                 family="circadian",
-                severity="medium" if drowsiness < 80 else "high",
+                severity="medium" if drowsiness < circadian_cfg["drowsiness_high"] else "high",
                 value=drowsiness,
                 display_value=f"{drowsiness:.0f}",
                 trend="rising",
@@ -968,13 +1099,13 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     sleep_debt = _safe_float(circadian.get("sleep_debt", 0.0))
-    if sleep_debt >= 0.45:
+    if sleep_debt >= circadian_cfg["sleep_debt_show"]:
         signals.append(
             _signal_card(
                 key="sleep_debt",
                 label="睡眠债偏高",
                 family="circadian",
-                severity="medium" if sleep_debt < 0.75 else "high",
+                severity="medium" if sleep_debt < circadian_cfg["sleep_debt_high"] else "high",
                 value=sleep_debt,
                 display_value=_format_percent(sleep_debt),
                 trend="rising",
@@ -984,7 +1115,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     sleep_reserve = _safe_float(circadian.get("sleep_reserve", 100.0), 100.0)
-    if sleep_reserve <= 25:
+    if sleep_reserve <= circadian_cfg["sleep_reserve_low"]:
         signals.append(
             _signal_card(
                 key="sleep_reserve",
@@ -1015,7 +1146,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     mood_bias = _safe_float(emergence.get("mood_bias", 0.5), 0.5)
-    if mood_bias <= 0.25:
+    if mood_bias <= emotion_cfg["mood_low"]:
         signals.append(
             _signal_card(
                 key="mood_bias",
@@ -1031,7 +1162,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     curiosity = _safe_float(emergence.get("curiosity_drive", 0.0))
-    if curiosity >= 0.65:
+    if curiosity >= emotion_cfg["curiosity_show"]:
         signals.append(
             _signal_card(
                 key="curiosity_drive",
@@ -1047,18 +1178,18 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         )
 
     social_desire = _safe_float(emergence.get("social_desire", 0.0))
-    if social_desire >= 0.75 or social_desire <= 0.25:
+    if social_desire >= emotion_cfg["social_desire_high"] or social_desire <= emotion_cfg["social_desire_low"]:
         signals.append(
             _signal_card(
                 key="social_desire",
                 label="社交欲",
                 family="emotion",
-                severity="info" if social_desire >= 0.75 else "low",
+                severity="info" if social_desire >= emotion_cfg["social_desire_high"] else "low",
                 value=social_desire,
                 display_value=_format_percent(social_desire),
-                trend="rising" if social_desire >= 0.75 else "falling",
+                trend="rising" if social_desire >= emotion_cfg["social_desire_high"] else "falling",
                 source_domain="emergence_core",
-                icon="💬" if social_desire >= 0.75 else "🤫",
+                icon="💬" if social_desire >= emotion_cfg["social_desire_high"] else "🤫",
             )
         )
 
@@ -1176,14 +1307,15 @@ def _build_circadian_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
 
 def _build_emotion_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     emergence = domains.get("emergence_core", {})
+    emotion_cfg = _state_monitor_thresholds()["emotion"]
     mood = _safe_float(emergence.get("mood_bias", 0.5), 0.5)
-    if mood >= 0.72:
+    if mood >= emotion_cfg["mood_happy"]:
         mood_label = "愉快"
-    elif mood >= 0.55:
+    elif mood >= emotion_cfg["mood_positive"]:
         mood_label = "平稳偏好"
-    elif mood >= 0.40:
+    elif mood >= emotion_cfg["mood_calm"]:
         mood_label = "平静"
-    elif mood >= 0.25:
+    elif mood >= emotion_cfg["mood_low_label"]:
         mood_label = "低落"
     else:
         mood_label = "明显低落"
@@ -1395,18 +1527,28 @@ def _build_context_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _derive_current_user_mood_hint(relationship: Dict[str, Any]) -> str:
+    relationship_cfg = _state_monitor_thresholds()["relationship"]
     irritation = _safe_float(relationship.get("irritation_load", 0.0))
     pressure = _safe_float(relationship.get("pressure_load", 0.0))
     trauma = _safe_float(relationship.get("trauma_load", 0.0))
     rapport = _safe_float(relationship.get("rapport_score", 0.0))
     trust = _safe_float(relationship.get("trust_score", 0.0))
-    if irritation >= 60:
+    if irritation >= relationship_cfg["current_user_irritation_high"]:
         return "明显不耐烦"
-    if pressure >= 45 or trauma >= 1.2:
+    if (
+        pressure >= relationship_cfg["current_user_pressure_high"]
+        or trauma >= relationship_cfg["current_user_trauma_high"]
+    ):
         return "防御绷紧"
-    if rapport >= 35 and trust >= 35:
+    if (
+        rapport >= relationship_cfg["current_user_rapport_warm"]
+        and trust >= relationship_cfg["current_user_trust_warm"]
+    ):
         return "放松熟络"
-    if rapport >= 15 or trust >= 20:
+    if (
+        rapport >= relationship_cfg["current_user_rapport_steady"]
+        or trust >= relationship_cfg["current_user_trust_steady"]
+    ):
         return "平稳接触"
     return "谨慎观察"
 
@@ -1497,6 +1639,9 @@ def _build_participant_impacts(
     domains: Dict[str, Any],
     active_signals: list[Dict[str, Any]],
 ) -> list[Dict[str, Any]]:
+    thresholds = _state_monitor_thresholds()
+    relationship_cfg = thresholds["relationship"]
+    trauma_cfg = thresholds["trauma"]
     relationship = domains.get("relationship_profile", {})
     relationship_population = domains.get("relationship_population", {})
     raw_participants = []
@@ -1530,15 +1675,15 @@ def _build_participant_impacts(
             labels.append("近5分钟发言")
         if recent_targeted_interaction:
             labels.append("近期目标互动")
-        if _safe_float(participant.get("irritation_load", 0.0)) >= 15:
+        if _safe_float(participant.get("irritation_load", 0.0)) >= relationship_cfg["irritation_show"]:
             labels.append("烦躁偏高")
-        if _safe_float(participant.get("pressure_load", 0.0)) >= 15:
+        if _safe_float(participant.get("pressure_load", 0.0)) >= relationship_cfg["pressure_show"]:
             labels.append("压力偏高")
-        if _safe_float(participant.get("trauma_load", 0.0)) >= 0.8:
+        if _safe_float(participant.get("trauma_load", 0.0)) >= trauma_cfg["trauma_show"]:
             labels.append("创伤警惕")
-        if _safe_float(participant.get("chaos_load", 0.0)) >= 1.0:
+        if _safe_float(participant.get("chaos_load", 0.0)) >= trauma_cfg["chaos_show"]:
             labels.append("内心混乱")
-        if _safe_float(participant.get("mask_load", 0.0)) >= 1.0:
+        if _safe_float(participant.get("mask_load", 0.0)) >= trauma_cfg["mask_show"]:
             labels.append("表层伪装")
         if bool(participant.get("is_blocked", False)):
             labels.append("已阻断")
@@ -1700,14 +1845,15 @@ def _build_dynamic_trace(
 
 def _build_initiative_state(domains: Dict[str, Any], prediction: Dict[str, Any]) -> Dict[str, Any]:
     emergence = domains.get("emergence_core", {})
+    emotion_cfg = _state_monitor_thresholds()["emotion"]
     boredom = _safe_float(emergence.get("boredom_load", 0.0))
     loneliness = _safe_float(emergence.get("loneliness_load", 0.0))
     fatigue = _safe_float(emergence.get("environment_fatigue_load", 0.0))
     initiative = _safe_float(emergence.get("initiative_drive", 0.0))
     withdrawal = _safe_float(emergence.get("withdrawal_drive", 0.0))
-    if initiative >= 0.7:
+    if initiative >= emotion_cfg["initiative_high"]:
         label = "主动想聊"
-    elif initiative <= 0.25:
+    elif initiative <= emotion_cfg["initiative_low"]:
         label = "主动性偏低"
     else:
         label = "自然观望"
@@ -1773,6 +1919,7 @@ def _build_presentation(
     dashboard_snapshot: Dict[str, Any],
     prediction: Dict[str, Any],
 ) -> Dict[str, Any]:
+    prediction_cfg = _state_monitor_thresholds()["prediction"]
     dashboard = dashboard_snapshot.get("snapshot", {}) if dashboard_snapshot.get("available") else {}
     vitality = dashboard.get("energy_reserve", {}) if isinstance(dashboard, dict) else {}
     mood = dashboard.get("inner_mood", {}) if isinstance(dashboard, dict) else {}
@@ -1866,7 +2013,7 @@ def _build_presentation(
         "prediction_readiness": {
             "label": "发言预测",
             "icon": "🔮",
-            "state": "高" if _safe_float(prediction.get("speak_probability", 0.0)) >= 0.7 else "中" if _safe_float(prediction.get("speak_probability", 0.0)) >= 0.45 else "低",
+            "state": "高" if _safe_float(prediction.get("speak_probability", 0.0)) >= prediction_cfg["probability_high"] else "中" if _safe_float(prediction.get("speak_probability", 0.0)) >= prediction_cfg["probability_medium"] else "低",
             "value": _safe_float(prediction.get("speak_probability", 0.0)),
             "display_value": f"{int(_safe_float(prediction.get('probability_percent', 0), 0.0))}%",
             "color": "#8d99ae",

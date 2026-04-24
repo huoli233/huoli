@@ -1237,6 +1237,139 @@ shuffle_types = ["typo", "wrong_word", "tone_shift", "incomplete"]
 "是" = "不是"
 "喜欢" = "讨厌"
 
+[profile_mapping.semantic_domains.webui_rate_limit]
+cleanup_interval_seconds = 300
+request_record_ttl_seconds = 600
+auth_failure_max_attempts = 5
+auth_failure_window_seconds = 300
+auth_failure_block_seconds = 600
+auth_request_limit = 10
+auth_request_window_seconds = 60
+auth_retry_after_seconds = 60
+api_request_limit = 100
+api_request_window_seconds = 60
+api_retry_after_seconds = 60
+auth_failure_warning_margin = 2
+
+[profile_mapping.semantic_domains.webui_websocket]
+auth_max_connections_per_user = 5
+auth_receive_timeout_seconds = 300.0
+logs_buffer_max_size = 1000
+logs_close_timeout_seconds = 5.0
+logs_initial_history_count = 50
+logs_receive_timeout_seconds = 60.0
+logs_default_history_count = 100
+logs_max_history_count = 200
+plugin_progress_receive_timeout_seconds = 60.0
+state_monitor_default_interval_seconds = 1.0
+state_monitor_min_interval_seconds = 0.5
+state_monitor_max_interval_seconds = 10.0
+
+[profile_mapping.semantic_domains.webui_git_mirror]
+max_retries = 3
+request_timeout_seconds = 30
+git_version_timeout_seconds = 5
+clone_timeout_seconds = 300
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.emotion]
+boredom_show = 0.35
+boredom_high = 0.70
+loneliness_show = 0.35
+loneliness_high = 0.70
+fatigue_show = 0.35
+fatigue_high = 0.75
+withdrawal_show = 0.25
+withdrawal_high = 0.55
+initiative_high = 0.70
+initiative_low = 0.25
+curiosity_show = 0.65
+mood_low = 0.25
+social_desire_high = 0.75
+social_desire_low = 0.25
+mood_happy = 0.72
+mood_positive = 0.55
+mood_calm = 0.40
+mood_low_label = 0.25
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.relationship]
+irritation_show = 15.0
+irritation_high = 45.0
+pressure_show = 15.0
+pressure_high = 45.0
+rapport_high = 30.0
+rapport_low = -10.0
+trust_high = 70.0
+trust_low = 25.0
+overstep_show = 5.0
+intimacy_show = 5.0
+compliance_show = 5.0
+compliance_high = 25.0
+conditioning_show = 5.0
+conditioning_high = 25.0
+resistance_delta_show = 10.0
+resistance_low = 90.0
+authority_show = 5.0
+authority_high = 25.0
+current_user_irritation_high = 60.0
+current_user_pressure_high = 45.0
+current_user_trauma_high = 1.2
+current_user_rapport_warm = 35.0
+current_user_trust_warm = 35.0
+current_user_rapport_steady = 15.0
+current_user_trust_steady = 20.0
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.trauma]
+trauma_show = 0.8
+trauma_critical = 2.5
+chaos_show = 1.0
+chaos_critical = 4.5
+flashback_show = 0.15
+flashback_high = 0.45
+cognitive_drag_show = 0.15
+cognitive_drag_high = 0.45
+mask_show = 1.0
+mask_high = 4.0
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.scene]
+scene_heat_show = 0.55
+scene_heat_high = 0.78
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.pending]
+pending_seconds_medium = 120.0
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.memory]
+overload_show = 0.8
+overload_critical = 0.92
+memoir_timeout_show = 3.0
+memoir_timeout_high = 5.0
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.autonomy]
+intention_show = 0.70
+intention_high = 0.90
+pending_proactive_medium = 3.0
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.attention]
+peek_desire_show = 0.65
+process_low = 0.12
+visibility_threshold = 0.55
+empty_peeks_show = 3.0
+empty_peeks_high = 5.0
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.safety]
+safety_show = 0.45
+safety_critical = 0.75
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.circadian]
+drowsiness_show = 60.0
+drowsiness_high = 80.0
+sleep_debt_show = 0.45
+sleep_debt_high = 0.75
+sleep_reserve_low = 25.0
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.prediction]
+probability_high = 0.70
+probability_medium = 0.45
+
 [profile_mapping.semantic_domains.heartflow_runtime]
 focus_channels = []
 initiative_interval_sec = 300.0
@@ -1490,3 +1623,23 @@ profile_name = "recall_correction_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["recall_shuffle"]
 profile_name = "recall_shuffle_view"
+
+[profile_mapping.module_views.webui_rate_limit]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["webui_rate_limit"]
+profile_name = "webui_rate_limit_view"
+
+[profile_mapping.module_views.webui_websocket]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["webui_websocket"]
+profile_name = "webui_websocket_view"
+
+[profile_mapping.module_views.webui_git_mirror]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["webui_git_mirror"]
+profile_name = "webui_git_mirror_view"
+
+[profile_mapping.module_views.webui_state_monitor_thresholds]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["webui_state_monitor_thresholds"]
+profile_name = "webui_state_monitor_thresholds_view"

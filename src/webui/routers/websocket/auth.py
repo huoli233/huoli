@@ -15,6 +15,7 @@ from pydantic import BaseModel
 from src.common.logger import get_logger
 from src.webui.core.security import get_token_manager
 from src.webui.core.auth import verify_auth_token_from_cookie_or_header
+from src.webui.runtime_config import webui_module_view
 
 logger = get_logger("WS认证")
 router = APIRouter(tags=["websocket"])
@@ -39,12 +40,20 @@ class WebSocketMessage(BaseModel):
 class ConnectionManager:
     """WebSocket 连接管理器"""
 
-    MAX_CONNECTIONS_PER_USER = 5
-
     def __init__(self):
         self._active_connections: dict[str, WebSocket] = {}
         self._connection_times: dict[str, float] = {}
         self._user_sessions: dict[str, str] = {}
+        self._load_config()
+
+    def _load_config(self) -> None:
+        config = webui_module_view("webui_websocket")
+        self._max_connections_per_user = int(
+            config.get("auth_max_connections_per_user", 5)
+        )
+        self._auth_receive_timeout_seconds = float(
+            config.get("auth_receive_timeout_seconds", 300.0)
+        )
 
     async def connect(
         self, websocket: WebSocket, session_id: str, user_id: str = "anonymous"
@@ -53,10 +62,10 @@ class ConnectionManager:
         user_conn_count = sum(
             1 for uid in self._user_sessions.values() if uid == user_id
         )
-        if user_conn_count >= self.MAX_CONNECTIONS_PER_USER:
+        if user_conn_count >= self._max_connections_per_user:
             logger.warning(
                 f"用户 {user_id} 连接数达到上限 {
-                    self.MAX_CONNECTIONS_PER_USER}，拒绝新连接"
+                    self._max_connections_per_user}，拒绝新连接"
             )
             await websocket.close(code=4008, reason="连接数达到上限")
             return False
@@ -188,7 +197,8 @@ async def websocket_auth_endpoint(
         while True:
             try:
                 data = await asyncio.wait_for(
-                    websocket.receive_json(), timeout=300.0
+                    websocket.receive_json(),
+                    timeout=connection_manager._auth_receive_timeout_seconds,
                 )
                 message_type = data.get("type", "unknown")
                 if message_type == "ping":

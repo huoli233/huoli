@@ -15,9 +15,14 @@ from fastapi import (
 )
 from src.common.logger import get_logger
 from src.webui.core.auth import verify_auth_token_from_cookie_or_header
+from src.webui.runtime_config import webui_module_view
 
 logger = get_logger("WS日志")
 router = APIRouter(tags=["websocket"])
+
+
+def _websocket_config() -> dict:
+    return webui_module_view("webui_websocket")
 
 
 def require_auth(
@@ -54,13 +59,19 @@ class LogEntry:
 class LogBuffer:
     """日志缓冲区"""
 
-    def __init__(self, max_size: int = 1000):
+    def __init__(self, max_size: Optional[int] = None):
+        config = _websocket_config()
+        if max_size is None:
+            max_size = int(config.get("logs_buffer_max_size", 1000))
         self._buffer: deque[LogEntry] = deque(maxlen=max_size)
         self._lock = threading.Lock()
         self._subscribers: list[WebSocket] = []
         self._subscriber_lock = threading.Lock()
         self._closing = False
         self._pending_tasks: set[asyncio.Task] = set()
+        self._close_timeout_seconds = float(
+            config.get("logs_close_timeout_seconds", 5.0)
+        )
 
     def add_log(self, level: str, message: str, source: str = "system"):
         """添加日志条目"""
@@ -76,8 +87,11 @@ class LogBuffer:
         except RuntimeError:
             pass
 
-    async def close(self, timeout: float = 5.0) -> None:
+    async def close(self, timeout: Optional[float] = None) -> None:
         """优雅关闭：停止接收新日志，等待所有待完成的广播任务"""
+        timeout = (
+            self._close_timeout_seconds if timeout is None else timeout
+        )
         self._closing = True
         if not self._pending_tasks:
             return
@@ -286,11 +300,20 @@ async def websocket_logs_endpoint(
             session_id, {"sources": [s.strip() for s in sources.split(",")]}
         )
     try:
-        await log_connection_manager.send_history(session_id, 50)
+        config = _websocket_config()
+        initial_history_count = int(config.get("logs_initial_history_count", 50))
+        receive_timeout_seconds = float(
+            config.get("logs_receive_timeout_seconds", 60.0)
+        )
+        default_history_count = int(
+            config.get("logs_default_history_count", 100)
+        )
+        max_history_count = int(config.get("logs_max_history_count", 200))
+        await log_connection_manager.send_history(session_id, initial_history_count)
         while True:
             try:
                 data = await asyncio.wait_for(
-                    websocket.receive_json(), timeout=60.0
+                    websocket.receive_json(), timeout=receive_timeout_seconds
                 )
                 message_type = data.get("type", "unknown")
                 if message_type == "ping":
@@ -311,7 +334,12 @@ async def websocket_logs_endpoint(
                         }
                     )
                 elif message_type == "get_history":
-                    count = data.get("data", {}).get("count", 100)
+                    count = int(
+                        data.get("data", {}).get(
+                            "count", default_history_count
+                        )
+                    )
+                    count = max(1, min(max_history_count, count))
                     await log_connection_manager.send_history(
                         session_id, count
                     )

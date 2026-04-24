@@ -6,9 +6,14 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from src.common.logger import get_logger
 from src.webui.services.state_monitor import build_channel_monitor_state, build_monitor_overview
+from src.webui.runtime_config import webui_module_view
 
 logger = get_logger("WS状态监控")
 router = APIRouter(tags=["websocket"])
+
+
+def _websocket_config() -> dict:
+    return webui_module_view("webui_websocket")
 
 
 @router.websocket("/ws/state-monitor")
@@ -16,11 +21,17 @@ async def websocket_state_monitor_endpoint(
     websocket: WebSocket,
     token: Optional[str] = Query(None),
     channel_id: Optional[str] = Query(default=None),
-    interval: float = Query(default=1.0, ge=0.5, le=10.0),
+    interval: float = Query(default=1.0, ge=0.1, le=30.0),
 ):
     session_id = f"state_{int(time.time() * 1000)}_{id(websocket)}"
     await websocket.accept()
     logger.info(f"状态监控 WebSocket 已建立: {session_id}, 会话={channel_id or '全部群聊/私聊'}")
+    config = _websocket_config()
+    min_interval = float(config.get("state_monitor_min_interval_seconds", 0.5))
+    max_interval = float(config.get("state_monitor_max_interval_seconds", 10.0))
+    default_interval = float(config.get("state_monitor_default_interval_seconds", 1.0))
+    interval = default_interval if interval is None else interval
+    interval = max(min_interval, min(max_interval, interval))
 
     async def send_snapshot(target_channel: Optional[str] = None) -> None:
         chosen_channel = target_channel if target_channel is not None else channel_id

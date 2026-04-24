@@ -14,8 +14,13 @@ from pathlib import Path
 from datetime import datetime
 from urllib.parse import urlparse
 from src.common.logger import get_logger
+from src.webui.runtime_config import webui_module_view
 
 logger = get_logger("WebUI镜像")
+
+
+def _git_mirror_runtime_config() -> dict:
+    return webui_module_view("webui_git_mirror")
 
 # 禁止访问的私有/保留 IP 段
 _BLOCKED_NETWORKS = [
@@ -365,8 +370,8 @@ class GitMirrorService:
 
     def __init__(
         self,
-        max_retries: int = 3,
-        timeout: int = 30,
+        max_retries: Optional[int] = None,
+        timeout: Optional[int] = None,
         config: Optional[GitMirrorConfig] = None,
     ):
         """
@@ -377,8 +382,23 @@ class GitMirrorService:
             timeout: 请求超时时间（秒）
             config: 镜像源配置管理器（可选，默认创建新实例）
         """
-        self.max_retries = max_retries
-        self.timeout = timeout
+        runtime = _git_mirror_runtime_config()
+        self.max_retries = (
+            int(runtime.get("max_retries", 3))
+            if max_retries is None
+            else max_retries
+        )
+        self.timeout = (
+            int(runtime.get("request_timeout_seconds", 30))
+            if timeout is None
+            else timeout
+        )
+        self._git_version_timeout_seconds = int(
+            runtime.get("git_version_timeout_seconds", 5)
+        )
+        self._clone_timeout_seconds = int(
+            runtime.get("clone_timeout_seconds", 300)
+        )
         self.config = config or GitMirrorConfig()
         logger.info(
             f"Git镜像源服务初始化完成，已加载 {len(self.config.get_enabled_mirrors())} 个启用的镜像源"
@@ -404,6 +424,10 @@ class GitMirrorService:
         import shutil
 
         try:
+            runtime = _git_mirror_runtime_config()
+            git_version_timeout_seconds = int(
+                runtime.get("git_version_timeout_seconds", 5)
+            )
             # 查找 git 可执行文件路径
             git_path = shutil.which("git")
 
@@ -416,7 +440,10 @@ class GitMirrorService:
 
             # 获取 Git 版本
             result = subprocess.run(
-                ["git", "--version"], capture_output=True, text=True, timeout=5
+                ["git", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=git_version_timeout_seconds,
             )
 
             if result.returncode == 0:
@@ -832,7 +859,7 @@ class GitMirrorService:
                         clone_cmd,
                         capture_output=True,
                         text=True,
-                        timeout=300,  # 5分钟超时
+                        timeout=self._clone_timeout_seconds,
                     )
 
                 process = await loop.run_in_executor(None, run_git_clone)
@@ -854,7 +881,7 @@ class GitMirrorService:
                     )
 
             except subprocess.TimeoutExpired:
-                last_error = "克隆超时（超过 5 分钟）"
+                last_error = f"克隆超时（超过 {self._clone_timeout_seconds} 秒）"
                 logger.warning(
                     f"克隆超时 (尝试 {attempt + 1}/{self.max_retries})"
                 )

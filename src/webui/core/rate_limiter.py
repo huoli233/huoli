@@ -9,6 +9,7 @@ from collections import defaultdict
 from typing import Dict, Tuple, Optional
 from fastapi import Request, HTTPException
 from src.common.logger import get_logger
+from src.webui.runtime_config import webui_module_view
 
 logger = get_logger("WebUI限流")
 
@@ -20,9 +21,6 @@ class RateLimiter:
     使用滑动窗口算法实现，后台定期清理过期记录防止内存泄漏
     """
 
-    # 清理间隔（秒）
-    _CLEANUP_INTERVAL = 300
-
     def __init__(self):
         # 存储格式: {key: [(timestamp, count), ...]}
         self._requests: Dict[str, list] = defaultdict(list)
@@ -32,6 +30,7 @@ class RateLimiter:
         self._lock = threading.Lock()
         # 后台清理线程控制标志
         self._running = True
+        self._load_config()
         self._cleanup_thread = threading.Thread(
             target=self._cleanup_loop,
             daemon=True,
@@ -39,10 +38,45 @@ class RateLimiter:
         )
         self._cleanup_thread.start()
 
+    def _load_config(self) -> None:
+        config = webui_module_view("webui_rate_limit")
+        self._cleanup_interval_seconds = int(
+            config.get("cleanup_interval_seconds", 300)
+        )
+        self._request_record_ttl_seconds = int(
+            config.get("request_record_ttl_seconds", 600)
+        )
+        self._auth_failure_max_attempts = int(
+            config.get("auth_failure_max_attempts", 5)
+        )
+        self._auth_failure_window_seconds = int(
+            config.get("auth_failure_window_seconds", 300)
+        )
+        self._auth_failure_block_seconds = int(
+            config.get("auth_failure_block_seconds", 600)
+        )
+        self._auth_request_limit = int(config.get("auth_request_limit", 10))
+        self._auth_request_window_seconds = int(
+            config.get("auth_request_window_seconds", 60)
+        )
+        self._auth_retry_after_seconds = int(
+            config.get("auth_retry_after_seconds", 60)
+        )
+        self._api_request_limit = int(config.get("api_request_limit", 100))
+        self._api_request_window_seconds = int(
+            config.get("api_request_window_seconds", 60)
+        )
+        self._api_retry_after_seconds = int(
+            config.get("api_retry_after_seconds", 60)
+        )
+        self._auth_failure_warning_margin = int(
+            config.get("auth_failure_warning_margin", 2)
+        )
+
     def _cleanup_loop(self):
         """后台清理循环，定期清除过期记录"""
         while self._running:
-            time.sleep(self._CLEANUP_INTERVAL)
+            time.sleep(self._cleanup_interval_seconds)
             if not self._running:
                 break
             self._cleanup_expired()
@@ -54,7 +88,8 @@ class RateLimiter:
             # 清理请求记录：移除所有记录已全部过期的 key
             expired_keys = [
                 key for key, records in self._requests.items()
-                if not records or all(now - ts > 600 for ts, _ in records)
+                if not records
+                or all(now - ts > self._request_record_ttl_seconds for ts, _ in records)
             ]
             for key in expired_keys:
                 del self._requests[key]
@@ -181,9 +216,9 @@ class RateLimiter:
     def record_failed_attempt(
         self,
         request: Request,
-        max_failures: int = 5,
-        window_seconds: int = 300,
-        block_duration: int = 600,
+        max_failures: Optional[int] = None,
+        window_seconds: Optional[int] = None,
+        block_duration: Optional[int] = None,
     ) -> Tuple[bool, int]:
         """
         记录失败尝试（如登录失败）
@@ -201,6 +236,21 @@ class RateLimiter:
         """
         ip = self._get_client_ip(request)
         key = f"{ip}:auth_failures"
+        max_failures = (
+            self._auth_failure_max_attempts
+            if max_failures is None
+            else max_failures
+        )
+        window_seconds = (
+            self._auth_failure_window_seconds
+            if window_seconds is None
+            else window_seconds
+        )
+        block_duration = (
+            self._auth_failure_block_seconds
+            if block_duration is None
+            else block_duration
+        )
         # 清理过期记录
         self._cleanup_old_requests(key, window_seconds)
         with self._lock:
@@ -218,7 +268,7 @@ class RateLimiter:
                 f"IP {ip} 认证失败次数过多 ({current_failures}/{max_failures})，已封禁"
             )
             return True, 0
-        if current_failures >= max_failures - 2:
+        if current_failures >= max_failures - self._auth_failure_warning_margin:
             logger.warning(
                 f"IP {ip} 认证失败 {current_failures}/{max_failures} 次"
             )
@@ -271,8 +321,8 @@ async def check_auth_rate_limit(request: Request):
     # 检查频率限制
     allowed, remaining = limiter.check_rate_limit(
         request,
-        max_requests=10,  # 每分钟 10 次
-        window_seconds=60,
+        max_requests=limiter._auth_request_limit,
+        window_seconds=limiter._auth_request_window_seconds,
         key_suffix="auth",
     )
 
@@ -280,7 +330,7 @@ async def check_auth_rate_limit(request: Request):
         raise HTTPException(
             status_code=429,
             detail="认证请求过于频繁，请稍后重试",
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": str(limiter._auth_retry_after_seconds)},
         )
 
 
@@ -304,8 +354,8 @@ async def check_api_rate_limit(request: Request):
     # 检查频率限制
     allowed, _ = limiter.check_rate_limit(
         request,
-        max_requests=100,  # 每分钟 100 次
-        window_seconds=60,
+        max_requests=limiter._api_request_limit,
+        window_seconds=limiter._api_request_window_seconds,
         key_suffix="api",
     )
 
@@ -313,5 +363,5 @@ async def check_api_rate_limit(request: Request):
         raise HTTPException(
             status_code=429,
             detail="请求过于频繁，请稍后重试",
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": str(limiter._api_retry_after_seconds)},
         )

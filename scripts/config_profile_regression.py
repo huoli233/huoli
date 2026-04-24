@@ -182,6 +182,24 @@ probability = 0.22
 [profile_mapping.semantic_domains.recall_shuffle.wrong_word_map]
 "真" = "针"
 
+[profile_mapping.semantic_domains.webui_rate_limit]
+auth_request_limit = 12
+api_request_limit = 144
+
+[profile_mapping.semantic_domains.webui_websocket]
+auth_max_connections_per_user = 7
+state_monitor_default_interval_seconds = 1.5
+
+[profile_mapping.semantic_domains.webui_git_mirror]
+max_retries = 4
+clone_timeout_seconds = 420
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.emotion]
+boredom_show = 0.41
+
+[profile_mapping.semantic_domains.webui_state_monitor_thresholds.prediction]
+probability_high = 0.74
+
 [profile_mapping.semantic_domains.skill]
 trial_to_active_invocations = 6
 runtime_skill_cost = 0.4
@@ -304,6 +322,18 @@ semantic_domains = ["recall_correction"]
 [profile_mapping.module_views.recall_shuffle]
 semantic_domains = ["recall_shuffle"]
 
+[profile_mapping.module_views.webui_rate_limit]
+semantic_domains = ["webui_rate_limit"]
+
+[profile_mapping.module_views.webui_websocket]
+semantic_domains = ["webui_websocket"]
+
+[profile_mapping.module_views.webui_git_mirror]
+semantic_domains = ["webui_git_mirror"]
+
+[profile_mapping.module_views.webui_state_monitor_thresholds]
+semantic_domains = ["webui_state_monitor_thresholds"]
+
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
 
@@ -386,6 +416,11 @@ def main() -> None:
         assert hub.resolve_module_view("recall_correction").values["timeout_seconds"] == 166.0
         assert hub.resolve_module_view("recall_shuffle").values["probability"] == 0.22
         assert hub.resolve_module_view("recall_shuffle").values["wrong_word_map"]["真"] == "针"
+        assert hub.resolve_module_view("webui_rate_limit").values["auth_request_limit"] == 12
+        assert hub.resolve_module_view("webui_websocket").values["auth_max_connections_per_user"] == 7
+        assert hub.resolve_module_view("webui_git_mirror").values["clone_timeout_seconds"] == 420
+        assert hub.resolve_module_view("webui_state_monitor_thresholds").values["emotion"]["boredom_show"] == 0.41
+        assert hub.resolve_module_view("webui_state_monitor_thresholds").values["prediction"]["probability_high"] == 0.74
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
         assert hub.resolve_module_view("adaptive_learning").values["expression_learn_temperature"] == 0.25
@@ -414,6 +449,8 @@ def main() -> None:
             "trauma_query_limit": hub.resolve_module_view("trauma_timeline").values["default_query_limit"],
             "recall_typo_limit": hub.resolve_module_view("recall_typo").values["max_typo_length"],
             "recall_correction_timeout": hub.resolve_module_view("recall_correction").values["timeout_seconds"],
+            "webui_auth_limit": hub.resolve_module_view("webui_rate_limit").values["auth_request_limit"],
+            "webui_prediction_high": hub.resolve_module_view("webui_state_monitor_thresholds").values["prediction"]["probability_high"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "jargon_thresholds": hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"],

@@ -16,9 +16,14 @@ from fastapi import (
 from src.common.logger import get_logger
 from src.common.task_utils import safe_create_task
 from src.webui.core.auth import verify_auth_token_from_cookie_or_header
+from src.webui.runtime_config import webui_module_view
 
 logger = get_logger("WS插件进度")
 router = APIRouter(tags=["websocket"])
+
+
+def _websocket_config() -> dict:
+    return webui_module_view("webui_websocket")
 
 
 def require_auth(
@@ -374,11 +379,15 @@ async def websocket_plugin_progress_endpoint(
                 }
             )
     try:
+        config = _websocket_config()
+        receive_timeout_seconds = float(
+            config.get("plugin_progress_receive_timeout_seconds", 60.0)
+        )
         await plugin_progress_manager.send_active_tasks(session_id)
         while True:
             try:
                 data = await asyncio.wait_for(
-                    websocket.receive_json(), timeout=60.0
+                    websocket.receive_json(), timeout=receive_timeout_seconds
                 )
                 message_type = data.get("type", "unknown")
                 if message_type == "ping":

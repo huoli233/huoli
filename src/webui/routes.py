@@ -84,12 +84,7 @@ async def verify_token(
             )
         else:
             # 记录失败尝试
-            blocked, remaining = rate_limiter.record_failed_attempt(
-                request,
-                max_failures=5,
-                window_seconds=300,
-                block_duration=600,
-            )
+            blocked, remaining = rate_limiter.record_failed_attempt(request)
 
             if blocked:
                 raise HTTPException(
