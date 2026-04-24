@@ -1817,294 +1817,363 @@ behavior_check_interval_seconds = 2400.0
 base_refs = ["runtime_defaults", "model_defaults"]
 semantic_domains = ["model_routing"]
 profile_name = "model_routing_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.schedule]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["schedule"]
 profile_name = "schedule_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.memory]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory"]
 profile_name = "memory_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.memory_capacity]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory_capacity"]
 profile_name = "memory_capacity_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.memory_retrieval]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory_retrieval"]
 profile_name = "memory_retrieval_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.memory_decay]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory_decay"]
 profile_name = "memory_decay_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.memory_dedup]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory_dedup"]
 profile_name = "memory_dedup_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.context]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["context"]
 profile_name = "context_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.vision]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["vision"]
 profile_name = "vision_view"
+edit_scope = "mixed"
+user_editable_keys = ["image_recognition_enabled", "gif_convert_enabled"]
+system_only_keys = ["vlm_temperature", "vlm_timeout_seconds", "gif_frame_limit", "gif_similarity_threshold", "emoji_vlm_temperature", "emoji_emotion_temperature", "emoji_emotion_timeout_seconds", "record_only_confidence_threshold", "degrade_to_placeholder"]
 
 [profile_mapping.module_views.skill]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["skill"]
 profile_name = "skill_view"
+edit_scope = "mixed"
+user_editable_keys = ["sticker_daily_ceiling", "sticker_dispatch_threshold"]
+system_only_keys = ["trigger_threshold", "cooldown_seconds", "failure_backoff_seconds", "priority_boost_from_learning", "runtime_skill_cost", "analysis_skill_cost", "dev_skill_cost"]
 
 [profile_mapping.module_views.adaptive_learning]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["adaptive_learning"]
 profile_name = "adaptive_learning_view"
+edit_scope = "mixed"
+user_editable_keys = ["priority_feedback_enabled", "vocabulary_limit", "mood_vocabulary_limit"]
+system_only_keys = ["expression_learn_temperature", "expression_learn_timeout_seconds", "jargon_infer_temperature", "jargon_infer_timeout_seconds", "behavior_check_interval_seconds", "max_learning_items"]
 
 [profile_mapping.module_views.chat_emotion]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["chat_emotion"]
 profile_name = "chat_emotion_view"
+edit_scope = "mixed"
+user_editable_keys = ["reply_eagerness_floor"]
+system_only_keys = ["query_window_seconds", "max_queries_per_window", "repeat_detection_threshold", "emotion_refresh_interval_seconds", "recent_query_window_seconds", "annoyance_repeat_threshold", "social_delta_scale"]
 
 [profile_mapping.module_views.message_processor]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["message_processor"]
 profile_name = "message_processor_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.runtime_tuning]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["runtime_tuning"]
 profile_name = "runtime_tuning_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.heartfc_thresholds]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["heartfc_thresholds"]
 profile_name = "heartfc_thresholds_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.personality]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["personality"]
 profile_name = "personality_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.phase_timing]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["phase_timing"]
 profile_name = "phase_timing_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.proactive_decider]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["proactive_decider"]
 profile_name = "proactive_decider_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.heartflow_decision]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["heartflow_decision"]
 profile_name = "heartflow_decision_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.module_switches]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["module_switches"]
 profile_name = "module_switches_view"
 edit_scope = "mixed"
-user_editable_keys = ["heartflow_enabled"]
+user_editable_keys = ["heartflow_enabled", "proactive_enabled", "silence_watcher_enabled", "inner_voice_enabled"]
+system_only_keys = ["energy_system_enabled", "emotion_stream_enabled", "enhanced_focus_route_enabled"]
 
 [profile_mapping.module_views.heartflow_runtime]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["heartflow_runtime"]
 profile_name = "heartflow_runtime_view"
 edit_scope = "mixed"
-user_editable_keys = ["focus_channels"]
-system_only_keys = ["initiative_probability"]
+user_editable_keys = ["focus_channels", "quiet_threshold_sec", "max_initiative_per_hour"]
+system_only_keys = ["initiative_probability", "initiative_interval_sec", "monitor_interval_sec", "stamina_max"]
 
 [profile_mapping.module_views.inner_voice]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["inner_voice"]
 profile_name = "inner_voice_view"
+edit_scope = "mixed"
+user_editable_keys = ["waiting_thoughts", "fallback_action"]
+system_only_keys = ["mention_min_desire", "private_chat_min_desire", "resource_penalty_max", "resource_thresholds", "time_bands", "max_output_actions", "desire_scale_min", "desire_scale_max"]
 
 [profile_mapping.module_views.frequency_control]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["frequency_control"]
 profile_name = "frequency_control_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.global_shield]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["global_shield"]
 profile_name = "global_shield_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.harassment_detection]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["harassment_detection"]
 profile_name = "harassment_detection_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.injection_detection]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["injection_detection"]
 profile_name = "injection_detection_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.user_protection]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["user_protection"]
 profile_name = "user_protection_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.psychological_core]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["psychological_core"]
 profile_name = "psychological_core_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.trauma_complex]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["trauma_complex"]
 profile_name = "trauma_complex_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.trauma_fragment]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["trauma_fragment"]
 profile_name = "trauma_fragment_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.trauma_layers]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["trauma_layers"]
 profile_name = "trauma_layers_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.trauma_system]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["trauma_system"]
 profile_name = "trauma_system_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.trauma_timeline]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["trauma_timeline"]
 profile_name = "trauma_timeline_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.trauma_triggers]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["trauma_triggers"]
 profile_name = "trauma_triggers_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.trauma_worldview]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["trauma_worldview"]
 profile_name = "trauma_worldview_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.recall_post_send]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["recall_post_send"]
 profile_name = "recall_post_send_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.recall_typo]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["recall_typo"]
 profile_name = "recall_typo_view"
+edit_scope = "mixed"
+user_editable_keys = ["probability", "extra_chars", "wrong_char_map"]
+system_only_keys = ["generation_task", "max_typo_length", "prompt_key", "random_confidence", "random_reasoning", "skip_reasoning"]
 
 [profile_mapping.module_views.recall_self_behavior]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["recall_self_behavior"]
 profile_name = "recall_self_behavior_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.recall_self_awareness]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["recall_self_awareness"]
 profile_name = "recall_self_awareness_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.recall_dimension]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["recall_dimension"]
 profile_name = "recall_dimension_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.recall_correction]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["recall_correction"]
 profile_name = "recall_correction_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.recall_shuffle]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["recall_shuffle"]
 profile_name = "recall_shuffle_view"
+edit_scope = "mixed"
+user_editable_keys = ["probability", "wrong_word_map", "shuffle_types"]
+system_only_keys = ["max_length", "prompt_key"]
 
 [profile_mapping.module_views.webui_rate_limit]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["webui_rate_limit"]
 profile_name = "webui_rate_limit_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.webui_websocket]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["webui_websocket"]
 profile_name = "webui_websocket_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.webui_git_mirror]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["webui_git_mirror"]
 profile_name = "webui_git_mirror_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.webui_state_monitor_thresholds]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["webui_state_monitor_thresholds"]
 profile_name = "webui_state_monitor_thresholds_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.brain_chat_runtime]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["brain_chat_runtime"]
 profile_name = "brain_chat_runtime_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.brain_planner]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["brain_planner"]
 profile_name = "brain_planner_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.brain_pfc_action]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["brain_pfc_action"]
 profile_name = "brain_pfc_action_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.brain_pfc_reply]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["brain_pfc_reply"]
 profile_name = "brain_pfc_reply_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.brain_waiter]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["brain_waiter"]
 profile_name = "brain_waiter_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.brain_pfc_goal]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["brain_pfc_goal"]
 profile_name = "brain_pfc_goal_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.identity_bot]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["identity_bot"]
 profile_name = "identity_bot_view"
 edit_scope = "mixed"
-user_editable_keys = ["nickname", "alias_names", "identity_templates", "role_visual_profiles", "skill_prompt_templates"]
+user_editable_keys = ["nickname", "alias_names", "character_age", "interests", "lore", "personality_core", "relationships", "reply_style", "visual_features", "identity_templates", "role_visual_profiles", "skill_prompt_templates"]
 system_only_keys = ["bot_id"]
 
 [profile_mapping.module_views.identity_anchor]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["identity_anchor"]
 profile_name = "identity_anchor_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.identity_user_persistence]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["identity_user_persistence"]
 profile_name = "identity_user_persistence_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.energy_runtime]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["energy_runtime"]
 profile_name = "energy_runtime_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.trigger_runtime]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["trigger_runtime"]
 profile_name = "trigger_runtime_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.personality_factors]
 base_refs = ["runtime_defaults"]
@@ -2123,93 +2192,112 @@ edit_scope = "system"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["social_settlement"]
 profile_name = "social_settlement_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.social_phase_tracker]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["social_phase_tracker"]
 profile_name = "social_phase_tracker_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.social_affect_fuser]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["social_affect_fuser"]
 profile_name = "social_affect_fuser_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.social_value_core]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["social_value_core"]
 profile_name = "social_value_core_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.perception_group_sense]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_group_sense"]
 profile_name = "perception_group_sense_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.perception_self_sense]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_self_sense"]
 profile_name = "perception_self_sense_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.perception_user_relation]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_user_relation"]
 profile_name = "perception_user_relation_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.perception_user_state]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_user_state"]
 profile_name = "perception_user_state_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.affection_dynamics]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["affection_dynamics"]
 profile_name = "affection_dynamics_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.persona_controller]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["persona_controller"]
 profile_name = "persona_controller_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.persona_generator]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["persona_generator"]
 profile_name = "persona_generator_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.persona_switcher]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["persona_switcher"]
 profile_name = "persona_switcher_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.perception_behavior]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_behavior"]
 profile_name = "perception_behavior_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.perception_buffer]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_buffer"]
 profile_name = "perception_buffer_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.perception_group_atmosphere]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_group_atmosphere"]
 profile_name = "perception_group_atmosphere_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.perception_interest]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_interest"]
 profile_name = "perception_interest_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.perception_message_preprocessor]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_message_preprocessor"]
 profile_name = "perception_message_preprocessor_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.perception_signal_detector]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_signal_detector"]
 profile_name = "perception_signal_detector_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.perception_understand]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_understand"]
 profile_name = "perception_understand_view"
+edit_scope = "system"

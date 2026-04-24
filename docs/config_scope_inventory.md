@@ -27,13 +27,13 @@
 
 | 一级类型 | 中文名 | 三级模块数 | system | mixed | user |
 | --- | --- | --- | --- | --- | --- |
-| dialogue_orchestration | 对话编排 | 15 | 14 | 1 | 0 |
-| emotion_psychology | 情绪与心理 | 3 | 3 | 0 | 0 |
+| dialogue_orchestration | 对话编排 | 15 | 12 | 3 | 0 |
+| emotion_psychology | 情绪与心理 | 3 | 2 | 1 | 0 |
 | identity_persona | 身份与人格 | 9 | 7 | 1 | 1 |
 | interface_observability | 界面与可观测 | 4 | 4 | 0 | 0 |
-| learning_adaptation | 学习与自适应 | 2 | 2 | 0 | 0 |
-| memory_knowledge | 记忆与知识 | 12 | 12 | 0 | 0 |
-| perception_context | 感知与上下文 | 13 | 13 | 0 | 0 |
+| learning_adaptation | 学习与自适应 | 2 | 1 | 1 | 0 |
+| memory_knowledge | 记忆与知识 | 12 | 10 | 2 | 0 |
+| perception_context | 感知与上下文 | 13 | 12 | 1 | 0 |
 | runtime_resources | 运行资源与开关 | 4 | 3 | 1 | 0 |
 | safety_guard | 安全与防护 | 4 | 4 | 0 | 0 |
 | trauma_relation | 创伤与关系 | 12 | 12 | 0 | 0 |
@@ -73,7 +73,7 @@
 
 | 三级模块类型 | 一级/二级路径 | 编辑分级 | 四层映射状态 | 用户可改键 | 绑定语义域 |
 | --- | --- | --- | --- | --- | --- |
-| adaptive_learning | 学习与自适应 / 学习与自适应 | system | 已接入 | - | adaptive_learning |
+| adaptive_learning | 学习与自适应 / 学习与自适应 | mixed | 已接入 | priority_feedback_enabled, vocabulary_limit, mood_vocabulary_limit | adaptive_learning |
 | affection_dynamics | 身份与人格 / 人格动态 | system | 已接入 | - | affection_dynamics |
 | brain_chat_runtime | 对话编排 / 路由与生成 | system | 已接入 | - | brain_chat_runtime |
 | brain_pfc_action | 对话编排 / 路由与生成 | system | 已接入 | - | brain_pfc_action |
@@ -81,7 +81,7 @@
 | brain_pfc_reply | 对话编排 / 路由与生成 | system | 已接入 | - | brain_pfc_reply |
 | brain_planner | 对话编排 / 路由与生成 | system | 已接入 | - | brain_planner |
 | brain_waiter | 对话编排 / 路由与生成 | system | 已接入 | - | brain_waiter |
-| chat_emotion | 情绪与心理 / 情绪流 | system | 已接入 | - | chat_emotion |
+| chat_emotion | 情绪与心理 / 情绪流 | mixed | 已接入 | reply_eagerness_floor | chat_emotion |
 | context | 感知与上下文 / 上下文与视觉 | system | 已接入 | - | context |
 | energy_runtime | 运行资源与开关 / 能量与触发 | system | 已接入 | - | energy_runtime |
 | frequency_control | 运行资源与开关 / 频控与开关 | system | 已接入 | - | frequency_control |
@@ -89,12 +89,12 @@
 | harassment_detection | 安全与防护 / 风险检测 | system | 已接入 | - | harassment_detection |
 | heartfc_thresholds | 情绪与心理 / 情绪流 | system | 已接入 | - | heartfc_thresholds |
 | heartflow_decision | 对话编排 / 主动与回复 | system | 已接入 | - | heartflow_decision |
-| heartflow_runtime | 对话编排 / 主动与回复 | mixed | 已接入 | focus_channels | heartflow_runtime |
+| heartflow_runtime | 对话编排 / 主动与回复 | mixed | 已接入 | focus_channels, quiet_threshold_sec, max_initiative_per_hour | heartflow_runtime |
 | identity_anchor | 身份与人格 / 身份档案 | system | 已接入 | - | identity_anchor |
-| identity_bot | 身份与人格 / 身份档案 | mixed | 已接入 | nickname, alias_names, identity_templates, role_visual_profiles, skill_prompt_templates | identity_bot |
+| identity_bot | 身份与人格 / 身份档案 | mixed | 已接入 | nickname, alias_names, character_age, interests, lore, personality_core, relationships, reply_style, visual_features, identity_templates, role_visual_profiles, skill_prompt_templates | identity_bot |
 | identity_user_persistence | 身份与人格 / 身份档案 | system | 已接入 | - | identity_user_persistence |
 | injection_detection | 安全与防护 / 风险检测 | system | 已接入 | - | injection_detection |
-| inner_voice | 对话编排 / 主动与回复 | system | 已接入 | - | inner_voice |
+| inner_voice | 对话编排 / 主动与回复 | mixed | 已接入 | waiting_thoughts, fallback_action | inner_voice |
 | memory | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory |
 | memory_capacity | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_capacity |
 | memory_decay | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_decay |
@@ -102,7 +102,7 @@
 | memory_retrieval | 记忆与知识 / 检索与召回 | system | 已接入 | - | memory_retrieval |
 | message_processor | 对话编排 / 路由与生成 | system | 已接入 | - | message_processor |
 | model_routing | 对话编排 / 路由与生成 | system | 已接入 | - | model_routing |
-| module_switches | 运行资源与开关 / 频控与开关 | mixed | 已接入 | heartflow_enabled | module_switches |
+| module_switches | 运行资源与开关 / 频控与开关 | mixed | 已接入 | heartflow_enabled, proactive_enabled, silence_watcher_enabled, inner_voice_enabled | module_switches |
 | perception_behavior | 感知与上下文 / 用户感知 | system | 已接入 | - | perception_behavior |
 | perception_buffer | 感知与上下文 / 语义理解 | system | 已接入 | - | perception_buffer |
 | perception_group_atmosphere | 感知与上下文 / 群体感知 | system | 已接入 | - | perception_group_atmosphere |
@@ -127,11 +127,11 @@
 | recall_post_send | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_post_send |
 | recall_self_awareness | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_self_awareness |
 | recall_self_behavior | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_self_behavior |
-| recall_shuffle | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_shuffle |
-| recall_typo | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_typo |
+| recall_shuffle | 记忆与知识 / 回想与纠错 | mixed | 已接入 | probability, wrong_word_map, shuffle_types | recall_shuffle |
+| recall_typo | 记忆与知识 / 回想与纠错 | mixed | 已接入 | probability, extra_chars, wrong_char_map | recall_typo |
 | runtime_tuning | 学习与自适应 / 运行调优 | system | 已接入 | - | runtime_tuning |
 | schedule | 对话编排 / 阶段与调度 | system | 已接入 | - | schedule |
-| skill | 对话编排 / 技能调度 | system | 已接入 | - | skill |
+| skill | 对话编排 / 技能调度 | mixed | 已接入 | sticker_daily_ceiling, sticker_dispatch_threshold | skill |
 | social_affect_fuser | 创伤与关系 / 社交关系 | system | 已接入 | - | social_affect_fuser |
 | social_calculator | 创伤与关系 / 社交关系 | system | 已接入 | - | social_calculator |
 | social_phase_tracker | 创伤与关系 / 社交关系 | system | 已接入 | - | social_phase_tracker |
@@ -146,7 +146,7 @@
 | trauma_worldview | 创伤与关系 / 创伤运行 | system | 已接入 | - | trauma_worldview |
 | trigger_runtime | 运行资源与开关 / 能量与触发 | system | 已接入 | - | trigger_runtime |
 | user_protection | 安全与防护 / 保护治理 | system | 已接入 | - | user_protection |
-| vision | 感知与上下文 / 上下文与视觉 | system | 已接入 | - | vision |
+| vision | 感知与上下文 / 上下文与视觉 | mixed | 已接入 | image_recognition_enabled, gif_convert_enabled | vision |
 | webui_git_mirror | 界面与可观测 / WebUI运行 | system | 已接入 | - | webui_git_mirror |
 | webui_rate_limit | 界面与可观测 / WebUI运行 | system | 已接入 | - | webui_rate_limit |
 | webui_state_monitor_thresholds | 界面与可观测 / 阈值与状态展示 | system | 已接入 | - | webui_state_monitor_thresholds |

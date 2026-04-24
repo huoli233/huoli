@@ -395,6 +395,9 @@ semantic_domains = ["memory_dedup"]
 timeout_seconds = 12.0
 vlm_temperature = 0.2
 gif_frame_limit = 4
+edit_scope = "mixed"
+user_editable_keys = ["image_recognition_enabled", "gif_convert_enabled"]
+system_only_keys = ["vlm_temperature", "vlm_timeout_seconds", "gif_frame_limit", "gif_similarity_threshold", "emoji_vlm_temperature", "emoji_emotion_temperature", "emoji_emotion_timeout_seconds", "record_only_confidence_threshold", "degrade_to_placeholder"]
 
 [profile_mapping.module_views.model_routing]
 semantic_domains = ["model_routing"]
@@ -414,16 +417,20 @@ semantic_domains = ["heartflow_decision"]
 [profile_mapping.module_views.module_switches]
 semantic_domains = ["module_switches"]
 edit_scope = "mixed"
-user_editable_keys = ["heartflow_enabled"]
+user_editable_keys = ["heartflow_enabled", "proactive_enabled", "silence_watcher_enabled", "inner_voice_enabled"]
+system_only_keys = ["energy_system_enabled", "emotion_stream_enabled", "enhanced_focus_route_enabled"]
 
 [profile_mapping.module_views.heartflow_runtime]
 semantic_domains = ["heartflow_runtime"]
 edit_scope = "mixed"
-user_editable_keys = ["focus_channels"]
-system_only_keys = ["initiative_probability"]
+user_editable_keys = ["focus_channels", "quiet_threshold_sec", "max_initiative_per_hour"]
+system_only_keys = ["initiative_probability", "initiative_interval_sec", "monitor_interval_sec", "stamina_max"]
 
 [profile_mapping.module_views.inner_voice]
 semantic_domains = ["inner_voice"]
+edit_scope = "mixed"
+user_editable_keys = ["waiting_thoughts", "fallback_action"]
+system_only_keys = ["mention_min_desire", "private_chat_min_desire", "resource_penalty_max", "resource_thresholds", "time_bands", "max_output_actions", "desire_scale_min", "desire_scale_max"]
 
 [profile_mapping.module_views.frequency_control]
 semantic_domains = ["frequency_control"]
@@ -469,6 +476,9 @@ semantic_domains = ["recall_post_send"]
 
 [profile_mapping.module_views.recall_typo]
 semantic_domains = ["recall_typo"]
+edit_scope = "mixed"
+user_editable_keys = ["probability", "extra_chars", "wrong_char_map"]
+system_only_keys = ["generation_task", "max_typo_length", "prompt_key", "random_confidence", "random_reasoning", "skip_reasoning"]
 
 [profile_mapping.module_views.recall_self_behavior]
 semantic_domains = ["recall_self_behavior"]
@@ -484,6 +494,9 @@ semantic_domains = ["recall_correction"]
 
 [profile_mapping.module_views.recall_shuffle]
 semantic_domains = ["recall_shuffle"]
+edit_scope = "mixed"
+user_editable_keys = ["probability", "wrong_word_map", "shuffle_types"]
+system_only_keys = ["max_length", "prompt_key"]
 
 [profile_mapping.module_views.webui_rate_limit]
 semantic_domains = ["webui_rate_limit"]
@@ -518,7 +531,7 @@ semantic_domains = ["brain_pfc_goal"]
 [profile_mapping.module_views.identity_bot]
 semantic_domains = ["identity_bot"]
 edit_scope = "mixed"
-user_editable_keys = ["nickname", "alias_names", "identity_templates", "role_visual_profiles", "skill_prompt_templates"]
+user_editable_keys = ["nickname", "alias_names", "character_age", "interests", "lore", "personality_core", "relationships", "reply_style", "visual_features", "identity_templates", "role_visual_profiles", "skill_prompt_templates"]
 system_only_keys = ["bot_id"]
 
 [profile_mapping.module_views.identity_anchor]
@@ -604,9 +617,15 @@ semantic_domains = ["context"]
 
 [profile_mapping.module_views.skill]
 semantic_domains = ["skill"]
+edit_scope = "mixed"
+user_editable_keys = ["sticker_daily_ceiling", "sticker_dispatch_threshold"]
+system_only_keys = ["trigger_threshold", "cooldown_seconds", "failure_backoff_seconds", "priority_boost_from_learning", "runtime_skill_cost", "analysis_skill_cost", "dev_skill_cost"]
 
 [profile_mapping.module_views.adaptive_learning]
 semantic_domains = ["adaptive_learning"]
+edit_scope = "mixed"
+user_editable_keys = ["priority_feedback_enabled", "vocabulary_limit", "mood_vocabulary_limit"]
+system_only_keys = ["expression_learn_temperature", "expression_learn_timeout_seconds", "jargon_infer_temperature", "jargon_infer_timeout_seconds", "behavior_check_interval_seconds", "max_learning_items"]
 """.strip()
 
 
@@ -645,6 +664,8 @@ def main() -> None:
         assert vision.values["risk_score"] == 0.8
         assert vision.values["vlm_temperature"] == 0.2
         assert vision.values["gif_frame_limit"] == 4
+        assert vision.edit_scope == "mixed"
+        assert vision.user_editable_keys == ("image_recognition_enabled", "gif_convert_enabled")
         assert hub.resolve_module_view("context").values["reply_context_max_tokens"] == 96
 
         schedule = hub.resolve_module_view("schedule")
@@ -660,13 +681,16 @@ def main() -> None:
         module_switches = hub.resolve_module_view("module_switches")
         assert module_switches.values["heartflow_enabled"] is True
         assert module_switches.edit_scope == "mixed"
-        assert module_switches.user_editable_keys == ("heartflow_enabled",)
+        assert module_switches.user_editable_keys == ("heartflow_enabled", "proactive_enabled", "silence_watcher_enabled", "inner_voice_enabled")
         heartflow_runtime = hub.resolve_module_view("heartflow_runtime")
         assert heartflow_runtime.values["initiative_probability"] == 0.44
         assert heartflow_runtime.edit_scope == "mixed"
-        assert heartflow_runtime.user_editable_keys == ("focus_channels",)
-        assert heartflow_runtime.system_only_keys == ("initiative_probability",)
-        assert hub.resolve_module_view("inner_voice").values["mention_min_desire"] == 7
+        assert heartflow_runtime.user_editable_keys == ("focus_channels", "quiet_threshold_sec", "max_initiative_per_hour")
+        assert heartflow_runtime.system_only_keys == ("initiative_probability", "initiative_interval_sec", "monitor_interval_sec", "stamina_max")
+        inner_voice = hub.resolve_module_view("inner_voice")
+        assert inner_voice.values["mention_min_desire"] == 7
+        assert inner_voice.edit_scope == "mixed"
+        assert inner_voice.user_editable_keys == ("waiting_thoughts", "fallback_action")
         assert hub.resolve_module_view("frequency_control").values["skip_limit"] == 7
         assert hub.resolve_module_view("global_shield").values["default_duration"] == 321.0
         assert hub.resolve_module_view("harassment_detection").values["block_threshold"] == 0.66
@@ -684,15 +708,21 @@ def main() -> None:
         assert hub.resolve_module_view("trauma_triggers").values["default_patterns"][0]["pattern_id"] == "echo"
         assert hub.resolve_module_view("trauma_worldview").values["max_beliefs_tracked"] == 12
         assert hub.resolve_module_view("recall_post_send").values["analysis_interval_seconds"] == 6.0
-        assert hub.resolve_module_view("recall_typo").values["max_typo_length"] == 66
-        assert hub.resolve_module_view("recall_typo").values["wrong_char_map"]["你"] == "尼"
+        recall_typo = hub.resolve_module_view("recall_typo")
+        assert recall_typo.values["max_typo_length"] == 66
+        assert recall_typo.values["wrong_char_map"]["你"] == "尼"
+        assert recall_typo.edit_scope == "mixed"
+        assert recall_typo.user_editable_keys == ("probability", "extra_chars", "wrong_char_map")
         assert hub.resolve_module_view("recall_self_behavior").values["min_samples"] == 4
         assert hub.resolve_module_view("recall_self_behavior").values["quick_learn_trigger_count"] == 5
         assert hub.resolve_module_view("recall_self_awareness").values["max_history"] == 88
         assert hub.resolve_module_view("recall_dimension").values["typo_limit_per_window"] == 4
         assert hub.resolve_module_view("recall_correction").values["timeout_seconds"] == 166.0
-        assert hub.resolve_module_view("recall_shuffle").values["probability"] == 0.22
-        assert hub.resolve_module_view("recall_shuffle").values["wrong_word_map"]["真"] == "针"
+        recall_shuffle = hub.resolve_module_view("recall_shuffle")
+        assert recall_shuffle.values["probability"] == 0.22
+        assert recall_shuffle.values["wrong_word_map"]["真"] == "针"
+        assert recall_shuffle.edit_scope == "mixed"
+        assert recall_shuffle.user_editable_keys == ("probability", "wrong_word_map", "shuffle_types")
         assert hub.resolve_module_view("webui_rate_limit").values["auth_request_limit"] == 12
         assert hub.resolve_module_view("webui_websocket").values["auth_max_connections_per_user"] == 7
         assert hub.resolve_module_view("webui_git_mirror").values["clone_timeout_seconds"] == 420
@@ -751,10 +781,16 @@ def main() -> None:
         assert hub.resolve_module_view("perception_message_preprocessor").values["bot_aliases"] == ["阿活"]
         assert hub.resolve_module_view("perception_signal_detector").values["strong_at_threshold"] == 2
         assert hub.resolve_module_view("perception_understand").values["cache_ttl"] == 88.0
-        assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
-        assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
-        assert hub.resolve_module_view("adaptive_learning").values["expression_learn_temperature"] == 0.25
-        assert hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"] == [2, 5, 10]
+        skill = hub.resolve_module_view("skill")
+        assert skill.values["trial_to_active_invocations"] == 6
+        assert skill.edit_scope == "mixed"
+        assert skill.user_editable_keys == ("sticker_daily_ceiling", "sticker_dispatch_threshold")
+        adaptive_learning = hub.resolve_module_view("adaptive_learning")
+        assert adaptive_learning.values["unknown_term_min_count"] == 4
+        assert adaptive_learning.values["expression_learn_temperature"] == 0.25
+        assert adaptive_learning.values["jargon_infer_thresholds"] == [2, 5, 10]
+        assert adaptive_learning.edit_scope == "mixed"
+        assert adaptive_learning.user_editable_keys == ("priority_feedback_enabled", "vocabulary_limit", "mood_vocabulary_limit")
 
         sleep(1.1)
         _write(config_path, _config(0.35))
