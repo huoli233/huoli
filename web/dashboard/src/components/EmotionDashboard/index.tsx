@@ -742,13 +742,14 @@ export function EmotionDashboard() {
   }, []);
 
   useEffect(() => {
-    if (!selectedChannel) {
-      return;
-    }
-
     let cancelled = false;
 
     async function loadMonitor() {
+      if (!selectedChannel) {
+        setPacket(null);
+        setLoading(false);
+        return;
+      }
       setLoading(true);
       setErrorMessage("");
       try {
@@ -778,10 +779,6 @@ export function EmotionDashboard() {
   }, [selectedChannel]);
 
   useEffect(() => {
-    if (!selectedChannel) {
-      return;
-    }
-
     if (socketRef.current) {
       socketRef.current.close();
       socketRef.current = null;
@@ -807,6 +804,26 @@ export function EmotionDashboard() {
           const message = JSON.parse(event.data) as { type?: string; data?: unknown };
           if (message.type === "state_snapshot" && message.data) {
             setPacket(message.data as MonitorPacket);
+            setErrorMessage("");
+          } else if (message.type === "state_overview" && message.data) {
+            const overviewPayload = message.data as OverviewPayload;
+            setOverview(overviewPayload);
+            setErrorMessage("");
+            const channels = overviewPayload?.channels ?? [];
+            if (!selectedChannel && channels.length > 0) {
+              setSelectedChannel(channels[0]?.channel_id ?? "");
+            } else if (
+              selectedChannel &&
+              channels.length > 0 &&
+              !channels.some((channel) => channel.channel_id === selectedChannel)
+            ) {
+              setSelectedChannel(channels[0]?.channel_id ?? "");
+            } else if (channels.length === 0) {
+              setPacket(null);
+            }
+          } else if (message.type === "state_error") {
+            setPacket(null);
+            setErrorMessage("当前没有活跃会话，状态页保持实时总览待机。");
           }
         } catch (error) {
           setErrorMessage(`解析实时状态失败: ${String(error)}`);
@@ -871,6 +888,9 @@ export function EmotionDashboard() {
 
       {loading && <div className="status-banner">正在同步状态数据…</div>}
       {errorMessage && <div className="status-banner is-error">{errorMessage}</div>}
+      {!loading && !errorMessage && (overview?.active_count ?? 0) === 0 && (
+        <div className="status-banner">当前没有活跃会话，状态页会保持实时总览待机，等新的 Heartflow 会话出现后自动接入。</div>
+      )}
 
       <section className="command-grid">
         <article className="command-card">
