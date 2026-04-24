@@ -1890,7 +1890,9 @@ edit_scope = "system"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory"]
 profile_name = "memory_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["short_term_limit", "temporary_ttl_seconds", "reactivation_cooldown_seconds", "reactivation_max_candidates", "emotion_reactivation_threshold", "boredom_reactivation_threshold"]
+system_only_keys = ["overload_ratio_threshold", "overload_amnesia_threshold", "overload_assessment_ttl_seconds", "long_term_batch_size", "memoir_timeout_seconds", "reactivation_cache_limit", "reactivation_score_threshold", "reactivation_topic_scan_limit", "reactivation_visibility_scan_limit", "boredom_high_threshold"]
 
 [profile_mapping.module_views.memory_capacity]
 base_refs = ["runtime_defaults"]
@@ -1920,7 +1922,9 @@ edit_scope = "system"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["context"]
 profile_name = "context_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["reply_context_max_tokens", "extra_info_max_tokens", "max_context_messages", "max_extra_blocks", "compressed_context_target_chars"]
+system_only_keys = ["compact_line_max_tokens", "compression_trigger_chars", "pollution_threshold", "repeat_topic_threshold", "selection_saturation_ratio"]
 
 [profile_mapping.module_views.vision]
 base_refs = ["runtime_defaults"]
@@ -1994,7 +1998,9 @@ edit_scope = "system"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["heartflow_decision"]
 profile_name = "heartflow_decision_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["bond", "tactics", "mood_factors"]
+system_only_keys = ["dimension_weights", "barrier_seeds", "barrier_tuning", "threat_weights", "fusion", "immediacy", "credibility", "heated_pulse_limit", "pulse_span_seconds", "heated_slot_ttl", "calm_slot_ttl", "slot_capacity_cap"]
 
 [profile_mapping.module_views.module_switches]
 base_refs = ["runtime_defaults"]
@@ -2216,7 +2222,9 @@ system_only_keys = ["bot_id"]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["identity_anchor"]
 profile_name = "identity_anchor_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["prompt_templates"]
+system_only_keys = ["max_history"]
 
 [profile_mapping.module_views.identity_user_persistence]
 base_refs = ["runtime_defaults"]

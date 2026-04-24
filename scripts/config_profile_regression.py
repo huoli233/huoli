@@ -378,6 +378,9 @@ risk_score = {value}
 [profile_mapping.module_views.memory]
 semantic_domains = ["memory"]
 long_term_limit = 4096
+edit_scope = "mixed"
+user_editable_keys = ["short_term_limit", "temporary_ttl_seconds", "reactivation_cooldown_seconds", "reactivation_max_candidates", "emotion_reactivation_threshold", "boredom_reactivation_threshold"]
+system_only_keys = ["overload_ratio_threshold", "overload_amnesia_threshold", "overload_assessment_ttl_seconds", "long_term_batch_size", "memoir_timeout_seconds", "reactivation_cache_limit", "reactivation_score_threshold", "reactivation_topic_scan_limit", "reactivation_visibility_scan_limit", "boredom_high_threshold"]
 
 [profile_mapping.module_views.memory_capacity]
 semantic_domains = ["memory_capacity"]
@@ -413,6 +416,9 @@ semantic_domains = ["proactive_decider"]
 
 [profile_mapping.module_views.heartflow_decision]
 semantic_domains = ["heartflow_decision"]
+edit_scope = "mixed"
+user_editable_keys = ["bond", "tactics", "mood_factors"]
+system_only_keys = ["dimension_weights", "barrier_seeds", "barrier_tuning", "threat_weights", "fusion", "immediacy", "credibility", "heated_pulse_limit", "pulse_span_seconds", "heated_slot_ttl", "calm_slot_ttl", "slot_capacity_cap"]
 
 [profile_mapping.module_views.module_switches]
 semantic_domains = ["module_switches"]
@@ -536,6 +542,9 @@ system_only_keys = ["bot_id"]
 
 [profile_mapping.module_views.identity_anchor]
 semantic_domains = ["identity_anchor"]
+edit_scope = "mixed"
+user_editable_keys = ["prompt_templates"]
+system_only_keys = ["max_history"]
 
 [profile_mapping.module_views.identity_user_persistence]
 semantic_domains = ["identity_user_persistence"]
@@ -614,6 +623,9 @@ semantic_domains = ["perception_understand"]
 
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
+edit_scope = "mixed"
+user_editable_keys = ["reply_context_max_tokens", "extra_info_max_tokens", "max_context_messages", "max_extra_blocks", "compressed_context_target_chars"]
+system_only_keys = ["compact_line_max_tokens", "compression_trigger_chars", "pollution_threshold", "repeat_topic_threshold", "selection_saturation_ratio"]
 
 [profile_mapping.module_views.skill]
 semantic_domains = ["skill"]
@@ -653,6 +665,8 @@ def main() -> None:
         assert memory.values["long_term_limit"] == 4096
         assert memory.values["reactivation_cooldown_seconds"] == 88.0
         assert memory.fallback_used is False
+        assert memory.edit_scope == "mixed"
+        assert memory.user_editable_keys == ("short_term_limit", "temporary_ttl_seconds", "reactivation_cooldown_seconds", "reactivation_max_candidates", "emotion_reactivation_threshold", "boredom_reactivation_threshold")
         assert hub.resolve_module_view("memory_capacity").values["review_interval_seconds"] == 333
         assert hub.resolve_module_view("memory_capacity").values["max_count_by_tier"]["working"] == 222
         assert hub.resolve_module_view("memory_retrieval").values["rrf_k"] == 77
@@ -666,7 +680,10 @@ def main() -> None:
         assert vision.values["gif_frame_limit"] == 4
         assert vision.edit_scope == "mixed"
         assert vision.user_editable_keys == ("image_recognition_enabled", "gif_convert_enabled")
-        assert hub.resolve_module_view("context").values["reply_context_max_tokens"] == 96
+        context = hub.resolve_module_view("context")
+        assert context.values["reply_context_max_tokens"] == 96
+        assert context.edit_scope == "mixed"
+        assert context.user_editable_keys == ("reply_context_max_tokens", "extra_info_max_tokens", "max_context_messages", "max_extra_blocks", "compressed_context_target_chars")
 
         schedule = hub.resolve_module_view("schedule")
         assert schedule.fallback_used is False
@@ -677,7 +694,10 @@ def main() -> None:
         assert hub.resolve_module_view("model_routing").values["model_fail_threshold"] == 4
         assert hub.resolve_module_view("phase_timing").values["max_idle_wait_seconds"] == 99
         assert hub.resolve_module_view("proactive_decider").values["activation_bar"] == 0.61
-        assert hub.resolve_module_view("heartflow_decision").values["heated_pulse_limit"] == 9
+        heartflow_decision = hub.resolve_module_view("heartflow_decision")
+        assert heartflow_decision.values["heated_pulse_limit"] == 9
+        assert heartflow_decision.edit_scope == "mixed"
+        assert heartflow_decision.user_editable_keys == ("bond", "tactics", "mood_factors")
         module_switches = hub.resolve_module_view("module_switches")
         assert module_switches.values["heartflow_enabled"] is True
         assert module_switches.edit_scope == "mixed"
@@ -742,8 +762,11 @@ def main() -> None:
         assert identity_bot.values["identity_templates"]["default_persona"] == "你叫{name}。"
         assert identity_bot.edit_scope == "mixed"
         assert identity_bot.system_only_keys == ("bot_id",)
-        assert hub.resolve_module_view("identity_anchor").values["max_history"] == 55
-        assert hub.resolve_module_view("identity_anchor").values["prompt_templates"]["default_persona"] == "anchor:{name}"
+        identity_anchor = hub.resolve_module_view("identity_anchor")
+        assert identity_anchor.values["max_history"] == 55
+        assert identity_anchor.values["prompt_templates"]["default_persona"] == "anchor:{name}"
+        assert identity_anchor.edit_scope == "mixed"
+        assert identity_anchor.user_editable_keys == ("prompt_templates",)
         assert hub.resolve_module_view("identity_user_persistence").values["storage_dir"] == "tmp/users"
         assert hub.resolve_module_view("energy_runtime").values["chat_value"]["ceiling"] == 123.0
         assert hub.resolve_module_view("energy_runtime").values["decay"]["annoyance_decay_per_min"] == 4.2
@@ -815,6 +838,7 @@ def main() -> None:
             "schedule_cooldown_sec": hub.assemble_scheduler_config()["cooldown_sec"],
             "model_fail_threshold": hub.resolve_module_view("model_routing").values["model_fail_threshold"],
             "context_reply_tokens": hub.resolve_module_view("context").values["reply_context_max_tokens"],
+            "context_scope": context.edit_scope,
             "phase_idle_timeout": hub.resolve_module_view("phase_timing").values["phase_idle_timeout_seconds"],
             "memory_rrf_k": hub.resolve_module_view("memory_retrieval").values["rrf_k"],
             "inner_voice_mention_floor": hub.resolve_module_view("inner_voice").values["mention_min_desire"],
@@ -830,6 +854,7 @@ def main() -> None:
             "brain_waiter_timeout": hub.resolve_module_view("brain_waiter").values["desired_timeout_seconds"],
             "identity_bot_name": hub.resolve_module_view("identity_bot").values["nickname"],
             "identity_bot_scope": identity_bot.edit_scope,
+            "identity_anchor_scope": identity_anchor.edit_scope,
             "identity_storage_dir": hub.resolve_module_view("identity_user_persistence").values["storage_dir"],
             "energy_chat_ceiling": hub.resolve_module_view("energy_runtime").values["chat_value"]["ceiling"],
             "trigger_overflow_ratio": hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"],
@@ -843,6 +868,8 @@ def main() -> None:
             "social_support_cap": hub.resolve_module_view("social_affect_fuser").values["support_relief_cap"],
             "social_core_initial": hub.resolve_module_view("social_value_core").values["social_new_user_initial"],
             "personality_scope": personality_factors.edit_scope,
+            "memory_scope": memory.edit_scope,
+            "heartflow_decision_scope": heartflow_decision.edit_scope,
             "perception_burst_count": hub.resolve_module_view("perception_group_sense").values["burst_msg_count"],
             "persona_pool_cap": hub.resolve_module_view("persona_controller").values["max_personas"],
             "perception_behavior_cap": hub.resolve_module_view("perception_behavior").values["memory_cap"],

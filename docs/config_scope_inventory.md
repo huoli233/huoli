@@ -27,13 +27,13 @@
 
 | 一级类型 | 中文名 | 三级模块数 | system | mixed | user |
 | --- | --- | --- | --- | --- | --- |
-| dialogue_orchestration | 对话编排 | 15 | 12 | 3 | 0 |
+| dialogue_orchestration | 对话编排 | 15 | 11 | 4 | 0 |
 | emotion_psychology | 情绪与心理 | 3 | 2 | 1 | 0 |
-| identity_persona | 身份与人格 | 9 | 7 | 1 | 1 |
+| identity_persona | 身份与人格 | 9 | 6 | 2 | 1 |
 | interface_observability | 界面与可观测 | 4 | 4 | 0 | 0 |
 | learning_adaptation | 学习与自适应 | 2 | 1 | 1 | 0 |
-| memory_knowledge | 记忆与知识 | 12 | 10 | 2 | 0 |
-| perception_context | 感知与上下文 | 13 | 12 | 1 | 0 |
+| memory_knowledge | 记忆与知识 | 12 | 9 | 3 | 0 |
+| perception_context | 感知与上下文 | 13 | 11 | 2 | 0 |
 | runtime_resources | 运行资源与开关 | 4 | 3 | 1 | 0 |
 | safety_guard | 安全与防护 | 4 | 4 | 0 | 0 |
 | trauma_relation | 创伤与关系 | 12 | 12 | 0 | 0 |
@@ -82,20 +82,20 @@
 | brain_planner | 对话编排 / 路由与生成 | system | 已接入 | - | brain_planner |
 | brain_waiter | 对话编排 / 路由与生成 | system | 已接入 | - | brain_waiter |
 | chat_emotion | 情绪与心理 / 情绪流 | mixed | 已接入 | reply_eagerness_floor | chat_emotion |
-| context | 感知与上下文 / 上下文与视觉 | system | 已接入 | - | context |
+| context | 感知与上下文 / 上下文与视觉 | mixed | 已接入 | reply_context_max_tokens, extra_info_max_tokens, max_context_messages, max_extra_blocks, compressed_context_target_chars | context |
 | energy_runtime | 运行资源与开关 / 能量与触发 | system | 已接入 | - | energy_runtime |
 | frequency_control | 运行资源与开关 / 频控与开关 | system | 已接入 | - | frequency_control |
 | global_shield | 安全与防护 / 保护治理 | system | 已接入 | - | global_shield |
 | harassment_detection | 安全与防护 / 风险检测 | system | 已接入 | - | harassment_detection |
 | heartfc_thresholds | 情绪与心理 / 情绪流 | system | 已接入 | - | heartfc_thresholds |
-| heartflow_decision | 对话编排 / 主动与回复 | system | 已接入 | - | heartflow_decision |
+| heartflow_decision | 对话编排 / 主动与回复 | mixed | 已接入 | bond, tactics, mood_factors | heartflow_decision |
 | heartflow_runtime | 对话编排 / 主动与回复 | mixed | 已接入 | focus_channels, quiet_threshold_sec, max_initiative_per_hour | heartflow_runtime |
-| identity_anchor | 身份与人格 / 身份档案 | system | 已接入 | - | identity_anchor |
+| identity_anchor | 身份与人格 / 身份档案 | mixed | 已接入 | prompt_templates | identity_anchor |
 | identity_bot | 身份与人格 / 身份档案 | mixed | 已接入 | nickname, alias_names, character_age, interests, lore, personality_core, relationships, reply_style, visual_features, identity_templates, role_visual_profiles, skill_prompt_templates | identity_bot |
 | identity_user_persistence | 身份与人格 / 身份档案 | system | 已接入 | - | identity_user_persistence |
 | injection_detection | 安全与防护 / 风险检测 | system | 已接入 | - | injection_detection |
 | inner_voice | 对话编排 / 主动与回复 | mixed | 已接入 | waiting_thoughts, fallback_action | inner_voice |
-| memory | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory |
+| memory | 记忆与知识 / 容量与衰减 | mixed | 已接入 | short_term_limit, temporary_ttl_seconds, reactivation_cooldown_seconds, reactivation_max_candidates, emotion_reactivation_threshold, boredom_reactivation_threshold | memory |
 | memory_capacity | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_capacity |
 | memory_decay | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_decay |
 | memory_dedup | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_dedup |
