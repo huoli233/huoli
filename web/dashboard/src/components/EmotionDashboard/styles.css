@@ -545,6 +545,145 @@ body {
   font-size: 12px;
 }
 
+.panel-config-scope {
+  grid-column: span 2;
+}
+
+.scope-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
+}
+
+.scope-summary-tile {
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(35, 26, 21, 0.04);
+  border: 1px solid rgba(35, 26, 21, 0.08);
+}
+
+.scope-summary-tile span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.scope-summary-tile strong {
+  display: block;
+  margin-top: 8px;
+  font-size: 28px;
+  letter-spacing: -0.03em;
+}
+
+.scope-columns {
+  display: grid;
+  grid-template-columns: 0.9fr 1.3fr 1.2fr;
+  gap: 16px;
+}
+
+.scope-column {
+  min-width: 0;
+}
+
+.scope-column-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.scope-column-header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.scope-column-header span {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.scope-module-list {
+  display: grid;
+  gap: 10px;
+  max-height: 520px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.scope-module-row {
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(35, 26, 21, 0.08);
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.scope-module-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.scope-module-head strong {
+  font-size: 15px;
+}
+
+.scope-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.scope-badge-user {
+  background: rgba(15, 118, 110, 0.14);
+  color: var(--accent-2);
+}
+
+.scope-badge-mixed {
+  background: rgba(217, 119, 6, 0.15);
+  color: var(--warning);
+}
+
+.scope-badge-system {
+  background: rgba(35, 26, 21, 0.08);
+  color: var(--ink);
+}
+
+.scope-domain-text,
+.scope-note {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.scope-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.scope-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.08);
+  color: var(--accent-3);
+  font-size: 12px;
+}
+
 .dashboard-auth-card {
   max-width: 640px;
   margin: 8vh auto 0;
@@ -603,7 +742,9 @@ body {
   .metric-wall,
   .drive-radar,
   .prediction-breakdown,
-  .policy-grid {
+  .policy-grid,
+  .scope-summary-grid,
+  .scope-columns {
     grid-template-columns: 1fr;
   }
 

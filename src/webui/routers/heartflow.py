@@ -5,6 +5,7 @@ from src.chat.heart_flow.heartfc_state_exporter import (
     list_heartfc_chats,
 )
 from src.chat.heart_flow.heartfc_thresholds import get_heartfc_thresholds
+from src.webui.services.config_scope import build_config_scope_snapshot
 from src.webui.services.state_monitor import build_channel_monitor_state, build_monitor_overview
 
 router = APIRouter(prefix="/api/heartflow", tags=["heartflow"])
@@ -49,3 +50,10 @@ async def get_heartflow_thresholds():
     """Return effective HeartFC threshold configuration."""
 
     return {"success": True, "thresholds": get_heartfc_thresholds().to_dict()}
+
+
+@router.get("/config-scope")
+async def get_heartflow_config_scope():
+    """Return config scope metadata for the public dashboard."""
+
+    return {"success": True, "config_scope": build_config_scope_snapshot()}

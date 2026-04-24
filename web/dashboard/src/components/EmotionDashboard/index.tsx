@@ -452,6 +452,28 @@ type OverviewPayload = {
   channels: OverviewChannel[];
 };
 
+type ConfigScopeModule = {
+  module: string;
+  scope: "system" | "mixed" | "user" | string;
+  semantic_domains: string[];
+  user_editable_keys: string[];
+  system_only_keys: string[];
+  editable_key_count: number;
+  system_key_count: number;
+};
+
+type ConfigScopeSnapshot = {
+  updated_at: number;
+  summary: {
+    total: number;
+    system: number;
+    mixed: number;
+    user: number;
+    editable: number;
+  };
+  modules: ConfigScopeModule[];
+};
+
 const severityRank: Record<string, number> = {
   critical: 5,
   high: 4,
@@ -583,13 +605,23 @@ function metricTone(value: number): string {
   return "low";
 }
 
+function scopeLabel(value: string): string {
+  return {
+    user: "用户可改",
+    mixed: "部分可改",
+    system: "系统级",
+  }[value] ?? value;
+}
+
 export function EmotionDashboard() {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [selectedChannel, setSelectedChannel] = useState("");
   const [packet, setPacket] = useState<MonitorPacket | null>(null);
+  const [configScope, setConfigScope] = useState<ConfigScopeSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [connectionState, setConnectionState] = useState("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [configScopeError, setConfigScopeError] = useState("");
   const reconnectTimerRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -627,6 +659,14 @@ export function EmotionDashboard() {
   const dynamicTrace = packet?.presentation?.dynamic_trace ?? [];
   const initiativeState = packet?.presentation?.initiative_state;
   const displayPolicy = packet?.presentation?.display_policy ?? fallbackDisplayPolicy;
+  const configScopeGroups = useMemo(() => {
+    const modules = configScope?.modules ?? [];
+    return {
+      user: modules.filter((item) => item.scope === "user"),
+      mixed: modules.filter((item) => item.scope === "mixed"),
+      system: modules.filter((item) => item.scope === "system"),
+    };
+  }, [configScope]);
   const selectedOverview = (overview?.channels ?? []).find(
     (channel) => channel.channel_id === selectedChannel,
   );
@@ -637,22 +677,33 @@ export function EmotionDashboard() {
     let ignore = false;
 
     async function bootstrap() {
-      try {
-        const monitorResponse = await fetch("/api/heartflow/monitor", {
+      const [monitorResult, scopeResult] = await Promise.allSettled([
+        fetch("/api/heartflow/monitor", {
           credentials: "same-origin",
-        });
-        const monitorData = await monitorResponse.json();
-        if (ignore) {
-          return;
-        }
-        const monitor = monitorData?.monitor as OverviewPayload | undefined;
+        }).then((response) => response.json()),
+        fetch("/api/heartflow/config-scope", {
+          credentials: "same-origin",
+        }).then((response) => response.json()),
+      ]);
+
+      if (ignore) {
+        return;
+      }
+
+      if (monitorResult.status === "fulfilled") {
+        const monitor = monitorResult.value?.monitor as OverviewPayload | undefined;
         setOverview(monitor ?? null);
         const initialChannel = monitor?.channels?.[0]?.channel_id ?? "";
         setSelectedChannel(initialChannel);
-      } catch (error) {
-        if (!ignore) {
-          setErrorMessage(`初始化状态页失败: ${String(error)}`);
-        }
+      } else {
+        setErrorMessage(`初始化状态页失败: ${String(monitorResult.reason)}`);
+      }
+
+      if (scopeResult.status === "fulfilled") {
+        setConfigScope(scopeResult.value?.config_scope ?? null);
+        setConfigScopeError("");
+      } else {
+        setConfigScopeError(`读取配置分级失败: ${String(scopeResult.reason)}`);
       }
     }
 
@@ -1567,6 +1618,85 @@ export function EmotionDashboard() {
               {(displayPolicy?.hidden ?? []).map((item) => <span key={item}>{item}</span>)}
             </div>
           </div>
+        </section>
+
+        <section className="panel panel-config-scope">
+          <div className="panel-header">
+            <h2>配置分级</h2>
+            <span>
+              {configScope
+                ? `${configScope.summary.editable} / ${configScope.summary.total} 可调 · ${formatClock(configScope.updated_at)}`
+                : "等待配置分级"}
+            </span>
+          </div>
+          {!configScope ? (
+            <div className="empty-state">
+              {configScopeError || "正在读取 system / mixed / user 分级..."}
+            </div>
+          ) : (
+            <>
+              <div className="scope-summary-grid">
+                <div className="scope-summary-tile">
+                  <span>总模块</span>
+                  <strong>{configScope.summary.total}</strong>
+                </div>
+                <div className="scope-summary-tile">
+                  <span>系统级</span>
+                  <strong>{configScope.summary.system}</strong>
+                </div>
+                <div className="scope-summary-tile">
+                  <span>部分可改</span>
+                  <strong>{configScope.summary.mixed}</strong>
+                </div>
+                <div className="scope-summary-tile">
+                  <span>用户可改</span>
+                  <strong>{configScope.summary.user}</strong>
+                </div>
+              </div>
+
+              <div className="scope-columns">
+                {(["user", "mixed", "system"] as const).map((scope) => {
+                  const modules = configScopeGroups[scope];
+                  return (
+                    <div className="scope-column" key={scope}>
+                      <div className="scope-column-header">
+                        <h3>{scopeLabel(scope)}</h3>
+                        <span>{modules.length} 个模块</span>
+                      </div>
+                      {modules.length === 0 ? (
+                        <div className="empty-state inline">当前没有这一类模块。</div>
+                      ) : (
+                        <div className="scope-module-list">
+                          {modules.map((item) => (
+                            <article className="scope-module-row" key={item.module}>
+                              <div className="scope-module-head">
+                                <strong>{item.module}</strong>
+                                <span className={`scope-badge scope-badge-${scope}`}>{scopeLabel(scope)}</span>
+                              </div>
+                              <p className="scope-domain-text">
+                                语义域：{item.semantic_domains.length > 0 ? item.semantic_domains.join(", ") : "无"}
+                              </p>
+                              {item.user_editable_keys.length > 0 ? (
+                                <div className="scope-chip-row">
+                                  {item.user_editable_keys.map((key) => (
+                                    <span className="scope-chip" key={`${item.module}-${key}`}>
+                                      {key}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="scope-note">用户不可直接修改，系统锁定 {item.system_key_count} 项。</p>
+                              )}
+                            </article>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
         </section>
 
         <section className="panel panel-timeline">
