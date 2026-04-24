@@ -1912,11 +1912,16 @@ profile_name = "heartflow_decision_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["module_switches"]
 profile_name = "module_switches_view"
+edit_scope = "mixed"
+user_editable_keys = ["heartflow_enabled"]
 
 [profile_mapping.module_views.heartflow_runtime]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["heartflow_runtime"]
 profile_name = "heartflow_runtime_view"
+edit_scope = "mixed"
+user_editable_keys = ["focus_channels"]
+system_only_keys = ["initiative_probability"]
 
 [profile_mapping.module_views.inner_voice]
 base_refs = ["runtime_defaults"]
@@ -2077,6 +2082,9 @@ profile_name = "brain_pfc_goal_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["identity_bot"]
 profile_name = "identity_bot_view"
+edit_scope = "mixed"
+user_editable_keys = ["nickname", "alias_names", "identity_templates", "role_visual_profiles", "skill_prompt_templates"]
+system_only_keys = ["bot_id"]
 
 [profile_mapping.module_views.identity_anchor]
 base_refs = ["runtime_defaults"]
@@ -2102,11 +2110,14 @@ profile_name = "trigger_runtime_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["personality_factors"]
 profile_name = "personality_factors_view"
+edit_scope = "user"
+user_editable_keys = ["sensitivity", "tolerance", "reactiveness", "recovery_speed", "social_warmth", "curiosity_drive", "reply_eagerness"]
 
 [profile_mapping.module_views.social_calculator]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["social_calculator"]
 profile_name = "social_calculator_view"
+edit_scope = "system"
 
 [profile_mapping.module_views.social_settlement]
 base_refs = ["runtime_defaults"]

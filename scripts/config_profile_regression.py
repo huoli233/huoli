@@ -413,9 +413,14 @@ semantic_domains = ["heartflow_decision"]
 
 [profile_mapping.module_views.module_switches]
 semantic_domains = ["module_switches"]
+edit_scope = "mixed"
+user_editable_keys = ["heartflow_enabled"]
 
 [profile_mapping.module_views.heartflow_runtime]
 semantic_domains = ["heartflow_runtime"]
+edit_scope = "mixed"
+user_editable_keys = ["focus_channels"]
+system_only_keys = ["initiative_probability"]
 
 [profile_mapping.module_views.inner_voice]
 semantic_domains = ["inner_voice"]
@@ -512,6 +517,9 @@ semantic_domains = ["brain_pfc_goal"]
 
 [profile_mapping.module_views.identity_bot]
 semantic_domains = ["identity_bot"]
+edit_scope = "mixed"
+user_editable_keys = ["nickname", "alias_names", "identity_templates", "role_visual_profiles", "skill_prompt_templates"]
+system_only_keys = ["bot_id"]
 
 [profile_mapping.module_views.identity_anchor]
 semantic_domains = ["identity_anchor"]
@@ -527,9 +535,12 @@ semantic_domains = ["trigger_runtime"]
 
 [profile_mapping.module_views.personality_factors]
 semantic_domains = ["personality_factors"]
+edit_scope = "user"
+user_editable_keys = ["sensitivity", "tolerance", "reactiveness", "recovery_speed", "social_warmth", "curiosity_drive", "reply_eagerness"]
 
 [profile_mapping.module_views.social_calculator]
 semantic_domains = ["social_calculator"]
+edit_scope = "system"
 
 [profile_mapping.module_views.social_settlement]
 semantic_domains = ["social_settlement"]
@@ -638,6 +649,7 @@ def main() -> None:
 
         schedule = hub.resolve_module_view("schedule")
         assert schedule.fallback_used is False
+        assert schedule.edit_scope == "system"
         assert schedule.values["proactive_reply_cooldown_seconds"] == 45.0
         assert hub.assemble_scheduler_config()["cooldown_sec"] == 45.0
         assert hub.assemble_scheduler_config()["task_cancel_timeout_sec"] == 7.0
@@ -645,8 +657,15 @@ def main() -> None:
         assert hub.resolve_module_view("phase_timing").values["max_idle_wait_seconds"] == 99
         assert hub.resolve_module_view("proactive_decider").values["activation_bar"] == 0.61
         assert hub.resolve_module_view("heartflow_decision").values["heated_pulse_limit"] == 9
-        assert hub.resolve_module_view("module_switches").values["heartflow_enabled"] is True
-        assert hub.resolve_module_view("heartflow_runtime").values["initiative_probability"] == 0.44
+        module_switches = hub.resolve_module_view("module_switches")
+        assert module_switches.values["heartflow_enabled"] is True
+        assert module_switches.edit_scope == "mixed"
+        assert module_switches.user_editable_keys == ("heartflow_enabled",)
+        heartflow_runtime = hub.resolve_module_view("heartflow_runtime")
+        assert heartflow_runtime.values["initiative_probability"] == 0.44
+        assert heartflow_runtime.edit_scope == "mixed"
+        assert heartflow_runtime.user_editable_keys == ("focus_channels",)
+        assert heartflow_runtime.system_only_keys == ("initiative_probability",)
         assert hub.resolve_module_view("inner_voice").values["mention_min_desire"] == 7
         assert hub.resolve_module_view("frequency_control").values["skip_limit"] == 7
         assert hub.resolve_module_view("global_shield").values["default_duration"] == 321.0
@@ -688,8 +707,11 @@ def main() -> None:
         assert hub.resolve_module_view("brain_pfc_reply").values["generation_timeout_seconds"] == 44.0
         assert hub.resolve_module_view("brain_waiter").values["desired_timeout_seconds"] == 222
         assert hub.resolve_module_view("brain_pfc_goal").values["max_goals"] == 5
-        assert hub.resolve_module_view("identity_bot").values["nickname"] == "测试爱丽丝"
-        assert hub.resolve_module_view("identity_bot").values["identity_templates"]["default_persona"] == "你叫{name}。"
+        identity_bot = hub.resolve_module_view("identity_bot")
+        assert identity_bot.values["nickname"] == "测试爱丽丝"
+        assert identity_bot.values["identity_templates"]["default_persona"] == "你叫{name}。"
+        assert identity_bot.edit_scope == "mixed"
+        assert identity_bot.system_only_keys == ("bot_id",)
         assert hub.resolve_module_view("identity_anchor").values["max_history"] == 55
         assert hub.resolve_module_view("identity_anchor").values["prompt_templates"]["default_persona"] == "anchor:{name}"
         assert hub.resolve_module_view("identity_user_persistence").values["storage_dir"] == "tmp/users"
@@ -697,11 +719,16 @@ def main() -> None:
         assert hub.resolve_module_view("energy_runtime").values["decay"]["annoyance_decay_per_min"] == 4.2
         assert hub.resolve_module_view("energy_runtime").values["penalty_caps"]["trauma_cap"] == 0.71
         assert hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"] == 0.91
-        assert hub.resolve_module_view("personality_factors").values["social_warmth"] == 0.77
-        assert hub.resolve_module_view("social_calculator").values["positive_streak_coeff"] == 1.9
-        assert hub.resolve_module_view("social_calculator").values["categories"]["hostile"]["acceleration_multiplier"] == 3.8
-        assert hub.resolve_module_view("social_calculator").values["intents"]["flirt"] == 0.95
-        assert hub.resolve_module_view("social_calculator").values["types"]["existence_threat"]["bonus"] == 2.2
+        personality_factors = hub.resolve_module_view("personality_factors")
+        assert personality_factors.values["social_warmth"] == 0.77
+        assert personality_factors.edit_scope == "user"
+        assert "social_warmth" in personality_factors.user_editable_keys
+        social_calculator = hub.resolve_module_view("social_calculator")
+        assert social_calculator.values["positive_streak_coeff"] == 1.9
+        assert social_calculator.values["categories"]["hostile"]["acceleration_multiplier"] == 3.8
+        assert social_calculator.values["intents"]["flirt"] == 0.95
+        assert social_calculator.values["types"]["existence_threat"]["bonus"] == 2.2
+        assert social_calculator.edit_scope == "system"
         assert hub.resolve_module_view("social_settlement").values["absolute_step_ceil"] == 12.0
         assert hub.resolve_module_view("social_phase_tracker").values["trend_window_sec"] == 2222.0
         assert hub.resolve_module_view("social_phase_tracker").values["phase_weights"]["trusted"] == 1.23
@@ -748,6 +775,7 @@ def main() -> None:
             "memory_keys": sorted(memory.values.keys()),
             "vision_risk_score": reloaded.values["risk_score"],
             "schedule_fallback_used": schedule.fallback_used,
+            "schedule_edit_scope": schedule.edit_scope,
             "schedule_cooldown_sec": hub.assemble_scheduler_config()["cooldown_sec"],
             "model_fail_threshold": hub.resolve_module_view("model_routing").values["model_fail_threshold"],
             "context_reply_tokens": hub.resolve_module_view("context").values["reply_context_max_tokens"],
@@ -765,6 +793,7 @@ def main() -> None:
             "brain_planner_timeout": hub.resolve_module_view("brain_planner").values["planner_timeout_seconds"],
             "brain_waiter_timeout": hub.resolve_module_view("brain_waiter").values["desired_timeout_seconds"],
             "identity_bot_name": hub.resolve_module_view("identity_bot").values["nickname"],
+            "identity_bot_scope": identity_bot.edit_scope,
             "identity_storage_dir": hub.resolve_module_view("identity_user_persistence").values["storage_dir"],
             "energy_chat_ceiling": hub.resolve_module_view("energy_runtime").values["chat_value"]["ceiling"],
             "trigger_overflow_ratio": hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"],
@@ -777,6 +806,7 @@ def main() -> None:
             "social_trusted_weight": hub.resolve_module_view("social_phase_tracker").values["phase_weights"]["trusted"],
             "social_support_cap": hub.resolve_module_view("social_affect_fuser").values["support_relief_cap"],
             "social_core_initial": hub.resolve_module_view("social_value_core").values["social_new_user_initial"],
+            "personality_scope": personality_factors.edit_scope,
             "perception_burst_count": hub.resolve_module_view("perception_group_sense").values["burst_msg_count"],
             "persona_pool_cap": hub.resolve_module_view("persona_controller").values["max_personas"],
             "perception_behavior_cap": hub.resolve_module_view("perception_behavior").values["memory_cap"],

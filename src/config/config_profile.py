@@ -20,6 +20,9 @@ _META_KEYS = {
     "description",
     "note",
     "file_refs",
+    "edit_scope",
+    "user_editable_keys",
+    "system_only_keys",
 }
 
 
@@ -52,6 +55,9 @@ class ModuleConfigView:
     values: Dict[str, Any]
     trace: Tuple[ConfigTrace, ...]
     fallback_used: bool
+    edit_scope: str = "system"
+    user_editable_keys: Tuple[str, ...] = ()
+    system_only_keys: Tuple[str, ...] = ()
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -60,6 +66,9 @@ class ModuleConfigView:
             "values": copy.deepcopy(self.values),
             "trace": [item.to_dict() for item in self.trace],
             "fallback_used": self.fallback_used,
+            "edit_scope": self.edit_scope,
+            "user_editable_keys": list(self.user_editable_keys),
+            "system_only_keys": list(self.system_only_keys),
         }
 
 
@@ -157,6 +166,9 @@ class ConfigProfileResolver:
                     payload_mode="payload",
                 )
                 profile_specific_contributed = True
+        edit_scope, user_editable_keys, system_only_keys = self._resolve_edit_policy(
+            module_view if isinstance(module_view, dict) else {}
+        )
 
         return ModuleConfigView(
             module=module,
@@ -164,6 +176,9 @@ class ConfigProfileResolver:
             values=copy.deepcopy(values),
             trace=tuple(trace),
             fallback_used=legacy_contributed and not profile_specific_contributed,
+            edit_scope=edit_scope,
+            user_editable_keys=user_editable_keys,
+            system_only_keys=system_only_keys,
         )
 
     def _merge_legacy(self, values: Dict[str, Any], trace: list[ConfigTrace]) -> bool:
@@ -273,6 +288,37 @@ class ConfigProfileResolver:
             return {}
         self._external_cache[ref] = copy.deepcopy(data)
         return copy.deepcopy(data)
+
+    def _resolve_edit_policy(
+        self, raw: Dict[str, Any]
+    ) -> Tuple[str, Tuple[str, ...], Tuple[str, ...]]:
+        scope = "system"
+        user_keys: Tuple[str, ...] = ()
+        system_keys: Tuple[str, ...] = ()
+        for file_ref in self._file_refs_from(raw):
+            patch = self._load_file_patch(file_ref)
+            scope, user_keys, system_keys = self._overlay_edit_policy(
+                scope, user_keys, system_keys, patch
+            )
+        return self._overlay_edit_policy(scope, user_keys, system_keys, raw)
+
+    def _overlay_edit_policy(
+        self,
+        scope: str,
+        user_keys: Tuple[str, ...],
+        system_keys: Tuple[str, ...],
+        raw: Dict[str, Any],
+    ) -> Tuple[str, Tuple[str, ...], Tuple[str, ...]]:
+        if not isinstance(raw, dict):
+            return scope, user_keys, system_keys
+        next_scope = str(raw.get("edit_scope", scope) or scope).strip() or "system"
+        next_user_keys = user_keys
+        if "user_editable_keys" in raw:
+            next_user_keys = self._list_from(raw.get("user_editable_keys"))
+        next_system_keys = system_keys
+        if "system_only_keys" in raw:
+            next_system_keys = self._list_from(raw.get("system_only_keys"))
+        return next_scope, next_user_keys, next_system_keys
 
     @staticmethod
     def _merge_with_trace(
