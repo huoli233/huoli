@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Tuple
 
 
@@ -18,6 +19,7 @@ _META_KEYS = {
     "legacy_blocks",
     "description",
     "note",
+    "file_refs",
 }
 
 
@@ -68,9 +70,12 @@ class ConfigProfileResolver:
         self,
         profile_mapping: Optional[Dict[str, Any]] = None,
         legacy_blocks: Optional[Dict[str, Dict[str, Any]]] = None,
+        profile_root: Optional[Path] = None,
     ) -> None:
         self.profile_mapping = copy.deepcopy(profile_mapping or {})
         self.legacy_blocks = copy.deepcopy(legacy_blocks or {})
+        self.profile_root = Path(profile_root) if profile_root is not None else None
+        self._external_cache: Dict[str, Dict[str, Any]] = {}
 
     def resolve(self, module_name: str, scenario: Optional[str] = None) -> ModuleConfigView:
         module = str(module_name).strip()
@@ -88,8 +93,15 @@ class ConfigProfileResolver:
         for ref in ("defaults", *base_refs, module):
             part = self._sub_mapping(base_layer, ref)
             if part:
-                self._merge_with_trace(values, part, trace, "base_parameters", f"base_parameters.{ref}")
-                if ref != "defaults":
+                contributed = self._merge_profile_source(
+                    values,
+                    part,
+                    trace,
+                    "base_parameters",
+                    f"base_parameters.{ref}",
+                    payload_mode="mapping",
+                )
+                if contributed and ref != "defaults":
                     profile_specific_contributed = True
 
         domain_layer = self._layer("semantic_domains")
@@ -99,36 +111,51 @@ class ConfigProfileResolver:
         for domain in self._unique(domain_names):
             part = self._sub_mapping(domain_layer, domain)
             if part:
-                self._merge_with_trace(values, part, trace, "semantic_domains", f"semantic_domains.{domain}")
-                profile_specific_contributed = True
+                if self._merge_profile_source(
+                    values,
+                    part,
+                    trace,
+                    "semantic_domains",
+                    f"semantic_domains.{domain}",
+                    payload_mode="mapping",
+                ):
+                    profile_specific_contributed = True
 
         if scenario:
             scenario_root = self._sub_mapping(self._layer("scenario_profiles"), scenario)
             scenario_defaults = self._payload_from(scenario_root)
-            if scenario_defaults:
-                self._merge_with_trace(
+            if scenario_defaults or self._file_refs_from(scenario_root):
+                self._merge_profile_source(
                     values,
-                    scenario_defaults,
+                    scenario_root,
                     trace,
                     "scenario_profiles",
                     f"scenario_profiles.{scenario}",
+                    payload_mode="payload",
                 )
                 profile_specific_contributed = True
             scenario_module = self._sub_mapping(scenario_root, module)
             if scenario_module:
-                self._merge_with_trace(
+                if self._merge_profile_source(
                     values,
                     scenario_module,
                     trace,
                     "scenario_profiles",
                     f"scenario_profiles.{scenario}.{module}",
-                )
-                profile_specific_contributed = True
+                    payload_mode="mapping",
+                ):
+                    profile_specific_contributed = True
 
         if isinstance(module_view, dict):
-            module_payload = self._payload_from(module_view)
-            if module_payload:
-                self._merge_with_trace(values, module_payload, trace, "module_views", f"module_views.{module}")
+            if self._payload_from(module_view) or self._file_refs_from(module_view):
+                self._merge_profile_source(
+                    values,
+                    module_view,
+                    trace,
+                    "module_views",
+                    f"module_views.{module}",
+                    payload_mode="payload",
+                )
                 profile_specific_contributed = True
 
         return ModuleConfigView(
@@ -164,6 +191,42 @@ class ConfigProfileResolver:
         layer = self._layer(layer_name)
         return self._sub_mapping(layer, key)
 
+    def _merge_profile_source(
+        self,
+        values: Dict[str, Any],
+        raw: Dict[str, Any],
+        trace: list[ConfigTrace],
+        layer: str,
+        source: str,
+        payload_mode: str,
+    ) -> bool:
+        contributed = False
+        for file_ref in self._file_refs_from(raw):
+            patch = self._load_file_patch(file_ref)
+            if not patch:
+                continue
+            self._merge_with_trace(
+                values,
+                patch,
+                trace,
+                layer,
+                f"{source}@{file_ref}",
+                note="external profile file",
+            )
+            contributed = True
+        if payload_mode == "payload":
+            local_patch = self._payload_from(raw)
+        else:
+            local_patch = {
+                key: copy.deepcopy(value)
+                for key, value in raw.items()
+                if key not in _META_KEYS
+            }
+        if local_patch:
+            self._merge_with_trace(values, local_patch, trace, layer, source)
+            contributed = True
+        return contributed
+
     @staticmethod
     def _sub_mapping(root: Dict[str, Any], key: str) -> Dict[str, Any]:
         value = root.get(key) if isinstance(root, dict) else None
@@ -177,6 +240,39 @@ class ConfigProfileResolver:
         if isinstance(payload, dict):
             return copy.deepcopy(payload)
         return copy.deepcopy({k: v for k, v in raw.items() if k not in _META_KEYS and not isinstance(v, dict)})
+
+    def _file_refs_from(self, raw: Dict[str, Any]) -> Tuple[str, ...]:
+        if not isinstance(raw, dict):
+            return ()
+        return self._list_from(raw.get("file_refs"))
+
+    def _load_file_patch(self, file_ref: str) -> Dict[str, Any]:
+        ref = str(file_ref).strip()
+        if not ref:
+            return {}
+        cached = self._external_cache.get(ref)
+        if cached is not None:
+            return copy.deepcopy(cached)
+        if self.profile_root is None:
+            return {}
+        try:
+            path = (self.profile_root / ref).resolve()
+            profile_root = self.profile_root.resolve()
+            path.relative_to(profile_root)
+        except Exception:
+            return {}
+        if not path.exists() or not path.is_file():
+            return {}
+        try:
+            import tomlkit
+
+            with open(path, "r", encoding="utf-8") as fh:
+                parsed = tomlkit.load(fh)
+            data = dict(parsed)
+        except Exception:
+            return {}
+        self._external_cache[ref] = copy.deepcopy(data)
+        return copy.deepcopy(data)
 
     @staticmethod
     def _merge_with_trace(

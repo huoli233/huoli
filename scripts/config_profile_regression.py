@@ -18,6 +18,24 @@ def _write(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
+def _social_calculator_file(
+    hostile_acceleration_multiplier: float,
+    flirt_multiplier: float,
+    existence_threat_bonus: float,
+) -> str:
+    return f"""
+[categories.hostile]
+acceleration_multiplier = {hostile_acceleration_multiplier}
+
+[intents]
+flirt = {flirt_multiplier}
+
+[types.existence_threat]
+category = "hostile"
+bonus = {existence_threat_bonus}
+""".strip()
+
+
 def _config(value: float) -> str:
     return f"""
 [proactive_schedule]
@@ -259,16 +277,7 @@ social_warmth = 0.77
 [profile_mapping.semantic_domains.social_calculator]
 offset_decay_per_hour = 0.23
 positive_streak_coeff = 1.9
-
-[profile_mapping.semantic_domains.social_calculator.categories.hostile]
-acceleration_multiplier = 3.8
-
-[profile_mapping.semantic_domains.social_calculator.intents]
-flirt = 0.95
-
-[profile_mapping.semantic_domains.social_calculator.types.existence_threat]
-category = "hostile"
-bonus = 2.2
+file_refs = ["profile_domains/social/social_calculator.toml"]
 
 [profile_mapping.semantic_domains.social_settlement]
 absolute_step_ceil = 12.0
@@ -598,8 +607,12 @@ def main() -> None:
         template_dir = tmp_path / "template"
         config_path = config_dir / "core_config.toml"
         template_path = template_dir / "core_config_template.toml"
+        config_sidecar_path = config_dir / "profile_domains" / "social" / "social_calculator.toml"
+        template_sidecar_path = template_dir / "profile_domains" / "social" / "social_calculator.toml"
         _write(config_path, _config(0.8))
         _write(template_path, _config(0.8))
+        _write(template_sidecar_path, _social_calculator_file(3.8, 0.95, 2.2))
+        _write(config_sidecar_path, _social_calculator_file(3.8, 0.95, 2.2))
 
         hub = CoreSettingsHub.boot(config_dir=config_dir, template_dir=template_dir)
         memory = hub.resolve_module_view("memory")
@@ -722,6 +735,14 @@ def main() -> None:
         assert hub.hot_reload() is True
         reloaded = hub.resolve_module_view("vision", scenario="image_high_risk")
         assert reloaded.values["risk_score"] == 0.35
+        sleep(1.1)
+        _write(config_sidecar_path, _social_calculator_file(4.1, 1.05, 2.4))
+        os.utime(config_sidecar_path, None)
+        assert hub.hot_reload() is True
+        social_reloaded = hub.resolve_module_view("social_calculator")
+        assert social_reloaded.values["categories"]["hostile"]["acceleration_multiplier"] == 4.1
+        assert social_reloaded.values["intents"]["flirt"] == 1.05
+        assert social_reloaded.values["types"]["existence_threat"]["bonus"] == 2.4
 
         result = {
             "memory_keys": sorted(memory.values.keys()),
@@ -748,9 +769,9 @@ def main() -> None:
             "energy_chat_ceiling": hub.resolve_module_view("energy_runtime").values["chat_value"]["ceiling"],
             "trigger_overflow_ratio": hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"],
             "social_streak_coeff": hub.resolve_module_view("social_calculator").values["positive_streak_coeff"],
-            "social_hostile_accel": hub.resolve_module_view("social_calculator").values["categories"]["hostile"]["acceleration_multiplier"],
-            "social_flirt_multiplier": hub.resolve_module_view("social_calculator").values["intents"]["flirt"],
-            "social_threat_bonus": hub.resolve_module_view("social_calculator").values["types"]["existence_threat"]["bonus"],
+            "social_hostile_accel": social_reloaded.values["categories"]["hostile"]["acceleration_multiplier"],
+            "social_flirt_multiplier": social_reloaded.values["intents"]["flirt"],
+            "social_threat_bonus": social_reloaded.values["types"]["existence_threat"]["bonus"],
             "social_settlement_cap": hub.resolve_module_view("social_settlement").values["absolute_step_ceil"],
             "social_phase_trend_window": hub.resolve_module_view("social_phase_tracker").values["trend_window_sec"],
             "social_trusted_weight": hub.resolve_module_view("social_phase_tracker").values["phase_weights"]["trusted"],
@@ -765,6 +786,15 @@ def main() -> None:
             "trace_layers": sorted({item.layer for item in vision.trace}),
         }
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        CoreSettingsHub.teardown()
+        stamped_config_dir = tmp_path / "stamped_config"
+        stamped_hub = CoreSettingsHub.boot(
+            config_dir=stamped_config_dir,
+            template_dir=template_dir,
+        )
+        assert (stamped_config_dir / "core_config.toml").exists()
+        assert (stamped_config_dir / "profile_domains" / "social" / "social_calculator.toml").exists()
+        assert stamped_hub.resolve_module_view("social_calculator").values["types"]["existence_threat"]["bonus"] == 2.2
     CoreSettingsHub.teardown()
 
 

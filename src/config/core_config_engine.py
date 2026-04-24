@@ -60,11 +60,14 @@ class CoreSettingsHub:
                 return cls._sole_ref
             hub = cls.__new__(cls)
             hub._sections = {}
-            hub._toml_path = (config_dir or _CONFIG_DIR) / _TOML_NAME
-            hub._template_path = (template_dir or _TEMPLATE_DIR) / _TEMPLATE_NAME
+            hub._config_root = Path(config_dir or _CONFIG_DIR)
+            hub._template_root = Path(template_dir or _TEMPLATE_DIR)
+            hub._toml_path = hub._config_root / _TOML_NAME
+            hub._template_path = hub._template_root / _TEMPLATE_NAME
             hub._disk_mtime = 0.0
             hub._slider_cache = {}
             hub._slider_stale = True
+            hub._profile_file_mtimes = {}
             hub._do_init()
             cls._sole_ref = hub
             return hub
@@ -94,6 +97,7 @@ class CoreSettingsHub:
             raise FileNotFoundError(f"配置模板不存在: {self._template_path}")
         self._toml_path.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(self._template_path), str(self._toml_path))
+        self._copy_profile_sidecars_from_template()
         logger.info(f"已从模板部署配置: {self._toml_path}")
 
     def _ingest_disk(self) -> None:
@@ -110,6 +114,7 @@ class CoreSettingsHub:
             self._sections = dict(doc)
             self._disk_mtime = os.path.getmtime(filepath)
             self._slider_stale = True
+            self._profile_file_mtimes = self._snapshot_profile_file_mtimes()
             # 校验段落名称：检测拼写错误或遗留的无效段落
             for section_name in self._sections:
                 if isinstance(self._sections[section_name], dict) and section_name not in self._KNOWN_SECTIONS:
@@ -124,7 +129,8 @@ class CoreSettingsHub:
         if not os.path.exists(filepath):
             return False
         current = os.path.getmtime(filepath)
-        if current <= self._disk_mtime:
+        sidecar_changed = self._profile_sidecars_changed()
+        if current <= self._disk_mtime and not sidecar_changed:
             return False
         logger.info("检测到配置变更，执行热重载")
         self._ingest_disk()
@@ -171,7 +177,10 @@ class CoreSettingsHub:
     def resolve_module_view(self, module_name: str, scenario: Optional[str] = None) -> ModuleConfigView:
         """解析指定模块在当前场景下的配置视图。"""
         profile = self.profile_mapping_block()
-        resolver = ConfigProfileResolver(profile_mapping=profile)
+        resolver = ConfigProfileResolver(
+            profile_mapping=profile,
+            profile_root=self._config_root,
+        )
         return resolver.resolve(module_name, scenario=scenario)
 
     def assemble_decision_config(self) -> Dict[str, Any]:
@@ -502,6 +511,91 @@ class CoreSettingsHub:
             else:
                 merged[k] = copy.deepcopy(v)
         return merged
+
+    def _copy_profile_sidecars_from_template(self) -> None:
+        profile = self._load_profile_mapping(self._template_path)
+        for rel_ref in self._collect_profile_file_refs(profile):
+            src = self._resolve_profile_ref(self._template_root, rel_ref)
+            dst = self._resolve_profile_ref(self._config_root, rel_ref)
+            if src is None or dst is None:
+                continue
+            if not src.exists() or not src.is_file():
+                logger.warning(f"模板侧画像文件缺失，跳过复制: {src}")
+                continue
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(src), str(dst))
+
+    def _snapshot_profile_file_mtimes(self) -> Dict[str, float]:
+        result: Dict[str, float] = {}
+        for rel_ref in self._collect_profile_file_refs(self.profile_mapping_block()):
+            path = self._resolve_profile_ref(self._config_root, rel_ref)
+            if path is None:
+                continue
+            result[rel_ref] = path.stat().st_mtime if path.exists() else -1.0
+        return result
+
+    def _profile_sidecars_changed(self) -> bool:
+        for rel_ref, old_mtime in self._profile_file_mtimes.items():
+            path = self._resolve_profile_ref(self._config_root, rel_ref)
+            if path is None:
+                continue
+            current = path.stat().st_mtime if path.exists() else -1.0
+            if current != old_mtime:
+                return True
+        return False
+
+    @staticmethod
+    def _load_profile_mapping(path: Path) -> Dict[str, Any]:
+        try:
+            import tomlkit
+
+            with open(path, "r", encoding="utf-8") as fh:
+                doc = tomlkit.load(fh)
+            profile = doc.get("profile_mapping")
+            return dict(profile) if isinstance(profile, dict) else {}
+        except Exception:
+            return {}
+
+    @staticmethod
+    def _collect_profile_file_refs(profile_mapping: Dict[str, Any]) -> Tuple[str, ...]:
+        found = []
+
+        def _walk(node: Any) -> None:
+            if isinstance(node, dict):
+                raw_refs = node.get("file_refs")
+                if isinstance(raw_refs, str):
+                    refs = (raw_refs,)
+                elif isinstance(raw_refs, (list, tuple, set)):
+                    refs = tuple(str(item) for item in raw_refs if str(item).strip())
+                else:
+                    refs = ()
+                found.extend(refs)
+                for value in node.values():
+                    _walk(value)
+            elif isinstance(node, list):
+                for item in node:
+                    _walk(item)
+
+        _walk(profile_mapping)
+        seen = set()
+        unique = []
+        for ref in found:
+            if ref in seen:
+                continue
+            seen.add(ref)
+            unique.append(ref)
+        return tuple(unique)
+
+    @staticmethod
+    def _resolve_profile_ref(root: Path, ref: str) -> Optional[Path]:
+        try:
+            base = root.resolve()
+            path = (base / ref).resolve()
+            path.relative_to(base)
+            return path
+        except Exception:
+            logger.warning(f"忽略越界画像文件引用: {ref}")
+            return None
 
 
 def get_core_config() -> CoreSettingsHub:

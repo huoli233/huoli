@@ -1,0 +1,248 @@
+[categories.friendly]
+base_score = 0.5
+max_change_per_reply = 0.02
+acceleration_threshold = 0.8
+acceleration_multiplier = 2.0
+decay_rate = 0.01
+trauma_impact = 0.0
+
+[categories.neutral]
+base_score = 0.0
+max_change_per_reply = 0.01
+acceleration_threshold = 0.95
+acceleration_multiplier = 1.0
+decay_rate = 0.005
+trauma_impact = 0.0
+
+[categories.unfriendly]
+base_score = -1.0
+max_change_per_reply = 0.02
+acceleration_threshold = 0.8
+acceleration_multiplier = 2.5
+decay_rate = 0.015
+trauma_impact = 0.1
+
+[categories.hostile]
+base_score = -3.0
+max_change_per_reply = 0.03
+acceleration_threshold = 0.7
+acceleration_multiplier = 3.0
+decay_rate = 0.02
+trauma_impact = 0.3
+
+[categories.harassing]
+base_score = -5.0
+max_change_per_reply = 0.05
+acceleration_threshold = 0.6
+acceleration_multiplier = 3.5
+decay_rate = 0.03
+trauma_impact = 0.45
+
+[intents]
+compliment = 1.5
+comfort = 1.4
+help = 1.3
+apology = 1.2
+chat = 1.0
+question = 1.0
+criticism = 1.2
+manipulation = 1.5
+insult = 2.0
+threat = 3.0
+bullying = 2.5
+sexual = 3.0
+stalking = 2.5
+tease = 0.5
+flirt = 0.8
+
+[types.genuine_praise]
+category = "friendly"
+bonus = 1.3
+
+[types.casual_compliment]
+category = "friendly"
+bonus = 1.0
+
+[types.encouragement]
+category = "friendly"
+bonus = 1.2
+
+[types.gratitude]
+category = "friendly"
+bonus = 1.1
+
+[types.care_expression]
+category = "friendly"
+bonus = 1.3
+
+[types.sharing_secrets]
+category = "friendly"
+bonus = 1.2
+
+[types.comfort]
+category = "friendly"
+bonus = 1.4
+
+[types.support]
+category = "friendly"
+bonus = 1.2
+
+[types.gentle_humor]
+category = "friendly"
+bonus = 1.0
+
+[types.remembering_details]
+category = "friendly"
+bonus = 1.3
+
+[types.apology]
+category = "friendly"
+bonus = 1.1
+
+[types.affection_expression]
+category = "friendly"
+bonus = 1.4
+
+[types.casual_chat]
+category = "neutral"
+bonus = 1.0
+
+[types.information_request]
+category = "neutral"
+bonus = 1.0
+
+[types.topic_change]
+category = "neutral"
+bonus = 1.0
+
+[types.brief_response]
+category = "neutral"
+bonus = 1.0
+
+[types.factual_statement]
+category = "neutral"
+bonus = 1.0
+
+[types.question]
+category = "neutral"
+bonus = 1.0
+
+[types.observation]
+category = "neutral"
+bonus = 1.0
+
+[types.greeting]
+category = "neutral"
+bonus = 1.0
+
+[types.farewell]
+category = "neutral"
+bonus = 1.0
+
+[types.unclear_intent]
+category = "neutral"
+bonus = 1.0
+
+[types.cold_response]
+category = "unfriendly"
+bonus = 1.0
+
+[types.passive_aggressive]
+category = "unfriendly"
+bonus = 1.3
+
+[types.dismissive]
+category = "unfriendly"
+bonus = 1.1
+
+[types.sarcastic_criticism]
+category = "unfriendly"
+bonus = 1.2
+
+[types.ignoring_boundaries]
+category = "unfriendly"
+bonus = 1.3
+
+[types.condescending]
+category = "unfriendly"
+bonus = 1.2
+
+[types.backhanded_compliment]
+category = "unfriendly"
+bonus = 1.1
+
+[types.manipulation]
+category = "unfriendly"
+bonus = 1.5
+
+[types.gaslighting]
+category = "unfriendly"
+bonus = 1.8
+
+[types.blame_shifting]
+category = "unfriendly"
+bonus = 1.3
+
+[types.direct_insult]
+category = "hostile"
+bonus = 1.0
+
+[types.personal_attack]
+category = "hostile"
+bonus = 1.2
+
+[types.value_denial]
+category = "hostile"
+bonus = 1.5
+
+[types.existence_threat]
+category = "hostile"
+bonus = 1.8
+
+[types.dehumanizing]
+category = "hostile"
+bonus = 1.5
+
+[types.violent_language]
+category = "hostile"
+bonus = 1.3
+
+[types.bullying]
+category = "hostile"
+bonus = 1.4
+
+[types.group_attack]
+category = "hostile"
+bonus = 1.3
+
+[types.sexual_harassment]
+category = "harassing"
+bonus = 1.3
+
+[types.repeated_stalking]
+category = "harassing"
+bonus = 1.2
+
+[types.spam_flooding]
+category = "harassing"
+bonus = 1.0
+
+[types.violent_threat]
+category = "harassing"
+bonus = 1.5
+
+[types.doxxing_threat]
+category = "harassing"
+bonus = 1.8
+
+[types.forced_interaction]
+category = "harassing"
+bonus = 1.2
+
+[types.objectification]
+category = "harassing"
+bonus = 1.3
+
+[types.explicit_content]
+category = "harassing"
+bonus = 1.5
