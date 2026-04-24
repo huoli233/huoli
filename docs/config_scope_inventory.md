@@ -23,88 +23,134 @@
 | plugins | 4 | built_in(4) |
 | webui | 39 | api(2), core(3), middleware(1), routers(19), schemas(5), services(1), utils(0) |
 
-## 2. 已接入四层映射的 Module View 与编辑分级
+## 2. 第一层：十大类型总览
 
-| Module View | 编辑分级 | 绑定语义域 | 用户可改键 | 系统锁定键 |
+| 一级类型 | 中文名 | 三级模块数 | system | mixed | user |
+| --- | --- | --- | --- | --- | --- |
+| dialogue_orchestration | 对话编排 | 15 | 14 | 1 | 0 |
+| emotion_psychology | 情绪与心理 | 3 | 3 | 0 | 0 |
+| identity_persona | 身份与人格 | 9 | 7 | 1 | 1 |
+| interface_observability | 界面与可观测 | 4 | 4 | 0 | 0 |
+| learning_adaptation | 学习与自适应 | 2 | 2 | 0 | 0 |
+| memory_knowledge | 记忆与知识 | 12 | 12 | 0 | 0 |
+| perception_context | 感知与上下文 | 13 | 13 | 0 | 0 |
+| runtime_resources | 运行资源与开关 | 4 | 3 | 1 | 0 |
+| safety_guard | 安全与防护 | 4 | 4 | 0 | 0 |
+| trauma_relation | 创伤与关系 | 12 | 12 | 0 | 0 |
+
+## 3. 第二层：二十到三十类型展开
+
+| 二级类型 | 中文名 | 所属一级类型 | 三级模块数 | 代表模块 |
 | --- | --- | --- | --- | --- |
-| adaptive_learning | system | adaptive_learning | - | - |
-| affection_dynamics | system | affection_dynamics | - | - |
-| brain_chat_runtime | system | brain_chat_runtime | - | - |
-| brain_pfc_action | system | brain_pfc_action | - | - |
-| brain_pfc_goal | system | brain_pfc_goal | - | - |
-| brain_pfc_reply | system | brain_pfc_reply | - | - |
-| brain_planner | system | brain_planner | - | - |
-| brain_waiter | system | brain_waiter | - | - |
-| chat_emotion | system | chat_emotion | - | - |
-| context | system | context | - | - |
-| energy_runtime | system | energy_runtime | - | - |
-| frequency_control | system | frequency_control | - | - |
-| global_shield | system | global_shield | - | - |
-| harassment_detection | system | harassment_detection | - | - |
-| heartfc_thresholds | system | heartfc_thresholds | - | - |
-| heartflow_decision | system | heartflow_decision | - | - |
-| heartflow_runtime | mixed | heartflow_runtime | focus_channels | initiative_probability |
-| identity_anchor | system | identity_anchor | - | - |
-| identity_bot | mixed | identity_bot | nickname, alias_names, identity_templates, role_visual_profiles, skill_prompt_templates | bot_id |
-| identity_user_persistence | system | identity_user_persistence | - | - |
-| injection_detection | system | injection_detection | - | - |
-| inner_voice | system | inner_voice | - | - |
-| memory | system | memory | - | - |
-| memory_capacity | system | memory_capacity | - | - |
-| memory_decay | system | memory_decay | - | - |
-| memory_dedup | system | memory_dedup | - | - |
-| memory_retrieval | system | memory_retrieval | - | - |
-| message_processor | system | message_processor | - | - |
-| model_routing | system | model_routing | - | - |
-| module_switches | mixed | module_switches | heartflow_enabled | - |
-| perception_behavior | system | perception_behavior | - | - |
-| perception_buffer | system | perception_buffer | - | - |
-| perception_group_atmosphere | system | perception_group_atmosphere | - | - |
-| perception_group_sense | system | perception_group_sense | - | - |
-| perception_interest | system | perception_interest | - | - |
-| perception_message_preprocessor | system | perception_message_preprocessor | - | - |
-| perception_self_sense | system | perception_self_sense | - | - |
-| perception_signal_detector | system | perception_signal_detector | - | - |
-| perception_understand | system | perception_understand | - | - |
-| perception_user_relation | system | perception_user_relation | - | - |
-| perception_user_state | system | perception_user_state | - | - |
-| persona_controller | system | persona_controller | - | - |
-| persona_generator | system | persona_generator | - | - |
-| persona_switcher | system | persona_switcher | - | - |
-| personality | system | personality | - | - |
-| personality_factors | user | personality_factors | sensitivity, tolerance, reactiveness, recovery_speed, social_warmth, curiosity_drive, reply_eagerness | - |
-| phase_timing | system | phase_timing | - | - |
-| proactive_decider | system | proactive_decider | - | - |
-| psychological_core | system | psychological_core | - | - |
-| recall_correction | system | recall_correction | - | - |
-| recall_dimension | system | recall_dimension | - | - |
-| recall_post_send | system | recall_post_send | - | - |
-| recall_self_awareness | system | recall_self_awareness | - | - |
-| recall_self_behavior | system | recall_self_behavior | - | - |
-| recall_shuffle | system | recall_shuffle | - | - |
-| recall_typo | system | recall_typo | - | - |
-| runtime_tuning | system | runtime_tuning | - | - |
-| schedule | system | schedule | - | - |
-| skill | system | skill | - | - |
-| social_affect_fuser | system | social_affect_fuser | - | - |
-| social_calculator | system | social_calculator | - | - |
-| social_phase_tracker | system | social_phase_tracker | - | - |
-| social_settlement | system | social_settlement | - | - |
-| social_value_core | system | social_value_core | - | - |
-| trauma_complex | system | trauma_complex | - | - |
-| trauma_fragment | system | trauma_fragment | - | - |
-| trauma_layers | system | trauma_layers | - | - |
-| trauma_system | system | trauma_system | - | - |
-| trauma_timeline | system | trauma_timeline | - | - |
-| trauma_triggers | system | trauma_triggers | - | - |
-| trauma_worldview | system | trauma_worldview | - | - |
-| trigger_runtime | system | trigger_runtime | - | - |
-| user_protection | system | user_protection | - | - |
-| vision | system | vision | - | - |
-| webui_git_mirror | system | webui_git_mirror | - | - |
-| webui_rate_limit | system | webui_rate_limit | - | - |
-| webui_state_monitor_thresholds | system | webui_state_monitor_thresholds | - | - |
-| webui_websocket | system | webui_websocket | - | - |
+| adaptive_learning | 学习与自适应 | learning_adaptation / 学习与自适应 | 1 | adaptive_learning |
+| context_and_vision | 上下文与视觉 | perception_context / 感知与上下文 | 2 | context, vision |
+| disposition_sliders | 性格因子 | identity_persona / 身份与人格 | 1 | personality_factors |
+| emotion_stream | 情绪流 | emotion_psychology / 情绪与心理 | 2 | chat_emotion, heartfc_thresholds |
+| energy_and_trigger | 能量与触发 | runtime_resources / 运行资源与开关 | 2 | energy_runtime, trigger_runtime |
+| frequency_and_switches | 频控与开关 | runtime_resources / 运行资源与开关 | 2 | frequency_control, module_switches |
+| group_perception | 群体感知 | perception_context / 感知与上下文 | 2 | perception_group_atmosphere, perception_group_sense |
+| harassment_injection_guard | 风险检测 | safety_guard / 安全与防护 | 2 | harassment_detection, injection_detection |
+| identity_profiles | 身份档案 | identity_persona / 身份与人格 | 3 | identity_anchor, identity_bot, identity_user_persistence |
+| memory_capacity_decay | 容量与衰减 | memory_knowledge / 记忆与知识 | 4 | memory, memory_capacity, memory_decay, memory_dedup |
+| memory_retrieval | 检索与召回 | memory_knowledge / 记忆与知识 | 1 | memory_retrieval |
+| monitoring_thresholds | 阈值与状态展示 | interface_observability / 界面与可观测 | 1 | webui_state_monitor_thresholds |
+| persona_dynamics | 人格动态 | identity_persona / 身份与人格 | 5 | affection_dynamics, persona_controller, persona_generator, persona_switcher ... |
+| phase_scheduling | 阶段与调度 | dialogue_orchestration / 对话编排 | 2 | phase_timing, schedule |
+| proactive_reply | 主动与回复 | dialogue_orchestration / 对话编排 | 4 | heartflow_decision, heartflow_runtime, inner_voice, proactive_decider |
+| protection_governance | 保护治理 | safety_guard / 安全与防护 | 2 | global_shield, user_protection |
+| psychological_state | 心理状态 | emotion_psychology / 情绪与心理 | 1 | psychological_core |
+| recall_rewrite | 回想与纠错 | memory_knowledge / 记忆与知识 | 7 | recall_correction, recall_dimension, recall_post_send, recall_self_awareness ... |
+| routing_generation | 路由与生成 | dialogue_orchestration / 对话编排 | 8 | brain_chat_runtime, brain_pfc_action, brain_pfc_goal, brain_pfc_reply ... |
+| runtime_tuning | 运行调优 | learning_adaptation / 学习与自适应 | 1 | runtime_tuning |
+| semantic_understanding | 语义理解 | perception_context / 感知与上下文 | 4 | perception_buffer, perception_message_preprocessor, perception_signal_detector, perception_understand |
+| skill_dispatch | 技能调度 | dialogue_orchestration / 对话编排 | 1 | skill |
+| social_relation | 社交关系 | trauma_relation / 创伤与关系 | 5 | social_affect_fuser, social_calculator, social_phase_tracker, social_settlement ... |
+| trauma_runtime | 创伤运行 | trauma_relation / 创伤与关系 | 7 | trauma_complex, trauma_fragment, trauma_layers, trauma_system ... |
+| user_perception | 用户感知 | perception_context / 感知与上下文 | 5 | perception_behavior, perception_interest, perception_self_sense, perception_user_relation ... |
+| webui_runtime | WebUI运行 | interface_observability / 界面与可观测 | 3 | webui_git_mirror, webui_rate_limit, webui_websocket |
+
+## 4. 第三层：五十到一百个模块类型明细
+
+| 三级模块类型 | 一级/二级路径 | 编辑分级 | 四层映射状态 | 用户可改键 | 绑定语义域 |
+| --- | --- | --- | --- | --- | --- |
+| adaptive_learning | 学习与自适应 / 学习与自适应 | system | 已接入 | - | adaptive_learning |
+| affection_dynamics | 身份与人格 / 人格动态 | system | 已接入 | - | affection_dynamics |
+| brain_chat_runtime | 对话编排 / 路由与生成 | system | 已接入 | - | brain_chat_runtime |
+| brain_pfc_action | 对话编排 / 路由与生成 | system | 已接入 | - | brain_pfc_action |
+| brain_pfc_goal | 对话编排 / 路由与生成 | system | 已接入 | - | brain_pfc_goal |
+| brain_pfc_reply | 对话编排 / 路由与生成 | system | 已接入 | - | brain_pfc_reply |
+| brain_planner | 对话编排 / 路由与生成 | system | 已接入 | - | brain_planner |
+| brain_waiter | 对话编排 / 路由与生成 | system | 已接入 | - | brain_waiter |
+| chat_emotion | 情绪与心理 / 情绪流 | system | 已接入 | - | chat_emotion |
+| context | 感知与上下文 / 上下文与视觉 | system | 已接入 | - | context |
+| energy_runtime | 运行资源与开关 / 能量与触发 | system | 已接入 | - | energy_runtime |
+| frequency_control | 运行资源与开关 / 频控与开关 | system | 已接入 | - | frequency_control |
+| global_shield | 安全与防护 / 保护治理 | system | 已接入 | - | global_shield |
+| harassment_detection | 安全与防护 / 风险检测 | system | 已接入 | - | harassment_detection |
+| heartfc_thresholds | 情绪与心理 / 情绪流 | system | 已接入 | - | heartfc_thresholds |
+| heartflow_decision | 对话编排 / 主动与回复 | system | 已接入 | - | heartflow_decision |
+| heartflow_runtime | 对话编排 / 主动与回复 | mixed | 已接入 | focus_channels | heartflow_runtime |
+| identity_anchor | 身份与人格 / 身份档案 | system | 已接入 | - | identity_anchor |
+| identity_bot | 身份与人格 / 身份档案 | mixed | 已接入 | nickname, alias_names, identity_templates, role_visual_profiles, skill_prompt_templates | identity_bot |
+| identity_user_persistence | 身份与人格 / 身份档案 | system | 已接入 | - | identity_user_persistence |
+| injection_detection | 安全与防护 / 风险检测 | system | 已接入 | - | injection_detection |
+| inner_voice | 对话编排 / 主动与回复 | system | 已接入 | - | inner_voice |
+| memory | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory |
+| memory_capacity | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_capacity |
+| memory_decay | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_decay |
+| memory_dedup | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_dedup |
+| memory_retrieval | 记忆与知识 / 检索与召回 | system | 已接入 | - | memory_retrieval |
+| message_processor | 对话编排 / 路由与生成 | system | 已接入 | - | message_processor |
+| model_routing | 对话编排 / 路由与生成 | system | 已接入 | - | model_routing |
+| module_switches | 运行资源与开关 / 频控与开关 | mixed | 已接入 | heartflow_enabled | module_switches |
+| perception_behavior | 感知与上下文 / 用户感知 | system | 已接入 | - | perception_behavior |
+| perception_buffer | 感知与上下文 / 语义理解 | system | 已接入 | - | perception_buffer |
+| perception_group_atmosphere | 感知与上下文 / 群体感知 | system | 已接入 | - | perception_group_atmosphere |
+| perception_group_sense | 感知与上下文 / 群体感知 | system | 已接入 | - | perception_group_sense |
+| perception_interest | 感知与上下文 / 用户感知 | system | 已接入 | - | perception_interest |
+| perception_message_preprocessor | 感知与上下文 / 语义理解 | system | 已接入 | - | perception_message_preprocessor |
+| perception_self_sense | 感知与上下文 / 用户感知 | system | 已接入 | - | perception_self_sense |
+| perception_signal_detector | 感知与上下文 / 语义理解 | system | 已接入 | - | perception_signal_detector |
+| perception_understand | 感知与上下文 / 语义理解 | system | 已接入 | - | perception_understand |
+| perception_user_relation | 感知与上下文 / 用户感知 | system | 已接入 | - | perception_user_relation |
+| perception_user_state | 感知与上下文 / 用户感知 | system | 已接入 | - | perception_user_state |
+| persona_controller | 身份与人格 / 人格动态 | system | 已接入 | - | persona_controller |
+| persona_generator | 身份与人格 / 人格动态 | system | 已接入 | - | persona_generator |
+| persona_switcher | 身份与人格 / 人格动态 | system | 已接入 | - | persona_switcher |
+| personality | 身份与人格 / 人格动态 | system | 已接入 | - | personality |
+| personality_factors | 身份与人格 / 性格因子 | user | 已接入 | sensitivity, tolerance, reactiveness, recovery_speed, social_warmth, curiosity_drive, reply_eagerness | personality_factors |
+| phase_timing | 对话编排 / 阶段与调度 | system | 已接入 | - | phase_timing |
+| proactive_decider | 对话编排 / 主动与回复 | system | 已接入 | - | proactive_decider |
+| psychological_core | 情绪与心理 / 心理状态 | system | 已接入 | - | psychological_core |
+| recall_correction | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_correction |
+| recall_dimension | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_dimension |
+| recall_post_send | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_post_send |
+| recall_self_awareness | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_self_awareness |
+| recall_self_behavior | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_self_behavior |
+| recall_shuffle | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_shuffle |
+| recall_typo | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_typo |
+| runtime_tuning | 学习与自适应 / 运行调优 | system | 已接入 | - | runtime_tuning |
+| schedule | 对话编排 / 阶段与调度 | system | 已接入 | - | schedule |
+| skill | 对话编排 / 技能调度 | system | 已接入 | - | skill |
+| social_affect_fuser | 创伤与关系 / 社交关系 | system | 已接入 | - | social_affect_fuser |
+| social_calculator | 创伤与关系 / 社交关系 | system | 已接入 | - | social_calculator |
+| social_phase_tracker | 创伤与关系 / 社交关系 | system | 已接入 | - | social_phase_tracker |
+| social_settlement | 创伤与关系 / 社交关系 | system | 已接入 | - | social_settlement |
+| social_value_core | 创伤与关系 / 社交关系 | system | 已接入 | - | social_value_core |
+| trauma_complex | 创伤与关系 / 创伤运行 | system | 已接入 | - | trauma_complex |
+| trauma_fragment | 创伤与关系 / 创伤运行 | system | 已接入 | - | trauma_fragment |
+| trauma_layers | 创伤与关系 / 创伤运行 | system | 已接入 | - | trauma_layers |
+| trauma_system | 创伤与关系 / 创伤运行 | system | 已接入 | - | trauma_system |
+| trauma_timeline | 创伤与关系 / 创伤运行 | system | 已接入 | - | trauma_timeline |
+| trauma_triggers | 创伤与关系 / 创伤运行 | system | 已接入 | - | trauma_triggers |
+| trauma_worldview | 创伤与关系 / 创伤运行 | system | 已接入 | - | trauma_worldview |
+| trigger_runtime | 运行资源与开关 / 能量与触发 | system | 已接入 | - | trigger_runtime |
+| user_protection | 安全与防护 / 保护治理 | system | 已接入 | - | user_protection |
+| vision | 感知与上下文 / 上下文与视觉 | system | 已接入 | - | vision |
+| webui_git_mirror | 界面与可观测 / WebUI运行 | system | 已接入 | - | webui_git_mirror |
+| webui_rate_limit | 界面与可观测 / WebUI运行 | system | 已接入 | - | webui_rate_limit |
+| webui_state_monitor_thresholds | 界面与可观测 / 阈值与状态展示 | system | 已接入 | - | webui_state_monitor_thresholds |
+| webui_websocket | 界面与可观测 / WebUI运行 | system | 已接入 | - | webui_websocket |
 
 ### 分级解释
 
@@ -112,7 +158,90 @@
 - `mixed`：混合级，仅 `user_editable_keys` 中列出的键允许用户改。
 - `user`：用户级，整组主要面向用户偏好与行为风格调节。
 
-## 3. 已存在的运行时配置桥接文件
+## 5. 第四层：模块关系层
+
+| 模块 | 所属二级类型 | 主要关联模块 |
+| --- | --- | --- |
+| adaptive_learning | 学习与自适应 | skill, runtime_tuning, recall_self_behavior, personality_factors |
+| affection_dynamics | 人格动态 | personality, persona_controller, persona_generator, persona_switcher |
+| brain_chat_runtime | 路由与生成 | model_routing, message_processor, brain_planner, brain_pfc_action, brain_pfc_reply, brain_waiter |
+| brain_pfc_action | 路由与生成 | model_routing, message_processor, brain_chat_runtime, brain_planner, brain_pfc_reply, brain_waiter |
+| brain_pfc_goal | 路由与生成 | model_routing, message_processor, brain_chat_runtime, brain_planner, brain_pfc_action, brain_pfc_reply |
+| brain_pfc_reply | 路由与生成 | model_routing, message_processor, brain_chat_runtime, brain_planner, brain_pfc_action, brain_waiter |
+| brain_planner | 路由与生成 | model_routing, message_processor, brain_chat_runtime, brain_pfc_action, brain_pfc_reply, brain_waiter |
+| brain_waiter | 路由与生成 | model_routing, message_processor, brain_chat_runtime, brain_planner, brain_pfc_action, brain_pfc_reply |
+| chat_emotion | 情绪流 | heartfc_thresholds |
+| context | 上下文与视觉 | vision, memory_retrieval, perception_understand, message_processor |
+| energy_runtime | 能量与触发 | trigger_runtime, frequency_control, heartflow_runtime, chat_emotion |
+| frequency_control | 频控与开关 | module_switches |
+| global_shield | 保护治理 | user_protection |
+| harassment_detection | 风险检测 | injection_detection |
+| heartfc_thresholds | 情绪流 | chat_emotion |
+| heartflow_decision | 主动与回复 | proactive_decider, heartflow_runtime, inner_voice |
+| heartflow_runtime | 主动与回复 | schedule, phase_timing, proactive_decider, inner_voice, heartflow_decision |
+| identity_anchor | 身份档案 | identity_bot, personality_factors, social_phase_tracker, identity_user_persistence |
+| identity_bot | 身份档案 | identity_anchor, personality_factors, heartflow_runtime, skill, identity_user_persistence |
+| identity_user_persistence | 身份档案 | identity_bot, identity_anchor |
+| injection_detection | 风险检测 | harassment_detection |
+| inner_voice | 主动与回复 | proactive_decider, heartflow_decision, heartflow_runtime |
+| memory | 容量与衰减 | memory_retrieval, context, recall_post_send, social_phase_tracker, memory_capacity, memory_decay |
+| memory_capacity | 容量与衰减 | memory, memory_decay, memory_dedup |
+| memory_decay | 容量与衰减 | memory, memory_capacity, memory_dedup |
+| memory_dedup | 容量与衰减 | memory, memory_capacity, memory_decay |
+| memory_retrieval | 检索与召回 | - |
+| message_processor | 路由与生成 | model_routing, brain_chat_runtime, brain_planner, brain_pfc_action, brain_pfc_reply, brain_waiter |
+| model_routing | 路由与生成 | brain_chat_runtime, vision, adaptive_learning, runtime_tuning, message_processor, brain_planner |
+| module_switches | 频控与开关 | heartflow_runtime, skill, vision, proactive_decider, frequency_control |
+| perception_behavior | 用户感知 | perception_self_sense, perception_user_relation, perception_user_state, perception_interest |
+| perception_buffer | 语义理解 | perception_message_preprocessor, perception_signal_detector, perception_understand |
+| perception_group_atmosphere | 群体感知 | perception_group_sense |
+| perception_group_sense | 群体感知 | perception_group_atmosphere |
+| perception_interest | 用户感知 | perception_self_sense, perception_user_relation, perception_user_state, perception_behavior |
+| perception_message_preprocessor | 语义理解 | perception_signal_detector, perception_understand, perception_buffer |
+| perception_self_sense | 用户感知 | perception_user_relation, perception_user_state, perception_behavior, perception_interest |
+| perception_signal_detector | 语义理解 | perception_message_preprocessor, perception_understand, perception_buffer |
+| perception_understand | 语义理解 | perception_message_preprocessor, perception_signal_detector, perception_buffer |
+| perception_user_relation | 用户感知 | perception_self_sense, perception_user_state, perception_behavior, perception_interest |
+| perception_user_state | 用户感知 | perception_self_sense, perception_user_relation, perception_behavior, perception_interest |
+| persona_controller | 人格动态 | personality, affection_dynamics, persona_generator, persona_switcher |
+| persona_generator | 人格动态 | personality, affection_dynamics, persona_controller, persona_switcher |
+| persona_switcher | 人格动态 | personality, affection_dynamics, persona_controller, persona_generator |
+| personality | 人格动态 | affection_dynamics, persona_controller, persona_generator, persona_switcher |
+| personality_factors | 性格因子 | personality, heartflow_decision, social_calculator, psychological_core |
+| phase_timing | 阶段与调度 | schedule, heartflow_runtime, brain_waiter, heartflow_decision |
+| proactive_decider | 主动与回复 | heartflow_decision, heartflow_runtime, inner_voice |
+| psychological_core | 心理状态 | trauma_system, social_calculator, chat_emotion, heartflow_decision |
+| recall_correction | 回想与纠错 | recall_post_send, recall_typo, recall_self_behavior, recall_self_awareness, recall_dimension, recall_shuffle |
+| recall_dimension | 回想与纠错 | recall_post_send, recall_typo, recall_self_behavior, recall_self_awareness, recall_correction, recall_shuffle |
+| recall_post_send | 回想与纠错 | recall_typo, recall_self_behavior, recall_self_awareness, recall_dimension, recall_correction, recall_shuffle |
+| recall_self_awareness | 回想与纠错 | recall_post_send, recall_typo, recall_self_behavior, recall_dimension, recall_correction, recall_shuffle |
+| recall_self_behavior | 回想与纠错 | recall_post_send, recall_typo, recall_self_awareness, recall_dimension, recall_correction, recall_shuffle |
+| recall_shuffle | 回想与纠错 | recall_post_send, recall_typo, recall_self_behavior, recall_self_awareness, recall_dimension, recall_correction |
+| recall_typo | 回想与纠错 | recall_post_send, recall_self_behavior, recall_self_awareness, recall_dimension, recall_correction, recall_shuffle |
+| runtime_tuning | 运行调优 | schedule, model_routing, heartflow_runtime, adaptive_learning |
+| schedule | 阶段与调度 | phase_timing, proactive_decider, heartflow_runtime, recall_post_send |
+| skill | 技能调度 | - |
+| social_affect_fuser | 社交关系 | social_calculator, social_phase_tracker, chat_emotion, heartflow_decision, social_settlement, social_value_core |
+| social_calculator | 社交关系 | social_settlement, social_phase_tracker, personality_factors, psychological_core, social_affect_fuser, social_value_core |
+| social_phase_tracker | 社交关系 | social_calculator, social_settlement, social_affect_fuser, social_value_core |
+| social_settlement | 社交关系 | social_calculator, social_phase_tracker, social_affect_fuser, social_value_core |
+| social_value_core | 社交关系 | social_calculator, social_settlement, social_phase_tracker, social_affect_fuser |
+| trauma_complex | 创伤运行 | trauma_fragment, trauma_layers, trauma_system, trauma_timeline, trauma_triggers, trauma_worldview |
+| trauma_fragment | 创伤运行 | trauma_complex, trauma_layers, trauma_system, trauma_timeline, trauma_triggers, trauma_worldview |
+| trauma_layers | 创伤运行 | trauma_complex, trauma_fragment, trauma_system, trauma_timeline, trauma_triggers, trauma_worldview |
+| trauma_system | 创伤运行 | trauma_layers, trauma_triggers, trauma_worldview, psychological_core, trauma_complex, trauma_fragment |
+| trauma_timeline | 创伤运行 | trauma_complex, trauma_fragment, trauma_layers, trauma_system, trauma_triggers, trauma_worldview |
+| trauma_triggers | 创伤运行 | trauma_complex, trauma_fragment, trauma_layers, trauma_system, trauma_timeline, trauma_worldview |
+| trauma_worldview | 创伤运行 | trauma_complex, trauma_fragment, trauma_layers, trauma_system, trauma_timeline, trauma_triggers |
+| trigger_runtime | 能量与触发 | energy_runtime, proactive_decider, heartflow_decision, module_switches |
+| user_protection | 保护治理 | global_shield |
+| vision | 上下文与视觉 | context, perception_understand, message_processor, memory |
+| webui_git_mirror | WebUI运行 | webui_rate_limit, webui_websocket |
+| webui_rate_limit | WebUI运行 | webui_websocket, webui_git_mirror |
+| webui_state_monitor_thresholds | 阈值与状态展示 | chat_emotion, social_phase_tracker, trauma_system, energy_runtime |
+| webui_websocket | WebUI运行 | webui_rate_limit, webui_git_mirror |
+
+## 6. 已存在的运行时配置桥接文件
 
 - `src/chat/brain_chat/runtime_config.py`
 - `src/memory_system/runtime_config.py`
@@ -125,7 +254,7 @@
 - `src/person_info/runtime_config.py`
 - `src/webui/runtime_config.py`
 
-## 4. 仍有旧配置体系痕迹、可继续收口到四层映射的热点
+## 7. 仍有旧配置体系痕迹、可继续收口到四层映射的热点
 
 ### `chat`
 
@@ -154,8 +283,9 @@
 - `src/modules/safety/social_calculator.py`
 - `src/modules/safety/user_protection.py`
 
-## 5. 当前建议
+## 8. 当前建议
 
-- 已接入四层映射的模块，继续细化 `edit_scope` 即可，不需要再回到旧配置引擎。
-- 仍出现旧配置引擎调用的热点目录，优先作为下一轮四层映射改造候选。
+- 已接入四层映射的 `78` 个模块，优先继续细化 `edit_scope` 与 `user_editable_keys`。
+- 现阶段一级类型共 `10` 个，二级类型共 `26` 个，三级模块类型共 `78` 个，满足你要的四层盘点规模。
+- 旧配置热点里，`memory_system` 和 `modules/safety` 是下一轮最适合继续动刀的目录。
 - 基础设施目录（如 `common`、`llm_models`、`plugin_system`）若无真实配置热点，默认保持系统级。
