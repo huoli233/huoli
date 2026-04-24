@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
+from src.modules.perception.runtime_config import perception_module_view
 
 logger = get_logger("behavior_analyzer")
 
@@ -53,20 +53,19 @@ class BehaviorDigest:
 
 class SentimentTracker:
     def __init__(self, config_engine=None):
-        self._config = config_engine or get_default_config_engine()
+        del config_engine
         self._user_samples: Dict[str, Deque[SentimentSample]] = {}
         self._window_size: int = 200
         self._trend_threshold: float = 0.15
         self._load_config()
 
     def _load_config(self) -> None:
+        config = perception_module_view("perception_behavior")
         self._window_size = int(
-            self._config.get("behavior_analyzer", "sentiment_window_size", 200)
+            config.get("sentiment_window_size", 200)
         )
         self._trend_threshold = float(
-            self._config.get(
-                "behavior_analyzer", "sentiment_trend_threshold", 0.15
-            )
+            config.get("sentiment_trend_threshold", 0.15)
         )
 
     def record(self, uid: str, polarity: float) -> None:
@@ -105,20 +104,19 @@ class SentimentTracker:
 
 class InterestProfiler:
     def __init__(self, config_engine=None):
-        self._config = config_engine or get_default_config_engine()
+        del config_engine
         self._user_interests: Dict[str, List[InterestEntry]] = {}
         self._decay_factor: float = 0.95
         self._min_weight_threshold: float = 0.1
         self._load_config()
 
     def _load_config(self) -> None:
+        config = perception_module_view("perception_behavior")
         self._decay_factor = float(
-            self._config.get(
-                "behavior_analyzer", "interest_decay_factor", 0.95
-            )
+            config.get("interest_decay_factor", 0.95)
         )
         self._min_weight_threshold = float(
-            self._config.get("behavior_analyzer", "interest_min_weight", 0.1)
+            config.get("interest_min_weight", 0.1)
         )
 
     def record_topic(self, uid: str, topic: str, weight: float = 1.0) -> None:
@@ -154,7 +152,7 @@ class InterestProfiler:
 
 class InteractionMemoryBank:
     def __init__(self, config_engine=None, cap: int = 60):
-        self._config = config_engine or get_default_config_engine()
+        del config_engine
         self._cap = cap
         self._user_memories: Dict[str, List[MemoryNote]] = {}
 
@@ -198,31 +196,26 @@ class InteractionMemoryBank:
 
 class UnifiedBehaviorAnalyzer:
     def __init__(self, config_engine=None):
-        self._config = config_engine or get_default_config_engine()
+        del config_engine
         self._memory_cap: int = 60
         self._load_config()
-        self.sentiment = SentimentTracker(self._config)
-        self.interests = InterestProfiler(self._config)
-        self.memory_bank = InteractionMemoryBank(
-            self._config, cap=self._memory_cap
-        )
+        self.sentiment = SentimentTracker()
+        self.interests = InterestProfiler()
+        self.memory_bank = InteractionMemoryBank(cap=self._memory_cap)
         self._message_timestamps: Dict[str, Deque[float]] = {}
         self._positive_threshold: float = 0.3
         self._negative_threshold: float = -0.3
 
     def _load_config(self) -> None:
+        config = perception_module_view("perception_behavior")
         self._memory_cap = int(
-            self._config.get("behavior_analyzer", "memory_cap", 60)
+            config.get("memory_cap", 60)
         )
         self._positive_threshold = float(
-            self._config.get(
-                "behavior_analyzer", "positive_polarity_threshold", 0.3
-            )
+            config.get("positive_polarity_threshold", 0.3)
         )
         self._negative_threshold = float(
-            self._config.get(
-                "behavior_analyzer", "negative_polarity_threshold", -0.3
-            )
+            config.get("negative_polarity_threshold", -0.3)
         )
 
     def ingest(

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
+from src.modules.perception.runtime_config import perception_list, perception_module_view
 
 logger = get_logger("消息预处理")
 
@@ -71,7 +71,7 @@ class StandardMessage:
 
 class MessagePreprocessor:
     def __init__(self, config_engine=None):
-        self._config = config_engine or get_default_config_engine()
+        del config_engine
         self._spam_interval_threshold: float = 2.0
         self._activity_burst_count: int = 15
         self._activity_burst_span: float = 120.0
@@ -85,35 +85,48 @@ class MessagePreprocessor:
         self._load_config()
 
     def _load_config(self) -> None:
+        config = perception_module_view("perception_message_preprocessor")
         self._spam_interval_threshold = float(
-            self._config.get("preprocessor", "spam_interval_threshold", 2.0)
+            config.get("spam_interval_threshold", 2.0)
         )
         self._activity_burst_count = int(
-            self._config.get("preprocessor", "activity_burst_count", 15)
+            config.get("activity_burst_count", 15)
         )
         self._activity_burst_span = float(
-            self._config.get("preprocessor", "activity_burst_span", 120.0)
+            config.get("activity_burst_span", 120.0)
         )
         self._activity_burst_users = int(
-            self._config.get("preprocessor", "activity_burst_users", 4)
+            config.get("activity_burst_users", 4)
         )
         self._activity_active_count = int(
-            self._config.get("preprocessor", "activity_active_count", 6)
+            config.get("activity_active_count", 6)
         )
         self._activity_active_users = int(
-            self._config.get("preprocessor", "activity_active_users", 3)
+            config.get("activity_active_users", 3)
         )
         self._activity_stable_count = int(
-            self._config.get("preprocessor", "activity_stable_count", 2)
+            config.get("activity_stable_count", 2)
         )
         self._text_max_length = int(
-            self._config.get("preprocessor", "message_text_max_length", 100)
+            config.get("message_text_max_length", 100)
         )
         self._quote_max_length = int(
-            self._config.get("preprocessor", "quote_max_length", 50)
+            config.get("quote_max_length", 50)
         )
         self._forward_max_items = int(
-            self._config.get("preprocessor", "forward_summary_max_items", 3)
+            config.get("forward_summary_max_items", 3)
+        )
+        self._bot_aliases = perception_list(
+            "perception_message_preprocessor", "bot_aliases", []
+        )
+        self._spam_same_user_threshold = int(
+            config.get("spam_same_user_threshold", 5)
+        )
+        self._spam_same_user_window = float(
+            config.get("spam_same_user_window", 30)
+        )
+        self._spam_repeat_threshold = int(
+            config.get("spam_repeat_threshold", 3)
         )
 
     def process(
@@ -185,9 +198,8 @@ class MessagePreprocessor:
         if not pm.is_at_me and bot_name and raw_text:
             if bot_name in raw_text:
                 pm.is_at_me = True
-            aliases = self._config.get("preprocessor", "bot_aliases", [])
-            if aliases:
-                for alias in aliases:
+            if self._bot_aliases:
+                for alias in self._bot_aliases:
                     if alias and alias in raw_text:
                         pm.is_at_me = True
                         break
@@ -260,15 +272,9 @@ class MessagePreprocessor:
     ) -> Tuple[bool, str]:
         if len(messages) < 3:
             return False, "正常"
-        same_user_threshold = int(
-            self._config.get("preprocessor", "spam_same_user_threshold", 5)
-        )
-        window_seconds = float(
-            self._config.get("preprocessor", "spam_same_user_window", 30)
-        )
-        repeat_threshold = int(
-            self._config.get("preprocessor", "spam_repeat_threshold", 3)
-        )
+        same_user_threshold = self._spam_same_user_threshold
+        window_seconds = self._spam_same_user_window
+        repeat_threshold = self._spam_repeat_threshold
         user_recent_counts: Counter = Counter()
         for msg in messages:
             if msg.timestamp > 0 and (now - msg.timestamp) <= window_seconds:

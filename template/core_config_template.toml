@@ -1636,6 +1636,54 @@ transition_phase_1_ratio = 0.2
 transition_phase_2_ratio = 0.6
 transition_phase_3_ratio = 0.2
 
+[profile_mapping.semantic_domains.perception_behavior]
+sentiment_window_size = 200
+sentiment_trend_threshold = 0.15
+interest_decay_factor = 0.95
+interest_min_weight = 0.1
+memory_cap = 60
+positive_polarity_threshold = 0.3
+negative_polarity_threshold = -0.3
+
+[profile_mapping.semantic_domains.perception_buffer]
+recent_show_count = 5
+recent_max_char_length = 50
+
+[profile_mapping.semantic_domains.perception_group_atmosphere]
+max_history = 100
+decay_rate = 0.1
+
+[profile_mapping.semantic_domains.perception_interest]
+novelty_weight = 0.5
+relevance_weight = 0.5
+high_threshold = 0.7
+
+[profile_mapping.semantic_domains.perception_message_preprocessor]
+spam_interval_threshold = 2.0
+activity_burst_count = 15
+activity_burst_span = 120.0
+activity_burst_users = 4
+activity_active_count = 6
+activity_active_users = 3
+activity_stable_count = 2
+message_text_max_length = 100
+quote_max_length = 50
+forward_summary_max_items = 3
+bot_aliases = []
+spam_same_user_threshold = 5
+spam_same_user_window = 30
+spam_repeat_threshold = 3
+
+[profile_mapping.semantic_domains.perception_signal_detector]
+medium_threshold = 10
+strong_at_threshold = 1
+name_match_enabled = true
+max_history = 50
+
+[profile_mapping.semantic_domains.perception_understand]
+cache_ttl = 60.0
+cache_max_size = 1000
+
 [profile_mapping.semantic_domains.heartflow_runtime]
 focus_channels = []
 initiative_interval_sec = 300.0
@@ -2009,3 +2057,38 @@ profile_name = "persona_generator_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["persona_switcher"]
 profile_name = "persona_switcher_view"
+
+[profile_mapping.module_views.perception_behavior]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["perception_behavior"]
+profile_name = "perception_behavior_view"
+
+[profile_mapping.module_views.perception_buffer]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["perception_buffer"]
+profile_name = "perception_buffer_view"
+
+[profile_mapping.module_views.perception_group_atmosphere]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["perception_group_atmosphere"]
+profile_name = "perception_group_atmosphere_view"
+
+[profile_mapping.module_views.perception_interest]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["perception_interest"]
+profile_name = "perception_interest_view"
+
+[profile_mapping.module_views.perception_message_preprocessor]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["perception_message_preprocessor"]
+profile_name = "perception_message_preprocessor_view"
+
+[profile_mapping.module_views.perception_signal_detector]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["perception_signal_detector"]
+profile_name = "perception_signal_detector_view"
+
+[profile_mapping.module_views.perception_understand]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["perception_understand"]
+profile_name = "perception_understand_view"

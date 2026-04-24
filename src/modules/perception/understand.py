@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
+from src.modules.perception.runtime_config import perception_module_view
 
 logger = get_logger("understand")
 
@@ -70,7 +70,7 @@ class ModelUnderstand:
         prompt_manager: Optional[PromptManagerInterface] = None,
         model_client: Optional[ModelInterface] = None,
     ):
-        self._config = config_engine or get_default_config_engine()
+        del config_engine
         self._prompts = prompt_manager or DefaultPromptManager()
         self._model_client = model_client or DefaultModelInterface()
         self._cache: Dict[str, UnderstandResult] = {}
@@ -79,11 +79,12 @@ class ModelUnderstand:
         self._load_config()
 
     def _load_config(self) -> None:
+        config = perception_module_view("perception_understand")
         self._cache_ttl = float(
-            self._config.get("understand", "cache_ttl", 60.0)
+            config.get("cache_ttl", 60.0)
         )
         self._cache_max_size = int(
-            self._config.get("understand", "cache_max_size", 1000)
+            config.get("cache_max_size", 1000)
         )
 
     def set_model_client(self, client: ModelInterface) -> None:

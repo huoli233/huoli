@@ -284,6 +284,28 @@ switch_cooldown = 240.0
 transition_duration_seconds = 44.0
 primary_base_weight = 0.55
 
+[profile_mapping.semantic_domains.perception_behavior]
+memory_cap = 77
+
+[profile_mapping.semantic_domains.perception_buffer]
+recent_show_count = 8
+
+[profile_mapping.semantic_domains.perception_group_atmosphere]
+max_history = 66
+
+[profile_mapping.semantic_domains.perception_interest]
+high_threshold = 0.82
+
+[profile_mapping.semantic_domains.perception_message_preprocessor]
+message_text_max_length = 88
+bot_aliases = ["阿活"]
+
+[profile_mapping.semantic_domains.perception_signal_detector]
+strong_at_threshold = 2
+
+[profile_mapping.semantic_domains.perception_understand]
+cache_ttl = 88.0
+
 [profile_mapping.semantic_domains.skill]
 trial_to_active_invocations = 6
 runtime_skill_cost = 0.4
@@ -478,6 +500,27 @@ semantic_domains = ["persona_generator"]
 [profile_mapping.module_views.persona_switcher]
 semantic_domains = ["persona_switcher"]
 
+[profile_mapping.module_views.perception_behavior]
+semantic_domains = ["perception_behavior"]
+
+[profile_mapping.module_views.perception_buffer]
+semantic_domains = ["perception_buffer"]
+
+[profile_mapping.module_views.perception_group_atmosphere]
+semantic_domains = ["perception_group_atmosphere"]
+
+[profile_mapping.module_views.perception_interest]
+semantic_domains = ["perception_interest"]
+
+[profile_mapping.module_views.perception_message_preprocessor]
+semantic_domains = ["perception_message_preprocessor"]
+
+[profile_mapping.module_views.perception_signal_detector]
+semantic_domains = ["perception_signal_detector"]
+
+[profile_mapping.module_views.perception_understand]
+semantic_domains = ["perception_understand"]
+
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
 
@@ -593,6 +636,14 @@ def main() -> None:
         assert hub.resolve_module_view("persona_controller").values["max_personas"] == 12
         assert hub.resolve_module_view("persona_generator").values["switch_cooldown"] == 240.0
         assert hub.resolve_module_view("persona_switcher").values["transition_duration_seconds"] == 44.0
+        assert hub.resolve_module_view("perception_behavior").values["memory_cap"] == 77
+        assert hub.resolve_module_view("perception_buffer").values["recent_show_count"] == 8
+        assert hub.resolve_module_view("perception_group_atmosphere").values["max_history"] == 66
+        assert hub.resolve_module_view("perception_interest").values["high_threshold"] == 0.82
+        assert hub.resolve_module_view("perception_message_preprocessor").values["message_text_max_length"] == 88
+        assert hub.resolve_module_view("perception_message_preprocessor").values["bot_aliases"] == ["阿活"]
+        assert hub.resolve_module_view("perception_signal_detector").values["strong_at_threshold"] == 2
+        assert hub.resolve_module_view("perception_understand").values["cache_ttl"] == 88.0
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
         assert hub.resolve_module_view("adaptive_learning").values["expression_learn_temperature"] == 0.25
@@ -631,6 +682,7 @@ def main() -> None:
             "trigger_overflow_ratio": hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"],
             "perception_burst_count": hub.resolve_module_view("perception_group_sense").values["burst_msg_count"],
             "persona_pool_cap": hub.resolve_module_view("persona_controller").values["max_personas"],
+            "perception_behavior_cap": hub.resolve_module_view("perception_behavior").values["memory_cap"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "jargon_thresholds": hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"],

@@ -3,7 +3,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
+from src.modules.perception.runtime_config import perception_module_view
 
 logger = get_logger("群氛围")
 
@@ -34,7 +34,7 @@ class GroupAtmosphereAnalyzer:
     def __init__(
         self, config_engine=None, model_client: Optional[ModelInterface] = None
     ):
-        self._config = config_engine or get_default_config_engine()
+        del config_engine
         self._model = model_client or DefaultModelInterface()
         self._history: List[Dict[str, Any]] = []
         self._max_history: int = 100
@@ -42,11 +42,12 @@ class GroupAtmosphereAnalyzer:
         self._load_config()
 
     def _load_config(self) -> None:
+        config = perception_module_view("perception_group_atmosphere")
         self._max_history = int(
-            self._config.get("group_atmosphere", "max_history", 100)
+            config.get("max_history", 100)
         )
         self._decay_rate = float(
-            self._config.get("group_atmosphere", "decay_rate", 0.1)
+            config.get("decay_rate", 0.1)
         )
 
     def set_model_client(self, client: ModelInterface) -> None:

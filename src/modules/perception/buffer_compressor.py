@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
+from src.modules.perception.runtime_config import perception_module_view
 
 logger = get_logger("buffer_compressor")
 
@@ -24,17 +24,18 @@ class StandardMessage:
 
 class BufferCompressor:
     def __init__(self, config_engine=None):
-        self._config = config_engine or get_default_config_engine()
+        del config_engine
         self._recent_show_count: int = 5
         self._recent_max_char_length: int = 50
         self._load_config()
 
     def _load_config(self) -> None:
+        config = perception_module_view("perception_buffer")
         self._recent_show_count = int(
-            self._config.get("buffer", "recent_show_count", 5)
+            config.get("recent_show_count", 5)
         )
         self._recent_max_char_length = int(
-            self._config.get("buffer", "recent_max_char_length", 50)
+            config.get("recent_max_char_length", 50)
         )
 
     def compress(

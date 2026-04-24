@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
+from src.modules.perception.runtime_config import perception_module_view
 
 logger = get_logger("兴趣评分")
 
@@ -30,7 +30,7 @@ class InterestScorer:
     def __init__(
         self, config_engine=None, model_client: Optional[ModelInterface] = None
     ):
-        self._config = config_engine or get_default_config_engine()
+        del config_engine
         self._model = model_client or DefaultModelInterface()
         self._novelty_weight: float = 0.5
         self._relevance_weight: float = 0.5
@@ -38,14 +38,15 @@ class InterestScorer:
         self._load_config()
 
     def _load_config(self) -> None:
+        config = perception_module_view("perception_interest")
         self._novelty_weight = float(
-            self._config.get("interest", "novelty_weight", 0.5)
+            config.get("novelty_weight", 0.5)
         )
         self._relevance_weight = float(
-            self._config.get("interest", "relevance_weight", 0.5)
+            config.get("relevance_weight", 0.5)
         )
         self._high_interest_threshold = float(
-            self._config.get("interest", "high_threshold", 0.7)
+            config.get("high_threshold", 0.7)
         )
 
     def set_model_client(self, client: ModelInterface) -> None:

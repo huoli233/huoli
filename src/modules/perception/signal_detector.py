@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from src.common.logger import get_logger
-from src.common.config.config_engine import get_default_config_engine
+from src.modules.perception.runtime_config import perception_module_view
 
 logger = get_logger("信号检测")
 
@@ -42,7 +42,7 @@ class SignalResult:
 
 class SignalDetector:
     def __init__(self, config_engine=None):
-        self._config = config_engine or get_default_config_engine()
+        del config_engine
         self._medium_threshold: int = 10
         self._strong_at_threshold: int = 1
         self._name_match_enabled: bool = True
@@ -51,17 +51,18 @@ class SignalDetector:
         self._load_config()
 
     def _load_config(self) -> None:
+        config = perception_module_view("perception_signal_detector")
         self._medium_threshold = int(
-            self._config.get("signal_detector", "medium_threshold", 10)
+            config.get("medium_threshold", 10)
         )
         self._strong_at_threshold = int(
-            self._config.get("signal_detector", "strong_at_threshold", 1)
+            config.get("strong_at_threshold", 1)
         )
         self._name_match_enabled = bool(
-            self._config.get("signal_detector", "name_match_enabled", True)
+            config.get("name_match_enabled", True)
         )
         self._max_history = int(
-            self._config.get("signal_detector", "max_history", 50)
+            config.get("max_history", 50)
         )
 
     def detect(
