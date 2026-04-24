@@ -1843,7 +1843,9 @@ edit_scope = "system"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory_retrieval"]
 profile_name = "memory_retrieval_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["bm25_weight", "vector_weight"]
+system_only_keys = ["rrf_k"]
 
 [profile_mapping.module_views.memory_decay]
 base_refs = ["runtime_defaults"]
@@ -1925,13 +1927,17 @@ edit_scope = "system"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["phase_timing"]
 profile_name = "phase_timing_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["rest_default_seconds", "peek_chance_ratio", "max_idle_wait_seconds", "max_chase_count", "phase_idle_timeout_seconds"]
+system_only_keys = ["reflect_interval_seconds", "max_reflect_rounds", "transition_cooldown_ms", "pending_expire_sec", "max_engaged_duration_sec", "awaken_skip_threshold", "auto_dormant_after_sec"]
 
 [profile_mapping.module_views.proactive_decider]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["proactive_decider"]
 profile_name = "proactive_decider_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["activation_bar", "reply_grace_period_sec", "silence_full_score_sec", "max_pending_events"]
+system_only_keys = ["reward_on_reply", "penalty_on_ignore", "penalty_on_negative", "reward_decay_per_hour", "reply_watch_window_sec", "reward_floor", "reward_ceiling", "wt_content_freshness", "wt_emotional_readiness", "wt_historical_reward", "wt_inner_desire", "wt_intention_drive", "wt_social_standing", "wt_vitality_reserve"]
 
 [profile_mapping.module_views.heartflow_decision]
 base_refs = ["runtime_defaults"]
@@ -2111,7 +2117,9 @@ edit_scope = "system"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["webui_state_monitor_thresholds"]
 profile_name = "webui_state_monitor_thresholds_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["emotion", "relationship", "trauma", "memory", "prediction", "scene", "attention", "circadian"]
+system_only_keys = ["autonomy", "pending", "safety"]
 
 [profile_mapping.module_views.brain_chat_runtime]
 base_refs = ["runtime_defaults"]

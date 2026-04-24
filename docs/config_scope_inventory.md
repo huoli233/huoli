@@ -27,12 +27,12 @@
 
 | 一级类型 | 中文名 | 三级模块数 | system | mixed | user |
 | --- | --- | --- | --- | --- | --- |
-| dialogue_orchestration | 对话编排 | 15 | 11 | 4 | 0 |
+| dialogue_orchestration | 对话编排 | 15 | 9 | 6 | 0 |
 | emotion_psychology | 情绪与心理 | 3 | 2 | 1 | 0 |
 | identity_persona | 身份与人格 | 9 | 6 | 2 | 1 |
-| interface_observability | 界面与可观测 | 4 | 4 | 0 | 0 |
+| interface_observability | 界面与可观测 | 4 | 3 | 1 | 0 |
 | learning_adaptation | 学习与自适应 | 2 | 1 | 1 | 0 |
-| memory_knowledge | 记忆与知识 | 12 | 9 | 3 | 0 |
+| memory_knowledge | 记忆与知识 | 12 | 8 | 4 | 0 |
 | perception_context | 感知与上下文 | 13 | 11 | 2 | 0 |
 | runtime_resources | 运行资源与开关 | 4 | 3 | 1 | 0 |
 | safety_guard | 安全与防护 | 4 | 4 | 0 | 0 |
@@ -99,7 +99,7 @@
 | memory_capacity | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_capacity |
 | memory_decay | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_decay |
 | memory_dedup | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_dedup |
-| memory_retrieval | 记忆与知识 / 检索与召回 | system | 已接入 | - | memory_retrieval |
+| memory_retrieval | 记忆与知识 / 检索与召回 | mixed | 已接入 | bm25_weight, vector_weight | memory_retrieval |
 | message_processor | 对话编排 / 路由与生成 | system | 已接入 | - | message_processor |
 | model_routing | 对话编排 / 路由与生成 | system | 已接入 | - | model_routing |
 | module_switches | 运行资源与开关 / 频控与开关 | mixed | 已接入 | heartflow_enabled, proactive_enabled, silence_watcher_enabled, inner_voice_enabled | module_switches |
@@ -119,8 +119,8 @@
 | persona_switcher | 身份与人格 / 人格动态 | system | 已接入 | - | persona_switcher |
 | personality | 身份与人格 / 人格动态 | system | 已接入 | - | personality |
 | personality_factors | 身份与人格 / 性格因子 | user | 已接入 | sensitivity, tolerance, reactiveness, recovery_speed, social_warmth, curiosity_drive, reply_eagerness | personality_factors |
-| phase_timing | 对话编排 / 阶段与调度 | system | 已接入 | - | phase_timing |
-| proactive_decider | 对话编排 / 主动与回复 | system | 已接入 | - | proactive_decider |
+| phase_timing | 对话编排 / 阶段与调度 | mixed | 已接入 | rest_default_seconds, peek_chance_ratio, max_idle_wait_seconds, max_chase_count, phase_idle_timeout_seconds | phase_timing |
+| proactive_decider | 对话编排 / 主动与回复 | mixed | 已接入 | activation_bar, reply_grace_period_sec, silence_full_score_sec, max_pending_events | proactive_decider |
 | psychological_core | 情绪与心理 / 心理状态 | system | 已接入 | - | psychological_core |
 | recall_correction | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_correction |
 | recall_dimension | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_dimension |
@@ -149,7 +149,7 @@
 | vision | 感知与上下文 / 上下文与视觉 | mixed | 已接入 | image_recognition_enabled, gif_convert_enabled | vision |
 | webui_git_mirror | 界面与可观测 / WebUI运行 | system | 已接入 | - | webui_git_mirror |
 | webui_rate_limit | 界面与可观测 / WebUI运行 | system | 已接入 | - | webui_rate_limit |
-| webui_state_monitor_thresholds | 界面与可观测 / 阈值与状态展示 | system | 已接入 | - | webui_state_monitor_thresholds |
+| webui_state_monitor_thresholds | 界面与可观测 / 阈值与状态展示 | mixed | 已接入 | emotion, relationship, trauma, memory, prediction, scene, attention, circadian | webui_state_monitor_thresholds |
 | webui_websocket | 界面与可观测 / WebUI运行 | system | 已接入 | - | webui_websocket |
 
 ### 分级解释

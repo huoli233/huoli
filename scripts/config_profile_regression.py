@@ -387,6 +387,9 @@ semantic_domains = ["memory_capacity"]
 
 [profile_mapping.module_views.memory_retrieval]
 semantic_domains = ["memory_retrieval"]
+edit_scope = "mixed"
+user_editable_keys = ["bm25_weight", "vector_weight"]
+system_only_keys = ["rrf_k"]
 
 [profile_mapping.module_views.memory_decay]
 semantic_domains = ["memory_decay"]
@@ -410,9 +413,15 @@ semantic_domains = ["schedule"]
 
 [profile_mapping.module_views.phase_timing]
 semantic_domains = ["phase_timing"]
+edit_scope = "mixed"
+user_editable_keys = ["rest_default_seconds", "peek_chance_ratio", "max_idle_wait_seconds", "max_chase_count", "phase_idle_timeout_seconds"]
+system_only_keys = ["reflect_interval_seconds", "max_reflect_rounds", "transition_cooldown_ms", "pending_expire_sec", "max_engaged_duration_sec", "awaken_skip_threshold", "auto_dormant_after_sec"]
 
 [profile_mapping.module_views.proactive_decider]
 semantic_domains = ["proactive_decider"]
+edit_scope = "mixed"
+user_editable_keys = ["activation_bar", "reply_grace_period_sec", "silence_full_score_sec", "max_pending_events"]
+system_only_keys = ["reward_on_reply", "penalty_on_ignore", "penalty_on_negative", "reward_decay_per_hour", "reply_watch_window_sec", "reward_floor", "reward_ceiling", "wt_content_freshness", "wt_emotional_readiness", "wt_historical_reward", "wt_inner_desire", "wt_intention_drive", "wt_social_standing", "wt_vitality_reserve"]
 
 [profile_mapping.module_views.heartflow_decision]
 semantic_domains = ["heartflow_decision"]
@@ -515,6 +524,9 @@ semantic_domains = ["webui_git_mirror"]
 
 [profile_mapping.module_views.webui_state_monitor_thresholds]
 semantic_domains = ["webui_state_monitor_thresholds"]
+edit_scope = "mixed"
+user_editable_keys = ["emotion", "relationship", "trauma", "memory", "prediction", "scene", "attention", "circadian"]
+system_only_keys = ["autonomy", "pending", "safety"]
 
 [profile_mapping.module_views.brain_chat_runtime]
 semantic_domains = ["brain_chat_runtime"]
@@ -669,7 +681,10 @@ def main() -> None:
         assert memory.user_editable_keys == ("short_term_limit", "temporary_ttl_seconds", "reactivation_cooldown_seconds", "reactivation_max_candidates", "emotion_reactivation_threshold", "boredom_reactivation_threshold")
         assert hub.resolve_module_view("memory_capacity").values["review_interval_seconds"] == 333
         assert hub.resolve_module_view("memory_capacity").values["max_count_by_tier"]["working"] == 222
-        assert hub.resolve_module_view("memory_retrieval").values["rrf_k"] == 77
+        memory_retrieval = hub.resolve_module_view("memory_retrieval")
+        assert memory_retrieval.values["rrf_k"] == 77
+        assert memory_retrieval.edit_scope == "mixed"
+        assert memory_retrieval.user_editable_keys == ("bm25_weight", "vector_weight")
         assert hub.resolve_module_view("memory_decay").values["forget_threshold"] == 0.22
         assert hub.resolve_module_view("memory_dedup").values["similarity_threshold"] == 0.88
 
@@ -692,8 +707,14 @@ def main() -> None:
         assert hub.assemble_scheduler_config()["cooldown_sec"] == 45.0
         assert hub.assemble_scheduler_config()["task_cancel_timeout_sec"] == 7.0
         assert hub.resolve_module_view("model_routing").values["model_fail_threshold"] == 4
-        assert hub.resolve_module_view("phase_timing").values["max_idle_wait_seconds"] == 99
-        assert hub.resolve_module_view("proactive_decider").values["activation_bar"] == 0.61
+        phase_timing = hub.resolve_module_view("phase_timing")
+        assert phase_timing.values["max_idle_wait_seconds"] == 99
+        assert phase_timing.edit_scope == "mixed"
+        assert phase_timing.user_editable_keys == ("rest_default_seconds", "peek_chance_ratio", "max_idle_wait_seconds", "max_chase_count", "phase_idle_timeout_seconds")
+        proactive_decider = hub.resolve_module_view("proactive_decider")
+        assert proactive_decider.values["activation_bar"] == 0.61
+        assert proactive_decider.edit_scope == "mixed"
+        assert proactive_decider.user_editable_keys == ("activation_bar", "reply_grace_period_sec", "silence_full_score_sec", "max_pending_events")
         heartflow_decision = hub.resolve_module_view("heartflow_decision")
         assert heartflow_decision.values["heated_pulse_limit"] == 9
         assert heartflow_decision.edit_scope == "mixed"
@@ -746,8 +767,11 @@ def main() -> None:
         assert hub.resolve_module_view("webui_rate_limit").values["auth_request_limit"] == 12
         assert hub.resolve_module_view("webui_websocket").values["auth_max_connections_per_user"] == 7
         assert hub.resolve_module_view("webui_git_mirror").values["clone_timeout_seconds"] == 420
-        assert hub.resolve_module_view("webui_state_monitor_thresholds").values["emotion"]["boredom_show"] == 0.41
-        assert hub.resolve_module_view("webui_state_monitor_thresholds").values["prediction"]["probability_high"] == 0.74
+        webui_thresholds = hub.resolve_module_view("webui_state_monitor_thresholds")
+        assert webui_thresholds.values["emotion"]["boredom_show"] == 0.41
+        assert webui_thresholds.values["prediction"]["probability_high"] == 0.74
+        assert webui_thresholds.edit_scope == "mixed"
+        assert webui_thresholds.user_editable_keys == ("emotion", "relationship", "trauma", "memory", "prediction", "scene", "attention", "circadian")
         assert hub.resolve_module_view("brain_chat_runtime").values["parallel_action_timeout_seconds"] == 88.0
         assert hub.resolve_module_view("brain_planner").values["planner_timeout_seconds"] == 22.0
         assert hub.resolve_module_view("brain_pfc_action").values["llm_timeout_seconds"] == 26.0
@@ -839,8 +863,10 @@ def main() -> None:
             "model_fail_threshold": hub.resolve_module_view("model_routing").values["model_fail_threshold"],
             "context_reply_tokens": hub.resolve_module_view("context").values["reply_context_max_tokens"],
             "context_scope": context.edit_scope,
-            "phase_idle_timeout": hub.resolve_module_view("phase_timing").values["phase_idle_timeout_seconds"],
-            "memory_rrf_k": hub.resolve_module_view("memory_retrieval").values["rrf_k"],
+            "phase_idle_timeout": phase_timing.values["phase_idle_timeout_seconds"],
+            "phase_timing_scope": phase_timing.edit_scope,
+            "memory_rrf_k": memory_retrieval.values["rrf_k"],
+            "memory_retrieval_scope": memory_retrieval.edit_scope,
             "inner_voice_mention_floor": hub.resolve_module_view("inner_voice").values["mention_min_desire"],
             "frequency_skip_limit": hub.resolve_module_view("frequency_control").values["skip_limit"],
             "harassment_block_threshold": hub.resolve_module_view("harassment_detection").values["block_threshold"],
@@ -849,7 +875,8 @@ def main() -> None:
             "recall_typo_limit": hub.resolve_module_view("recall_typo").values["max_typo_length"],
             "recall_correction_timeout": hub.resolve_module_view("recall_correction").values["timeout_seconds"],
             "webui_auth_limit": hub.resolve_module_view("webui_rate_limit").values["auth_request_limit"],
-            "webui_prediction_high": hub.resolve_module_view("webui_state_monitor_thresholds").values["prediction"]["probability_high"],
+            "webui_prediction_high": webui_thresholds.values["prediction"]["probability_high"],
+            "webui_threshold_scope": webui_thresholds.edit_scope,
             "brain_planner_timeout": hub.resolve_module_view("brain_planner").values["planner_timeout_seconds"],
             "brain_waiter_timeout": hub.resolve_module_view("brain_waiter").values["desired_timeout_seconds"],
             "identity_bot_name": hub.resolve_module_view("identity_bot").values["nickname"],
@@ -870,6 +897,7 @@ def main() -> None:
             "personality_scope": personality_factors.edit_scope,
             "memory_scope": memory.edit_scope,
             "heartflow_decision_scope": heartflow_decision.edit_scope,
+            "proactive_scope": proactive_decider.edit_scope,
             "perception_burst_count": hub.resolve_module_view("perception_group_sense").values["burst_msg_count"],
             "persona_pool_cap": hub.resolve_module_view("persona_controller").values["max_personas"],
             "perception_behavior_cap": hub.resolve_module_view("perception_behavior").values["memory_cap"],
