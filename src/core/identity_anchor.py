@@ -2,9 +2,9 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 from enum import Enum
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
 from src.common.singleton import SingletonMeta
+from src.person_info.runtime_config import identity_dict, identity_module_view
 
 logger = get_logger("身份锚点")
 
@@ -70,10 +70,11 @@ class IdentityAnchor(metaclass=SingletonMeta):
         self._initialized = True
         self._base_identity = base_identity
         self._default_role = default_role
-        self._config = ConfigEngine.get_instance()
         self._contexts: Dict[str, IdentityContext] = {}
         self._conflict_history: List[IdentityConflict] = []
-        self._max_history = 100
+        self._max_history = int(
+            self._config_float("max_history", 100.0)
+        )
         self._identity_prompt_templates = self._load_identity_templates()
         logger.info(f"[身份锚定] 身份锚定系统初始化完成，基础身份: {base_identity}")
 
@@ -84,7 +85,7 @@ class IdentityAnchor(metaclass=SingletonMeta):
             "role_play": "你当前采用的人设是{role}。请保持角色一致性，不要突然跳出人设。",
             "hybrid": "你叫{name}，当前采用的人设是{role}。在保持角色特点的同时，也要维持稳定的自我一致性。",
         }
-        loaded = self._config.get("identity_anchor", "prompt_templates", {})
+        loaded = identity_dict("identity_anchor", "prompt_templates", {})
         if not isinstance(loaded, dict):
             return defaults
         merged = dict(defaults)
@@ -92,6 +93,13 @@ class IdentityAnchor(metaclass=SingletonMeta):
             if isinstance(key, str) and isinstance(value, str) and value.strip():
                 merged[key] = value
         return merged
+
+    @staticmethod
+    def _config_float(key: str, default: float) -> float:
+        try:
+            return float(identity_module_view("identity_anchor").get(key, default))
+        except Exception:
+            return default
 
     def get_context(self, channel_id: str) -> IdentityContext:
         """获取频道的身份上下文"""

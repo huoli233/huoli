@@ -4,8 +4,12 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.person_info.runtime_config import (
+    identity_dict,
+    identity_list,
+    identity_module_view,
+)
 
 logger = get_logger("bot_identity")
 
@@ -151,8 +155,8 @@ class NameMatcher:
 class BotIdentityManager:
     """机器人身份管理器"""
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self, config_engine: Optional[Any] = None):
+        del config_engine
         self._persona = BotPersona()
         self._account = BotAccountInfo()
         self._hash_tracker = PersonaHashTracker()
@@ -228,7 +232,7 @@ class BotIdentityManager:
     def _load_role_visual_profiles(self) -> None:
         """加载角色视觉档案。"""
         self._role_visual_profiles = {}
-        profile_map = self._config.get("bot_identity", "role_visual_profiles", {})
+        profile_map = identity_dict("identity_bot", "role_visual_profiles", {})
         if not isinstance(profile_map, dict):
             return
         for role_name, profile_data in profile_map.items():
@@ -253,7 +257,7 @@ class BotIdentityManager:
             "visual_header": "[当前外观识别基准]",
             "skill_header": "[当前技能倾向]",
         }
-        loaded_templates = self._config.get("bot_identity", "identity_templates", {})
+        loaded_templates = identity_dict("identity_bot", "identity_templates", {})
         if isinstance(loaded_templates, dict):
             merged = dict(template_defaults)
             for key, value in loaded_templates.items():
@@ -265,7 +269,7 @@ class BotIdentityManager:
 
     def _load_skill_prompt_templates(self) -> None:
         """加载技能提示词模板。"""
-        template_map = self._config.get("bot_identity", "skill_prompt_templates", {})
+        template_map = identity_dict("identity_bot", "skill_prompt_templates", {})
         if isinstance(template_map, dict):
             self._skill_prompt_templates = {
                 str(key).strip(): str(value).strip()
@@ -391,49 +395,39 @@ class BotIdentityManager:
 
     def _load_config(self) -> None:
         """加载配置"""
-        nickname = self._config.get("bot_identity", "nickname", "") or self._config.get("bot", "nickname", "")
-        self._persona.nickname = nickname
-        alt_names = self._config.get("bot_identity", "alias_names", []) or self._config.get("bot", "alias_names", [])
-        if isinstance(alt_names, list):
-            self._persona.alias_names = alt_names
-        elif isinstance(alt_names, str):
-            self._persona.alias_names = [a.strip() for a in alt_names.split(",") if a.strip()]
+        config = identity_module_view("identity_bot")
+        self._persona.nickname = str(config.get("nickname", "") or "")
+        self._persona.alias_names = identity_list("identity_bot", "alias_names", [])
 
-        self._persona.personality_core = self._config.get("bot_identity", "personality_core", "") or self._config.get(
-            "personality", "personality", ""
+        self._persona.personality_core = str(
+            config.get("personality_core", "") or ""
         )
-        self._persona.character_age = self._config.get("bot_identity", "character_age", 0) or self._config.get(
-            "personality", "character_age", 0
+        self._persona.character_age = self._coerce_int(
+            config.get("character_age", 0), 0
         )
-        self._persona.reply_style = self._config.get("bot_identity", "reply_style", "") or self._config.get(
-            "personality", "reply_style", ""
-        )
+        self._persona.reply_style = str(config.get("reply_style", "") or "")
 
-        interest_str = self._config.get("bot_identity", "interests", "") or self._config.get(
-            "personality", "character_hobbies", ""
-        )
-        if interest_str:
-            self._persona.interests = [i.strip() for i in interest_str.split(",") if i.strip()]
+        interests = config.get("interests", [])
+        self._persona.interests = self._ensure_list(interests)
 
-        visual_str = self._config.get("bot_identity", "visual_features", "")
-        if visual_str:
-            self._persona.visual_features = [v.strip() for v in visual_str.split(",") if v.strip()]
+        visual_features = config.get("visual_features", [])
+        self._persona.visual_features = self._ensure_list(visual_features)
         self._load_role_visual_profiles()
         self._load_identity_templates()
         self._load_skill_prompt_templates()
 
-        self._persona.lore = self._config.get("bot_identity", "lore", "") or self._config.get(
-            "personality", "character_background", ""
-        )
+        self._persona.lore = str(config.get("lore", "") or "")
 
-        rels_str = self._config.get("bot_identity", "relationships", "")
-        if rels_str:
-            for item in rels_str.split(","):
-                if ":" in item:
-                    k, v = item.split(":", 1)
-                    self._persona.relationships[k.strip()] = v.strip()
+        self._persona.relationships = {}
+        relationships = config.get("relationships", {})
+        if isinstance(relationships, dict):
+            self._persona.relationships = {
+                str(k).strip(): str(v).strip()
+                for k, v in relationships.items()
+                if str(k).strip() and str(v).strip()
+            }
 
-        self._account.bot_id = str(self._config.get("bot_identity", "bot_id", ""))
+        self._account.bot_id = str(config.get("bot_id", "") or "")
         self._name_matcher.set_names(self._persona.nickname, self._persona.alias_names)
 
         if self._hash_tracker.has_changed(self._persona):
@@ -697,7 +691,7 @@ _bot_identity_manager: Optional[BotIdentityManager] = None
 
 
 def get_bot_identity_manager(
-    config_engine: Optional[ConfigEngine] = None,
+    config_engine: Optional[Any] = None,
 ) -> BotIdentityManager:
     """获取机器人身份管理器单例"""
     global _bot_identity_manager
@@ -707,7 +701,7 @@ def get_bot_identity_manager(
 
 
 def init_bot_identity(
-    config_engine: Optional[ConfigEngine] = None,
+    config_engine: Optional[Any] = None,
 ) -> BotIdentityManager:
     """初始化机器人身份"""
     global _bot_identity_manager

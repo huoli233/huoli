@@ -7,19 +7,19 @@ from threading import Lock
 from typing import Any, Dict, List, Optional
 
 from src.common.atomic_io import atomic_json_dump
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger, sanitize_log_input
+from src.person_info.runtime_config import identity_module_view
 
 logger = get_logger("用户持久化")
 
 _file_locks: Dict[str, Lock] = {}
 _locks_lock = Lock()
 _lock_access_times: Dict[str, float] = {}
-_LOCK_STALE_SEC = 3600.0
-
-
-_CLEANUP_INTERVAL_SEC = 600.0
 _last_cleanup_ts: float = 0.0
+
+
+def _user_persistence_config() -> Dict[str, Any]:
+    return identity_module_view("identity_user_persistence")
 
 
 def _get_file_lock(file_path: str) -> Lock:
@@ -30,7 +30,12 @@ def _get_file_lock(file_path: str) -> Lock:
         _lock_access_times[file_path] = now
         if file_path not in _file_locks:
             _file_locks[file_path] = Lock()
-        if now - _last_cleanup_ts > _CLEANUP_INTERVAL_SEC:
+        cleanup_interval_sec = float(
+            _user_persistence_config().get(
+                "file_lock_cleanup_interval_seconds", 600.0
+            )
+        )
+        if now - _last_cleanup_ts > cleanup_interval_sec:
             _last_cleanup_ts = now
         else:
             return _file_locks[file_path]
@@ -44,7 +49,11 @@ def _cleanup_stale_locks() -> int:
     """清理长期未访问的文件锁，返回清理数量"""
     removed = 0
     with _locks_lock:
-        cutoff = time.time() - _LOCK_STALE_SEC
+        cutoff = time.time() - float(
+            _user_persistence_config().get(
+                "file_lock_stale_seconds", 3600.0
+            )
+        )
         stale_keys = [k for k, t in _lock_access_times.items() if t < cutoff]
         for k in stale_keys:
             lk = _file_locks.get(k)
@@ -71,12 +80,13 @@ class UserDataStorage:
 
     def __init__(
         self,
-        config_engine: Optional[ConfigEngine] = None,
+        config_engine: Optional[Any] = None,
         storage_dir: str = "",
     ):
-        self._config = config_engine or ConfigEngine.get_instance()
-        self._storage_dir = storage_dir or self._config.get(
-            "user_persistence", "storage_dir", "data/users"
+        del config_engine
+        config = _user_persistence_config()
+        self._storage_dir = storage_dir or str(
+            config.get("storage_dir", "data/users")
         )
         self._ensure_dir()
         self._user_index: set[str] = set()
@@ -271,7 +281,9 @@ class UserActivityTracker:
 
     def __init__(self, storage: UserDataStorage):
         self._storage = storage
-        self._max_activities = 100
+        self._max_activities = int(
+            _user_persistence_config().get("max_activities", 100)
+        )
 
     def record_activity(
         self,
@@ -359,7 +371,7 @@ _singleton_lock = Lock()
 
 
 def get_user_data_storage(
-    config_engine: Optional[ConfigEngine] = None,
+    config_engine: Optional[Any] = None,
 ) -> UserDataStorage:
     """获取用户数据存储单例"""
     global _user_data_storage

@@ -223,6 +223,24 @@ desired_timeout_seconds = 222
 analysis_timeout_seconds = 12.0
 max_goals = 5
 
+[profile_mapping.semantic_domains.identity_bot]
+nickname = "测试爱丽丝"
+alias_names = ["测试爱丽丝", "测试小爱"]
+bot_id = "10001"
+
+[profile_mapping.semantic_domains.identity_bot.identity_templates]
+default_persona = "你叫{{name}}。"
+
+[profile_mapping.semantic_domains.identity_anchor]
+max_history = 55
+
+[profile_mapping.semantic_domains.identity_anchor.prompt_templates]
+default_persona = "anchor:{{name}}"
+
+[profile_mapping.semantic_domains.identity_user_persistence]
+storage_dir = "tmp/users"
+max_activities = 77
+
 [profile_mapping.semantic_domains.skill]
 trial_to_active_invocations = 6
 runtime_skill_cost = 0.4
@@ -375,6 +393,15 @@ semantic_domains = ["brain_waiter"]
 [profile_mapping.module_views.brain_pfc_goal]
 semantic_domains = ["brain_pfc_goal"]
 
+[profile_mapping.module_views.identity_bot]
+semantic_domains = ["identity_bot"]
+
+[profile_mapping.module_views.identity_anchor]
+semantic_domains = ["identity_anchor"]
+
+[profile_mapping.module_views.identity_user_persistence]
+semantic_domains = ["identity_user_persistence"]
+
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
 
@@ -471,6 +498,11 @@ def main() -> None:
         assert hub.resolve_module_view("brain_pfc_reply").values["generation_timeout_seconds"] == 44.0
         assert hub.resolve_module_view("brain_waiter").values["desired_timeout_seconds"] == 222
         assert hub.resolve_module_view("brain_pfc_goal").values["max_goals"] == 5
+        assert hub.resolve_module_view("identity_bot").values["nickname"] == "测试爱丽丝"
+        assert hub.resolve_module_view("identity_bot").values["identity_templates"]["default_persona"] == "你叫{name}。"
+        assert hub.resolve_module_view("identity_anchor").values["max_history"] == 55
+        assert hub.resolve_module_view("identity_anchor").values["prompt_templates"]["default_persona"] == "anchor:{name}"
+        assert hub.resolve_module_view("identity_user_persistence").values["storage_dir"] == "tmp/users"
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
         assert hub.resolve_module_view("adaptive_learning").values["expression_learn_temperature"] == 0.25
@@ -503,6 +535,8 @@ def main() -> None:
             "webui_prediction_high": hub.resolve_module_view("webui_state_monitor_thresholds").values["prediction"]["probability_high"],
             "brain_planner_timeout": hub.resolve_module_view("brain_planner").values["planner_timeout_seconds"],
             "brain_waiter_timeout": hub.resolve_module_view("brain_waiter").values["desired_timeout_seconds"],
+            "identity_bot_name": hub.resolve_module_view("identity_bot").values["nickname"],
+            "identity_storage_dir": hub.resolve_module_view("identity_user_persistence").values["storage_dir"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "jargon_thresholds": hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"],
