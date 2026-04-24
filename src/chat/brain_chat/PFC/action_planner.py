@@ -2,11 +2,12 @@ import asyncio
 import json
 import re
 import time
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from src.chat.brain_chat.PFC.chat_observer import ChatObserver
 from src.chat.brain_chat.PFC.conversation_info import ConversationInfo
 from src.chat.brain_chat.PFC.observation_info import ObservationInfo
+from src.chat.brain_chat.runtime_config import brainchat_module_view
 from src.chat.brain_chat.PFC.pfc_utils import parse_json_payload
 from src.chat.utils.chat_message_builder import build_readable_messages
 from src.common.logger import get_logger
@@ -32,11 +33,6 @@ PERMITTED_ACTIONS = (
     "say_goodbye",
 )
 
-# --- 行动重复检测参数 ---
-_RECENT_ACTION_WINDOW = 6
-_REPEATED_ACTION_CEILING = 4
-
-
 class ActionPlanner:
     """行动规划器 —— 综合对话环境信号、行动模式与历史上下文做出下一步决策。"""
 
@@ -53,6 +49,78 @@ class ActionPlanner:
         )
         # 决策置信度追踪，有助于跨轮次感知上下文质量
         self._prev_confidence = 0.5
+        self._load_config()
+
+    def _load_config(self) -> None:
+        config = brainchat_module_view("brain_pfc_action")
+        self._recent_action_window = int(
+            config.get("recent_action_window", 6)
+        )
+        self._repeated_action_ceiling = int(
+            config.get("repeated_action_ceiling", 4)
+        )
+        self._llm_timeout_seconds = float(
+            config.get("llm_timeout_seconds", 30.0)
+        )
+        self._elapsed_hint_recent_seconds = float(
+            config.get("elapsed_hint_recent_seconds", 60.0)
+        )
+        self._elapsed_hint_recent_minutes_seconds = float(
+            config.get("elapsed_hint_recent_minutes_seconds", 300.0)
+        )
+        self._elapsed_hint_one_hour_seconds = float(
+            config.get("elapsed_hint_one_hour_seconds", 3600.0)
+        )
+        self._goal_clarity_with_goal = float(
+            config.get("goal_clarity_with_goal", 0.85)
+        )
+        self._goal_clarity_without_goal = float(
+            config.get("goal_clarity_without_goal", 0.25)
+        )
+        self._knowledge_depth_empty = float(
+            config.get("knowledge_depth_empty", 0.15)
+        )
+        self._history_continuity_empty = float(
+            config.get("history_continuity_empty", 0.2)
+        )
+        self._consensus_bonus_cap = float(
+            config.get("consensus_bonus_cap", 0.12)
+        )
+        self._consensus_spread_penalty = float(
+            config.get("consensus_spread_penalty", 0.15)
+        )
+        self._risk_avg_interval_fast = float(
+            config.get("risk_avg_interval_fast", 2.0)
+        )
+        self._risk_avg_interval_medium = float(
+            config.get("risk_avg_interval_medium", 5.0)
+        )
+        self._risk_avg_interval_slow = float(
+            config.get("risk_avg_interval_slow", 10.0)
+        )
+        self._risk_staleness_high = float(
+            config.get("risk_staleness_high", 600.0)
+        )
+        self._risk_staleness_medium = float(
+            config.get("risk_staleness_medium", 300.0)
+        )
+        self._tail_streak_high = int(config.get("tail_streak_high", 3))
+        self._tail_streak_medium = int(config.get("tail_streak_medium", 2))
+        self._low_confidence_threshold = float(
+            config.get("low_confidence_threshold", 0.22)
+        )
+        self._high_risk_threshold = float(
+            config.get("high_risk_threshold", 0.3)
+        )
+        self._confidence_guard_threshold = float(
+            config.get("confidence_guard_threshold", 0.45)
+        )
+        self._send_new_message_risk_threshold = float(
+            config.get("send_new_message_risk_threshold", 0.42)
+        )
+        self._farewell_timeout_seconds = float(
+            config.get("farewell_timeout_seconds", 20.0)
+        )
 
     @staticmethod
     def _compose_persona_trait() -> Tuple[str, str]:
@@ -125,7 +193,7 @@ class ActionPlanner:
         try:
             raw_response, _ = await asyncio.wait_for(
                 self.llm.generate_response_async(final_prompt),
-                timeout=30.0,
+                timeout=self._llm_timeout_seconds,
             )
             logger.debug(
                 f"[私聊][{self.private_name}]LLM返回(前300字): {raw_response[:300]}"
@@ -168,11 +236,11 @@ class ActionPlanner:
                 ts_raw = record.get("time") or record.get("created_at")
                 if sender == self.bot_account and ts_raw:
                     gap = time.time() - float(ts_raw)
-                    if gap < 60.0:
+                    if gap < self._elapsed_hint_recent_seconds:
                         return f"提示：你上一条成功发送的消息是在 {gap:.1f} 秒前。\n"
-                    if gap < 300.0:
+                    if gap < self._elapsed_hint_recent_minutes_seconds:
                         return f"提示：你在约 {gap / 60:.1f} 分钟前发送了上一条消息。\n"
-                    if gap < 3600.0:
+                    if gap < self._elapsed_hint_one_hour_seconds:
                         return (
                             f"提示：你已有 {gap / 60:.0f} 分钟没有发言了。\n"
                         )
@@ -356,20 +424,26 @@ class ActionPlanner:
         signal_values.append(msg_readiness)
         # 信号B：对话目标明确度 —— 有目标时决策方向更清晰
         goal_entries = getattr(conv, "goal_list", None) or []
-        goal_clarity = 0.85 if goal_entries else 0.25
+        goal_clarity = (
+            self._goal_clarity_with_goal
+            if goal_entries
+            else self._goal_clarity_without_goal
+        )
         signal_values.append(goal_clarity)
         # 信号C：已获取知识的丰富度
         knowledge_entries = getattr(conv, "knowledge_list", None) or []
         knowledge_depth = (
             min(len(knowledge_entries) / 3.0, 1.0)
             if knowledge_entries
-            else 0.15
+            else self._knowledge_depth_empty
         )
         signal_values.append(knowledge_depth)
         # 信号D：行动历史的连续性 —— 有记录说明对话已进入活跃阶段
         action_log = getattr(conv, "done_action", None) or []
         history_continuity = (
-            min(len(action_log) / 4.0, 1.0) if action_log else 0.2
+            min(len(action_log) / 4.0, 1.0)
+            if action_log
+            else self._history_continuity_empty
         )
         signal_values.append(history_continuity)
         if not signal_values:
@@ -377,7 +451,11 @@ class ActionPlanner:
         mean_val = sum(signal_values) / len(signal_values)
         # 「一致性奖励」：信号间分散度越低，各维度共识越强
         spread = max(signal_values) - min(signal_values)
-        consensus_bonus = max(0.0, 0.12 - spread * 0.15)
+        consensus_bonus = max(
+            0.0,
+            self._consensus_bonus_cap
+            - spread * self._consensus_spread_penalty,
+        )
         final_score = min(mean_val + consensus_bonus, 1.0)
         logger.debug(
             f"[私聊][{self.private_name}]置信度评估: "
@@ -412,18 +490,18 @@ class ActionPlanner:
                     for i in range(len(ts_list) - 1)
                 ]
                 avg_interval = sum(intervals) / len(intervals)
-                if avg_interval < 2.0:
+                if avg_interval < self._risk_avg_interval_fast:
                     risk_val += 0.35
-                elif avg_interval < 5.0:
+                elif avg_interval < self._risk_avg_interval_medium:
                     risk_val += 0.2
-                elif avg_interval < 10.0:
+                elif avg_interval < self._risk_avg_interval_slow:
                     risk_val += 0.08
             # 维度2：对话停滞度 —— 最后一条消息距今很久表示对话可能已冷却
             if ts_list:
                 staleness = time.time() - ts_list[-1]
-                if staleness > 600:
+                if staleness > self._risk_staleness_high:
                     risk_val += 0.15
-                elif staleness > 300:
+                elif staleness > self._risk_staleness_medium:
                     risk_val += 0.05
 
             # 维度3：Bot 连续发言段，连续发言越多，继续主动发消息风险越高
@@ -435,9 +513,9 @@ class ActionPlanner:
                 if sender != self.bot_account:
                     break
                 tail_bot_streak += 1
-            if tail_bot_streak >= 3:
+            if tail_bot_streak >= self._tail_streak_high:
                 risk_val += 0.35
-            elif tail_bot_streak == 2:
+            elif tail_bot_streak == self._tail_streak_medium:
                 risk_val += 0.22
         except Exception as exc:
             logger.warning(f"[私聊][{self.private_name}]风险预估异常: {exc}")
@@ -456,8 +534,8 @@ class ActionPlanner:
         """
         try:
             raw_log = getattr(conv, "done_action", None) or []
-            window = raw_log[-_RECENT_ACTION_WINDOW:]
-            if len(window) < _REPEATED_ACTION_CEILING:
+            window = raw_log[-self._recent_action_window:]
+            if len(window) < self._repeated_action_ceiling:
                 return ""
             freq_map: Dict[str, int] = {}
             for entry in window:
@@ -470,13 +548,13 @@ class ActionPlanner:
                 if act:
                     freq_map[act] = freq_map.get(act, 0) + 1
             for act_label, occurrences in freq_map.items():
-                if occurrences >= _REPEATED_ACTION_CEILING:
+                if occurrences >= self._repeated_action_ceiling:
                     logger.info(
                         f"[私聊][{self.private_name}]行动环路警报: "
-                        f"'{act_label}'在最近{_RECENT_ACTION_WINDOW}次中出现{occurrences}次"
+                        f"'{act_label}'在最近{self._recent_action_window}次中出现{occurrences}次"
                     )
                     return (
-                        f"\n注意：你最近{_RECENT_ACTION_WINDOW}次决策中有{occurrences}次选择了'{act_label}'，"
+                        f"\n注意：你最近{self._recent_action_window}次决策中有{occurrences}次选择了'{act_label}'，"
                         f"这可能意味着你陷入了重复模式。请认真考虑是否需要采取不同的策略。\n"
                     )
         except Exception as exc:
@@ -512,7 +590,7 @@ class ActionPlanner:
             return action, reason
         proactive_set = ("direct_reply", "send_new_message", "rethink_goal")
         # 置信度极低时，将主动行动降级为倾听
-        if confidence < 0.22 and action in proactive_set:
+        if confidence < self._low_confidence_threshold and action in proactive_set:
             logger.info(
                 f"[私聊][{self.private_name}]置信度过低({confidence:.2f})，"
                 f"'{action}'降级为listening"
@@ -522,7 +600,11 @@ class ActionPlanner:
                 f"上下文信息不足(置信度={confidence:.2f})，暂时倾听。原计划: {action}({reason})",
             )
         # 高风险且置信度偏低时，切换为等待
-        if risk >= 0.3 and confidence < 0.45 and action in proactive_set:
+        if (
+            risk >= self._high_risk_threshold
+            and confidence < self._confidence_guard_threshold
+            and action in proactive_set
+        ):
             logger.info(
                 f"[私聊][{self.private_name}]高风险({risk:.2f})+低置信({confidence:.2f})，"
                 f"'{action}'降级为wait"
@@ -532,7 +614,10 @@ class ActionPlanner:
                 f"交互风险偏高({risk:.2f})且信息不足，暂时等待。原计划: {action}({reason})",
             )
         # 当风险高且决策是 send_new_message 时，无论置信度如何都避免追问轰炸
-        if action == "send_new_message" and risk >= 0.42:
+        if (
+            action == "send_new_message"
+            and risk >= self._send_new_message_risk_threshold
+        ):
             logger.info(
                 f"[私聊][{
                     self.private_name}]send_new_message 在高风险({
@@ -641,7 +726,7 @@ class ActionPlanner:
             )
             bye_response, _ = await asyncio.wait_for(
                 self.llm.generate_response_async(bye_prompt),
-                timeout=20.0,
+                timeout=self._farewell_timeout_seconds,
             )
             logger.debug(
                 f"[私聊][{self.private_name}]告别确认返回(前200字): {bye_response[:200]}"

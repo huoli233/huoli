@@ -1,24 +1,15 @@
 from src.common.logger import get_logger
 from .chat_observer import ChatObserver
 from .conversation_info import ConversationInfo
+from src.chat.brain_chat.runtime_config import brainchat_module_view
 
 # from src.individuality.individuality import Individuality # 不再需要
 from src.config.config import global_config
 import time
 import asyncio
-from typing import Any, Dict, Tuple
+from typing import Dict
 
 logger = get_logger("等待器")
-
-# --- 在这里设定你想要的超时时间（秒） ---
-# 例如： 120 秒 = 2 分钟
-DESIRED_TIMEOUT_SECONDS = 300
-
-WAIT_PROFILE_DEFAULTS: Dict[str, int] = {
-    "normal": DESIRED_TIMEOUT_SECONDS,
-    "listening": DESIRED_TIMEOUT_SECONDS,
-    "fast_retry": 120,
-}
 
 
 class Waiter:
@@ -26,25 +17,45 @@ class Waiter:
 
     def __init__(self, stream_id: str, private_name: str):
         self.chat_observer = ChatObserver.get_instance(stream_id, private_name)
-        self.name = global_config.BOT_NICKNAME
+        self.name = (
+            getattr(global_config, "BOT_NICKNAME", None)
+            or getattr(global_config.bot, "nickname", "")
+        )
         self.private_name = private_name
         self._stream_id = stream_id
+        self._load_config()
+
+    def _load_config(self) -> None:
+        config = brainchat_module_view("brain_waiter")
+        self._desired_timeout_seconds = int(
+            config.get("desired_timeout_seconds", 300)
+        )
+        self._listening_timeout_seconds = int(
+            config.get("listening_timeout_seconds", self._desired_timeout_seconds)
+        )
+        self._fast_retry_timeout_seconds = int(
+            config.get("fast_retry_timeout_seconds", 120)
+        )
+        self._goal_list_fast_retry_threshold = int(
+            config.get("goal_list_fast_retry_threshold", 4)
+        )
+        self._wait_poll_interval_seconds = float(
+            config.get("wait_poll_interval_seconds", 5.0)
+        )
 
     def _pick_timeout_seconds(
         self, listening_mode: bool, conversation_info: ConversationInfo
     ) -> int:
-        configured = getattr(global_config, "wait_timeout_seconds", None)
-        if isinstance(configured, int) and configured > 0:
-            return configured
-
         if (
             conversation_info.goal_list
-            and len(conversation_info.goal_list) >= 4
+            and len(conversation_info.goal_list)
+            >= self._goal_list_fast_retry_threshold
         ):
-            return WAIT_PROFILE_DEFAULTS["fast_retry"]
+            return self._fast_retry_timeout_seconds
 
-        profile_name = "listening" if listening_mode else "normal"
-        return WAIT_PROFILE_DEFAULTS.get(profile_name, DESIRED_TIMEOUT_SECONDS)
+        if listening_mode:
+            return self._listening_timeout_seconds
+        return self._desired_timeout_seconds
 
     @staticmethod
     def _has_similar_goal(
@@ -94,7 +105,10 @@ class Waiter:
             from src.chat.utils.statistic import record_runtime_state_event
 
             thinking_score = min(
-                max(elapsed_seconds / max(DESIRED_TIMEOUT_SECONDS, 1), 0.0),
+                max(
+                    elapsed_seconds / max(self._desired_timeout_seconds, 1),
+                    0.0,
+                ),
                 1.0,
             )
             record_runtime_state_event(
@@ -153,7 +167,7 @@ class Waiter:
                 )
                 return True
 
-            await asyncio.sleep(5)
+            await asyncio.sleep(self._wait_poll_interval_seconds)
             logger.debug(f"[私聊][{self.private_name}]{status_name}中...")
 
     async def wait(self, conversation_info: ConversationInfo) -> bool:

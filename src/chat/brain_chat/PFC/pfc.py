@@ -1,6 +1,7 @@
 import asyncio
 from typing import Any, Dict, List, Tuple, TYPE_CHECKING
 from src.common.logger import get_logger
+from src.chat.brain_chat.runtime_config import brainchat_module_view
 from src.llm_models.utils_model import LLMRequest
 from src.config.config import global_config, model_config
 from src.chat.utils.prompt_builder import global_prompt_manager
@@ -48,22 +49,30 @@ class GoalAnalyzer:
     """对话目标分析器"""
 
     def __init__(self, stream_id: str, private_name: str):
+        config = brainchat_module_view("brain_pfc_goal")
         self.llm = LLMRequest(
             model_set=model_config.model_task_config.lightweight,
-            temperature=0.7,
             request_type="conversation_goal",
         )
 
         self.name, self.personality_info = self._get_personality_prompt()
-        self.nick_name = global_config.BOT_ALIAS_NAMES
+        self.nick_name = (
+            getattr(global_config, "BOT_ALIAS_NAMES", None)
+            or getattr(global_config.bot, "alias_names", [])
+        )
         self.private_name = private_name
         self.chat_observer = ChatObserver.get_instance(stream_id, private_name)
 
         # 多目标存储结构
         self.goals = []  # 存储多个目标
-        self.max_goals = 3  # 同时保持的最大目标数量
+        self.max_goals = int(config.get("max_goals", 3))  # 同时保持的最大目标数量
         self.current_goal_and_reason = None
-        self._analysis_timeout_seconds = 18.0
+        self._analysis_timeout_seconds = float(
+            config.get("analysis_timeout_seconds", 18.0)
+        )
+        self._goal_similarity_threshold = float(
+            config.get("goal_similarity_threshold", 0.72)
+        )
 
     @staticmethod
     def _get_personality_prompt() -> Tuple[str, str]:
@@ -109,7 +118,10 @@ class GoalAnalyzer:
 
             duplicated = False
             for _, existing in ranked_buffer:
-                if _calculate_similarity(goal_text, existing["goal"]) >= 0.72:
+                if (
+                    _calculate_similarity(goal_text, existing["goal"])
+                    >= self._goal_similarity_threshold
+                ):
                     duplicated = True
                     break
             if duplicated:

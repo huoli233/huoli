@@ -200,6 +200,29 @@ boredom_show = 0.41
 [profile_mapping.semantic_domains.webui_state_monitor_thresholds.prediction]
 probability_high = 0.74
 
+[profile_mapping.semantic_domains.brain_chat_runtime]
+parallel_action_timeout_seconds = 88.0
+main_loop_max_retries = 4
+
+[profile_mapping.semantic_domains.brain_planner]
+planner_timeout_seconds = 22.0
+
+[profile_mapping.semantic_domains.brain_pfc_action]
+llm_timeout_seconds = 26.0
+high_risk_threshold = 0.41
+farewell_timeout_seconds = 19.0
+
+[profile_mapping.semantic_domains.brain_pfc_reply]
+duplicate_similarity_threshold = 0.91
+generation_timeout_seconds = 44.0
+
+[profile_mapping.semantic_domains.brain_waiter]
+desired_timeout_seconds = 222
+
+[profile_mapping.semantic_domains.brain_pfc_goal]
+analysis_timeout_seconds = 12.0
+max_goals = 5
+
 [profile_mapping.semantic_domains.skill]
 trial_to_active_invocations = 6
 runtime_skill_cost = 0.4
@@ -334,6 +357,24 @@ semantic_domains = ["webui_git_mirror"]
 [profile_mapping.module_views.webui_state_monitor_thresholds]
 semantic_domains = ["webui_state_monitor_thresholds"]
 
+[profile_mapping.module_views.brain_chat_runtime]
+semantic_domains = ["brain_chat_runtime"]
+
+[profile_mapping.module_views.brain_planner]
+semantic_domains = ["brain_planner"]
+
+[profile_mapping.module_views.brain_pfc_action]
+semantic_domains = ["brain_pfc_action"]
+
+[profile_mapping.module_views.brain_pfc_reply]
+semantic_domains = ["brain_pfc_reply"]
+
+[profile_mapping.module_views.brain_waiter]
+semantic_domains = ["brain_waiter"]
+
+[profile_mapping.module_views.brain_pfc_goal]
+semantic_domains = ["brain_pfc_goal"]
+
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
 
@@ -421,6 +462,15 @@ def main() -> None:
         assert hub.resolve_module_view("webui_git_mirror").values["clone_timeout_seconds"] == 420
         assert hub.resolve_module_view("webui_state_monitor_thresholds").values["emotion"]["boredom_show"] == 0.41
         assert hub.resolve_module_view("webui_state_monitor_thresholds").values["prediction"]["probability_high"] == 0.74
+        assert hub.resolve_module_view("brain_chat_runtime").values["parallel_action_timeout_seconds"] == 88.0
+        assert hub.resolve_module_view("brain_planner").values["planner_timeout_seconds"] == 22.0
+        assert hub.resolve_module_view("brain_pfc_action").values["llm_timeout_seconds"] == 26.0
+        assert hub.resolve_module_view("brain_pfc_action").values["high_risk_threshold"] == 0.41
+        assert hub.resolve_module_view("brain_pfc_action").values["farewell_timeout_seconds"] == 19.0
+        assert hub.resolve_module_view("brain_pfc_reply").values["duplicate_similarity_threshold"] == 0.91
+        assert hub.resolve_module_view("brain_pfc_reply").values["generation_timeout_seconds"] == 44.0
+        assert hub.resolve_module_view("brain_waiter").values["desired_timeout_seconds"] == 222
+        assert hub.resolve_module_view("brain_pfc_goal").values["max_goals"] == 5
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
         assert hub.resolve_module_view("adaptive_learning").values["expression_learn_temperature"] == 0.25
@@ -451,6 +501,8 @@ def main() -> None:
             "recall_correction_timeout": hub.resolve_module_view("recall_correction").values["timeout_seconds"],
             "webui_auth_limit": hub.resolve_module_view("webui_rate_limit").values["auth_request_limit"],
             "webui_prediction_high": hub.resolve_module_view("webui_state_monitor_thresholds").values["prediction"]["probability_high"],
+            "brain_planner_timeout": hub.resolve_module_view("brain_planner").values["planner_timeout_seconds"],
+            "brain_waiter_timeout": hub.resolve_module_view("brain_waiter").values["desired_timeout_seconds"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "jargon_thresholds": hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"],

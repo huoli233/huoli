@@ -25,6 +25,7 @@ from src.chat.utils.chat_message_builder import (
 from src.chat.utils.utils import get_chat_type_and_target_info
 from src.chat.planner_actions.action_manager import ActionManager
 from src.chat.message_receive.chat_stream import get_chat_manager
+from src.chat.brain_chat.runtime_config import brainchat_module_view
 from src.plugin_system.base.component_types import (
     ActionInfo,
     ComponentType,
@@ -161,6 +162,16 @@ class BrainPlanner:
 
         # 计划日志记录
         self.plan_log: List[Tuple[str, float, List[ActionPlannerInfo]]] = []
+        self._load_config()
+
+    def _load_config(self) -> None:
+        config = brainchat_module_view("brain_planner")
+        self._recent_actions_window_seconds = int(
+            config.get("recent_actions_window_seconds", 600)
+        )
+        self._planner_timeout_seconds = float(
+            config.get("planner_timeout_seconds", 30.0)
+        )
 
     def find_message_by_id(
         self,
@@ -467,7 +478,7 @@ class BrainPlanner:
             # 获取最近执行过的动作
             actions_before_now = get_actions_by_timestamp_with_chat(
                 chat_id=self.chat_id,
-                timestamp_start=time.time() - 600,
+                timestamp_start=time.time() - self._recent_actions_window_seconds,
                 timestamp_end=time.time(),
                 limit=6,
             )
@@ -673,7 +684,7 @@ class BrainPlanner:
             llm_content, (reasoning_content, _, _) = (
                 await asyncio.wait_for(
                     self.planner_llm.generate_response_async(prompt=prompt),
-                    timeout=30.0,
+                    timeout=self._planner_timeout_seconds,
                 )
             )
             llm_duration_ms = (time.perf_counter() - llm_start) * 1000

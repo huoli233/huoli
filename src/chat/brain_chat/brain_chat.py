@@ -15,25 +15,17 @@ from src.config.config import global_config
 from src.common.logger import get_logger
 from src.common.data_models.info_data_model import ActionPlannerInfo
 from src.common.data_models.message_data_model import ReplyContentType
+from src.chat.brain_chat.runtime_config import brainchat_module_view
 from src.chat.utils.prompt_builder import global_prompt_manager
-from src.chat.message_receive.chat_stream import ChatStream, get_chat_manager
 from src.chat.utils.timer_calculator import Timer
-from src.chat.planner_actions.action_modifier import ActionModifier
-from src.chat.planner_actions.action_manager import ActionManager
-from src.chat.heart_flow.hfc_utils import CycleDetail
-from src.bw_learner.expression_learner import expression_learner_manager
 from src.bw_learner.message_recorder import extract_and_distribute_messages
 from src.person_info.person_info import Person
-from src.plugin_system.base.component_types import EventType, ActionInfo
-from src.plugin_system.core.events_manager import events_manager
+from src.plugin_system.base.component_types import ActionInfo
 from src.plugin_system.apis import (
     generator_api,
     send_api,
     message_api,
     database_api,
-)
-from src.chat.utils.chat_message_builder import (
-    get_raw_msg_before_timestamp_with_chat,
 )
 from src.chat.replyer.context_block_builder import build_reply_context_block
 
@@ -67,6 +59,34 @@ class BrainChatting(ChatCoreBase):
         self.more_plan = False
         self._last_successful_reply: bool = False
         self._inaction_type = "wait"
+        self._load_config()
+
+    def _load_config(self) -> None:
+        config = brainchat_module_view("brain_chat_runtime")
+        self._loop_iteration_sleep_seconds = float(
+            config.get("loop_iteration_sleep_seconds", 0.1)
+        )
+        self._parallel_action_timeout_seconds = float(
+            config.get("parallel_action_timeout_seconds", 60.0)
+        )
+        self._main_loop_max_retries = int(
+            config.get("main_loop_max_retries", 3)
+        )
+        self._main_loop_retry_delay_seconds = float(
+            config.get("main_loop_retry_delay_seconds", 3.0)
+        )
+        self._wait_check_interval_seconds = float(
+            config.get("wait_check_interval_seconds", 1.0)
+        )
+        self._wait_default_seconds = float(
+            config.get("wait_default_seconds", 5.0)
+        )
+        self._listening_default_seconds = float(
+            config.get("listening_default_seconds", 3.0)
+        )
+        self._unified_gate_sleep_cap_seconds = float(
+            config.get("unified_gate_sleep_cap_seconds", 3.0)
+        )
 
     async def start(self):
         """检查是否需要启动主循环，如果未激活则启动。"""
@@ -123,7 +143,7 @@ class BrainChatting(ChatCoreBase):
 
         # 继续下一次迭代（除非选择了 complete_talk）
         # 短暂等待后再继续，避免过于频繁的循环
-        await asyncio.sleep(0.1)
+        await asyncio.sleep(self._loop_iteration_sleep_seconds)
 
         return True
 
@@ -232,7 +252,7 @@ class BrainChatting(ChatCoreBase):
                                 )
                                 or 1.0
                             ),
-                            3.0,
+                            self._unified_gate_sleep_cap_seconds,
                         )
                     )
                     return True
@@ -305,10 +325,12 @@ class BrainChatting(ChatCoreBase):
             try:
                 results = await asyncio.wait_for(
                     asyncio.gather(*action_tasks, return_exceptions=True),
-                    timeout=60.0,
+                    timeout=self._parallel_action_timeout_seconds,
                 )
             except asyncio.TimeoutError:
-                logger.warning(f"{self.log_prefix} 动作并行执行超时(60s)")
+                logger.warning(
+                    f"{self.log_prefix} 动作并行执行超时({self._parallel_action_timeout_seconds}s)"
+                )
                 results = []
 
             # 处理执行结果
@@ -382,7 +404,6 @@ class BrainChatting(ChatCoreBase):
         Args:
             retry_count: 当前重试次数，用于防止无限递归
         """
-        max_retries = 3
         try:
             while self.running:
                 # 主循环
@@ -395,7 +416,7 @@ class BrainChatting(ChatCoreBase):
                     await self._wait_for_new_message()
                     # 有新消息后继续循环
                     continue
-                await asyncio.sleep(0.1)
+                await asyncio.sleep(self._loop_iteration_sleep_seconds)
         except asyncio.CancelledError:
             # 设置了关闭标志位后被取消是正常流程
             logger.info(f"{self.log_prefix} 活力已关闭聊天")
@@ -404,21 +425,23 @@ class BrainChatting(ChatCoreBase):
                 f"{self.log_prefix} 活力聊天意外错误，将于3s后尝试重新启动: {exc}",
                 exc_info=True
             )
-            if retry_count < max_retries:
-                await asyncio.sleep(3)
+            if retry_count < self._main_loop_max_retries:
+                await asyncio.sleep(self._main_loop_retry_delay_seconds)
                 new_task = asyncio.create_task(
                     self._main_chat_loop(retry_count + 1)
                 )
                 self._loop_task = new_task
             else:
-                logger.error(f"{self.log_prefix} 达到最大重试次数({max_retries})，停止聊天循环")
+                logger.error(
+                    f"{self.log_prefix} 达到最大重试次数({self._main_loop_max_retries})，停止聊天循环"
+                )
                 self.running = False
         logger.error(f"{self.log_prefix} 结束了当前聊天循环")
 
     async def _wait_for_new_message(self):
         """等待新消息到达"""
         last_check_time = self.last_read_time
-        check_interval = 1.0  # 每秒检查一次
+        check_interval = self._wait_check_interval_seconds
 
         # 清除事件状态，准备等待新消息
         self._new_message_event.clear()
@@ -817,22 +840,22 @@ class BrainChatting(ChatCoreBase):
                             wait_seconds = action_data.get("wait_seconds")
                             if wait_seconds is None:
                                 logger.warning(
-                                    f"{self.log_prefix} wait 动作缺少 wait_seconds 参数，使用默认值 5 秒"
+                                    f"{self.log_prefix} wait 动作缺少 wait_seconds 参数，使用默认值 {self._wait_default_seconds} 秒"
                                 )
-                                wait_seconds = 5
+                                wait_seconds = self._wait_default_seconds
                             else:
                                 try:
                                     wait_seconds = float(wait_seconds)
                                     if wait_seconds < 0:
                                         logger.warning(
-                                            f"{self.log_prefix} wait_seconds 不能为负数，使用默认值 5 秒"
+                                            f"{self.log_prefix} wait_seconds 不能为负数，使用默认值 {self._wait_default_seconds} 秒"
                                         )
-                                        wait_seconds = 5
+                                        wait_seconds = self._wait_default_seconds
                                 except (ValueError, TypeError):
                                     logger.warning(
-                                        f"{self.log_prefix} wait_seconds 参数格式错误，使用默认值 5 秒"
+                                        f"{self.log_prefix} wait_seconds 参数格式错误，使用默认值 {self._wait_default_seconds} 秒"
                                     )
-                                    wait_seconds = 5
+                                    wait_seconds = self._wait_default_seconds
 
                             logger.info(
                                 f"{self.log_prefix} 执行 wait 动作，等待 {wait_seconds} 秒（可被新消息打断）"
@@ -889,7 +912,7 @@ class BrainChatting(ChatCoreBase):
                                 f"{self.log_prefix} 检测到 listening 动作，已合并到 wait，自动转换"
                             )
                             # 使用默认等待时间
-                            wait_seconds = 3
+                            wait_seconds = self._listening_default_seconds
 
                             logger.info(
                                 f"{self.log_prefix} 执行 listening（转换为 wait）动作，等待 {wait_seconds} 秒（可被新消息打断）"

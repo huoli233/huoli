@@ -1,12 +1,11 @@
 import asyncio
-import json
-import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from src.chat.brain_chat.PFC.chat_observer import ChatObserver
 from src.chat.brain_chat.PFC.conversation_info import ConversationInfo
 from src.chat.brain_chat.PFC.observation_info import ObservationInfo
 from src.chat.brain_chat.PFC.reply_checker import ReplyChecker
+from src.chat.brain_chat.runtime_config import brainchat_module_view
 from src.chat.utils.chat_message_builder import build_readable_messages
 from src.common.logger import get_logger
 from src.config.config import global_config, model_config
@@ -17,11 +16,6 @@ import src.chat.prompts.catalog  # noqa: F401 注册提示词
 from src.chat.utils.prompt_builder import global_prompt_manager
 
 logger = get_logger("回复生成")
-
-# 回复长度软上限（字符数），超过时截断到最近句子边界
-_RESPONSE_LENGTH_SOFT_CAP = 200
-# 生成重试上限
-_MAX_GENERATION_ATTEMPTS = 2
 
 
 class ReplyGenerator:
@@ -36,6 +30,25 @@ class ReplyGenerator:
         self.private_name = private_name
         self.chat_observer = ChatObserver.get_instance(stream_id, private_name)
         self.reply_checker = ReplyChecker(stream_id, private_name)
+        self._load_config()
+
+    def _load_config(self) -> None:
+        config = brainchat_module_view("brain_pfc_reply")
+        self._response_length_soft_cap = int(
+            config.get("response_length_soft_cap", 200)
+        )
+        self._max_generation_attempts = int(
+            config.get("max_generation_attempts", 2)
+        )
+        self._generation_timeout_seconds = float(
+            config.get("generation_timeout_seconds", 60.0)
+        )
+        self._generation_retry_backoff_seconds = float(
+            config.get("generation_retry_backoff_seconds", 0.35)
+        )
+        self._force_replan_retry_count = int(
+            config.get("force_replan_retry_count", 2)
+        )
 
     @staticmethod
     def _compose_persona_trait() -> Tuple[str, str]:
@@ -110,11 +123,11 @@ class ReplyGenerator:
         )
         # 带重试的生成循环
         last_error = None
-        for attempt in range(_MAX_GENERATION_ATTEMPTS):
+        for attempt in range(self._max_generation_attempts):
             try:
                 raw_output, _ = await asyncio.wait_for(
                     self.llm.generate_response_async(rendered_prompt),
-                    timeout=60.0,
+                    timeout=self._generation_timeout_seconds,
                 )
                 logger.debug(
                     f"[私聊][{self.private_name}]第{attempt + 1}次生成原始输出: "
@@ -137,8 +150,8 @@ class ReplyGenerator:
                     f"[私聊][{self.private_name}]第{attempt + 1}次生成异常: {exc}"
                 )
 
-            if attempt < _MAX_GENERATION_ATTEMPTS - 1:
-                backoff = 0.35 * (attempt + 1)
+            if attempt < self._max_generation_attempts - 1:
+                backoff = self._generation_retry_backoff_seconds * (attempt + 1)
                 await asyncio.sleep(backoff)
         # 全部尝试失败，返回兜底回复
         logger.error(
@@ -280,9 +293,9 @@ class ReplyGenerator:
         while "\n\n\n" in text:
             text = text.replace("\n\n\n", "\n\n")
         # 长度治理
-        if len(text) > _RESPONSE_LENGTH_SOFT_CAP:
+        if len(text) > self._response_length_soft_cap:
             text = self._truncate_at_sentence_boundary(
-                text, _RESPONSE_LENGTH_SOFT_CAP
+                text, self._response_length_soft_cap
             )
         return text
 
@@ -349,7 +362,7 @@ class ReplyGenerator:
         if not suitable and self._is_hard_replan_reason(normalized_reason):
             return False, normalized_reason, True
 
-        if not suitable and retry_count >= 2:
+        if not suitable and retry_count >= self._force_replan_retry_count:
             return False, normalized_reason, True
 
         return suitable, normalized_reason, need_replan

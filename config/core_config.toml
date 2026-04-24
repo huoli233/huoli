@@ -1431,6 +1431,72 @@ sleep_reserve_low = 25.0
 probability_high = 0.70
 probability_medium = 0.45
 
+[profile_mapping.semantic_domains.brain_chat_runtime]
+loop_iteration_sleep_seconds = 0.1
+parallel_action_timeout_seconds = 60.0
+main_loop_max_retries = 3
+main_loop_retry_delay_seconds = 3.0
+wait_check_interval_seconds = 1.0
+wait_default_seconds = 5.0
+listening_default_seconds = 3.0
+unified_gate_sleep_cap_seconds = 3.0
+
+[profile_mapping.semantic_domains.brain_planner]
+recent_actions_window_seconds = 600
+planner_timeout_seconds = 30.0
+
+[profile_mapping.semantic_domains.brain_pfc_action]
+recent_action_window = 6
+repeated_action_ceiling = 4
+llm_timeout_seconds = 30.0
+elapsed_hint_recent_seconds = 60.0
+elapsed_hint_recent_minutes_seconds = 300.0
+elapsed_hint_one_hour_seconds = 3600.0
+goal_clarity_with_goal = 0.85
+goal_clarity_without_goal = 0.25
+knowledge_depth_empty = 0.15
+history_continuity_empty = 0.2
+consensus_bonus_cap = 0.12
+consensus_spread_penalty = 0.15
+risk_avg_interval_fast = 2.0
+risk_avg_interval_medium = 5.0
+risk_avg_interval_slow = 10.0
+risk_staleness_high = 600.0
+risk_staleness_medium = 300.0
+tail_streak_high = 3
+tail_streak_medium = 2
+low_confidence_threshold = 0.22
+high_risk_threshold = 0.3
+confidence_guard_threshold = 0.45
+send_new_message_risk_threshold = 0.42
+farewell_timeout_seconds = 20.0
+
+[profile_mapping.semantic_domains.brain_pfc_reply]
+check_max_retries = 3
+checked_history_maxlen = 6
+recent_bot_limit = 4
+duplicate_similarity_threshold = 0.9
+checked_similarity_threshold = 0.85
+tail_streak_limit = 3
+check_timeout_seconds = 30.0
+response_length_soft_cap = 200
+max_generation_attempts = 2
+generation_timeout_seconds = 60.0
+generation_retry_backoff_seconds = 0.35
+force_replan_retry_count = 2
+
+[profile_mapping.semantic_domains.brain_waiter]
+desired_timeout_seconds = 300
+listening_timeout_seconds = 300
+fast_retry_timeout_seconds = 120
+goal_list_fast_retry_threshold = 4
+wait_poll_interval_seconds = 5.0
+
+[profile_mapping.semantic_domains.brain_pfc_goal]
+max_goals = 3
+analysis_timeout_seconds = 18.0
+goal_similarity_threshold = 0.72
+
 [profile_mapping.semantic_domains.heartflow_runtime]
 focus_channels = []
 initiative_interval_sec = 300.0
@@ -1704,3 +1770,33 @@ profile_name = "webui_git_mirror_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["webui_state_monitor_thresholds"]
 profile_name = "webui_state_monitor_thresholds_view"
+
+[profile_mapping.module_views.brain_chat_runtime]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["brain_chat_runtime"]
+profile_name = "brain_chat_runtime_view"
+
+[profile_mapping.module_views.brain_planner]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["brain_planner"]
+profile_name = "brain_planner_view"
+
+[profile_mapping.module_views.brain_pfc_action]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["brain_pfc_action"]
+profile_name = "brain_pfc_action_view"
+
+[profile_mapping.module_views.brain_pfc_reply]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["brain_pfc_reply"]
+profile_name = "brain_pfc_reply_view"
+
+[profile_mapping.module_views.brain_waiter]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["brain_waiter"]
+profile_name = "brain_waiter_view"
+
+[profile_mapping.module_views.brain_pfc_goal]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["brain_pfc_goal"]
+profile_name = "brain_pfc_goal_view"

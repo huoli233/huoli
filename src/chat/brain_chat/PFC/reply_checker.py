@@ -1,12 +1,12 @@
 import asyncio
-from collections import defaultdict, deque
+from collections import deque
 import difflib
-import json
 import re
 import traceback
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
 from src.chat.brain_chat.PFC.chat_observer import ChatObserver
+from src.chat.brain_chat.runtime_config import brainchat_module_view
 from src.chat.brain_chat.PFC.pfc_utils import parse_json_payload
 from src.common.logger import get_logger
 from src.config.config import global_config, model_config
@@ -21,9 +21,7 @@ logger = get_logger("回复检查")
 class ReplyChecker:
     """回复检查器，负责检查生成的回复是否合适。"""
 
-    _recent_checked_replies: Dict[str, Deque[str]] = defaultdict(
-        lambda: deque(maxlen=6)
-    )
+    _recent_checked_replies: Dict[str, Deque[str]] = {}
 
     def __init__(self, stream_id: str, private_name: str):
         self.llm = LLMRequest(
@@ -33,11 +31,36 @@ class ReplyChecker:
         self.bot_name = global_config.bot.nickname
         self.private_name = private_name
         self.chat_observer = ChatObserver.get_instance(stream_id, private_name)
-        self.max_retries = 3
         self.bot_account = str(
             getattr(global_config.bot, "qq_account", "") or ""
         )
         self._history_key = f"{stream_id}:{private_name}"
+        self._load_config()
+
+    def _load_config(self) -> None:
+        config = brainchat_module_view("brain_pfc_reply")
+        self.max_retries = int(config.get("check_max_retries", 3))
+        self._recent_checked_maxlen = int(
+            config.get("checked_history_maxlen", 6)
+        )
+        self._recent_bot_limit = int(config.get("recent_bot_limit", 4))
+        self._duplicate_similarity_threshold = float(
+            config.get("duplicate_similarity_threshold", 0.9)
+        )
+        self._checked_similarity_threshold = float(
+            config.get("checked_similarity_threshold", 0.85)
+        )
+        self._tail_streak_limit = int(config.get("tail_streak_limit", 3))
+        self._llm_timeout_seconds = float(
+            config.get("check_timeout_seconds", 30.0)
+        )
+
+    def _ensure_reply_history(self) -> Deque[str]:
+        history = self._recent_checked_replies.get(self._history_key)
+        if history is None or history.maxlen != self._recent_checked_maxlen:
+            history = deque(history or [], maxlen=self._recent_checked_maxlen)
+            self._recent_checked_replies[self._history_key] = history
+        return history
 
     @staticmethod
     def _normalize_reply_text(text: str) -> str:
@@ -49,13 +72,12 @@ class ReplyChecker:
     def _append_recent_reply(self, text: str) -> None:
         normalized = self._normalize_reply_text(text)
         if normalized:
-            self._recent_checked_replies[self._history_key].appendleft(
-                normalized
-            )
+            self._ensure_reply_history().appendleft(normalized)
 
     def _extract_recent_bot_messages(
-        self, chat_history: List[Dict[str, Any]], limit: int = 4
+        self, chat_history: List[Dict[str, Any]], limit: Optional[int] = None
     ) -> List[str]:
+        limit = self._recent_bot_limit if limit is None else limit
         bot_messages: List[str] = []
         for msg in reversed(chat_history):
             user_id = str(msg.get("user_id", "") or "")
@@ -106,22 +128,20 @@ class ReplyChecker:
             similarity_ratio = difflib.SequenceMatcher(
                 None, normalized_reply, normalized_recent
             ).ratio()
-            if similarity_ratio >= 0.9:
+            if similarity_ratio >= self._duplicate_similarity_threshold:
                 return f"被逻辑检查拒绝：回复内容与你近期发言高度相似（相似度 {
                     similarity_ratio:.2f}），建议换一种推进方式。"
 
-        recent_checked = self._recent_checked_replies.get(
-            self._history_key, deque()
-        )
+        recent_checked = self._ensure_reply_history()
         for checked in list(recent_checked)[:3]:
             similarity_ratio = difflib.SequenceMatcher(
                 None, normalized_reply, checked
             ).ratio()
-            if similarity_ratio >= 0.85:
+            if similarity_ratio >= self._checked_similarity_threshold:
                 return "被逻辑检查拒绝：这条回复在当前会话里已出现过近似表达，建议避免复读。"
 
         tail_streak = self._count_tail_bot_streak(chat_history)
-        if tail_streak >= 3:
+        if tail_streak >= self._tail_streak_limit:
             return "被逻辑检查拒绝：你已经连续发送多条消息且对方尚未回应，建议等待或调整目标。"
 
         return None
@@ -182,7 +202,7 @@ class ReplyChecker:
                     prompt,
                     usage_stream_id=self.chat_observer.stream_id,
                 ),
-                timeout=30.0,
+                timeout=self._llm_timeout_seconds,
             )
             logger.debug(
                 f"[私聊][{self.private_name}]检查回复的原始返回: {content}"
