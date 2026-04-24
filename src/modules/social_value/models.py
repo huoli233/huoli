@@ -38,7 +38,7 @@ class SocialUpdateResult:
 class AlgorithmParams:
     """最终算法参数 - 四层映射的输出
 
-    由 ConfigEngine.get_params() 生成，包含计算社交值变化所需的全部参数。
+    由 social_calculator 配置画像生成，包含计算社交值变化所需的全部参数。
     """
 
     category: str
@@ -57,7 +57,7 @@ class CategoryConfig:
     """分类配置 - 第二层运行时参数
 
     5个分类各一套配置：friendly, neutral, unfriendly, hostile, harassing
-    由 ConfigEngine 构建并应用用户调整。
+    由 social_calculator 配置画像构建并应用人格因子调整。
     """
 
     base_score: float = 0.0

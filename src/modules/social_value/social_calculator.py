@@ -3,11 +3,8 @@ import math
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, Dict
-from src.common.config.config_engine import (
-    ConfigEngine,
-    get_default_config_engine,
-)
-from src.common.config.config_engine import AlgorithmParams
+from src.modules.social_value.models import AlgorithmParams
+from src.modules.social_value.runtime_config import social_algorithm_params
 from src.modules.social_value.runtime_config import social_value_module_view
 
 
@@ -35,8 +32,7 @@ class SocialCalculator:
     5. 累积平衡: 心理状态调节变化效率
     """
 
-    def __init__(self, config_engine: ConfigEngine | None = None):
-        self._config = config_engine or get_default_config_engine()
+    def __init__(self):
         self._streak_states: Dict[str, _StreakState] = {}
         self._offset_decay_per_hour: float = 0.15
         self._positive_streak_coeff: float = 1.5
@@ -66,9 +62,7 @@ class SocialCalculator:
 
     def get_category_params(self, behavior_type: str, intent: str):
         """获取行为类型和意图对应的分类参数（公开接口）"""
-        if not self._config:
-            return AlgorithmParams()
-        return self._config.get_params(behavior_type, intent)
+        return social_algorithm_params(behavior_type, intent)
 
     def record_outcome(self, uid: str, delta: float, intensity: float) -> None:
         """记录一次计算结果，更新行为连续性追踪
@@ -147,7 +141,7 @@ class SocialCalculator:
         Returns:
             float: 社交值变化量
         """
-        params = self._config.get_params(behavior_type, intent)
+        params = social_algorithm_params(behavior_type, intent)
         adjusted_score = self._compute_adjusted_score(params, severity)
         progressive_score = self._apply_progressive_limit(
             adjusted_score, params, current_value
@@ -176,7 +170,7 @@ class SocialCalculator:
         uid: str = "",
     ) -> Dict:
         """计算并返回详细的中间过程（调试用）"""
-        params = self._config.get_params(behavior_type, intent)
+        params = social_algorithm_params(behavior_type, intent)
         adjusted_score = self._compute_adjusted_score(params, severity)
         max_change = params.max_change_per_reply * abs(current_value + 100)
         progressive_score = max(-max_change, min(max_change, adjusted_score))
@@ -346,10 +340,10 @@ class SocialCalculator:
 
         公式: decay = decay_rate × time_hours × |current_offset|
         """
-        params = self._config.get_params(behavior_type)
+        params = social_algorithm_params(behavior_type)
         return params.decay_rate * time_hours
 
     def get_trauma_impact(self, behavior_type: str, intent: str) -> float:
         """获取行为对创伤系统的影响系数"""
-        params = self._config.get_params(behavior_type, intent)
+        params = social_algorithm_params(behavior_type, intent)
         return params.trauma_impact

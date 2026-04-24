@@ -1533,6 +1533,255 @@ negative_streak_coeff = 2.0
 min_change_threshold = 0.001
 min_elapsed_hours = 0.01
 
+[profile_mapping.semantic_domains.social_calculator.categories.friendly]
+base_score = 0.5
+max_change_per_reply = 0.02
+acceleration_threshold = 0.8
+acceleration_multiplier = 2.0
+decay_rate = 0.01
+trauma_impact = 0.0
+
+[profile_mapping.semantic_domains.social_calculator.categories.neutral]
+base_score = 0.0
+max_change_per_reply = 0.01
+acceleration_threshold = 0.95
+acceleration_multiplier = 1.0
+decay_rate = 0.005
+trauma_impact = 0.0
+
+[profile_mapping.semantic_domains.social_calculator.categories.unfriendly]
+base_score = -1.0
+max_change_per_reply = 0.02
+acceleration_threshold = 0.8
+acceleration_multiplier = 2.5
+decay_rate = 0.015
+trauma_impact = 0.1
+
+[profile_mapping.semantic_domains.social_calculator.categories.hostile]
+base_score = -3.0
+max_change_per_reply = 0.03
+acceleration_threshold = 0.7
+acceleration_multiplier = 3.0
+decay_rate = 0.02
+trauma_impact = 0.3
+
+[profile_mapping.semantic_domains.social_calculator.categories.harassing]
+base_score = -5.0
+max_change_per_reply = 0.05
+acceleration_threshold = 0.6
+acceleration_multiplier = 3.5
+decay_rate = 0.03
+trauma_impact = 0.45
+
+[profile_mapping.semantic_domains.social_calculator.intents]
+compliment = 1.5
+comfort = 1.4
+help = 1.3
+apology = 1.2
+chat = 1.0
+question = 1.0
+criticism = 1.2
+manipulation = 1.5
+insult = 2.0
+threat = 3.0
+bullying = 2.5
+sexual = 3.0
+stalking = 2.5
+tease = 0.5
+flirt = 0.8
+
+[profile_mapping.semantic_domains.social_calculator.types.genuine_praise]
+category = "friendly"
+bonus = 1.3
+
+[profile_mapping.semantic_domains.social_calculator.types.casual_compliment]
+category = "friendly"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.encouragement]
+category = "friendly"
+bonus = 1.2
+
+[profile_mapping.semantic_domains.social_calculator.types.gratitude]
+category = "friendly"
+bonus = 1.1
+
+[profile_mapping.semantic_domains.social_calculator.types.care_expression]
+category = "friendly"
+bonus = 1.3
+
+[profile_mapping.semantic_domains.social_calculator.types.sharing_secrets]
+category = "friendly"
+bonus = 1.2
+
+[profile_mapping.semantic_domains.social_calculator.types.comfort]
+category = "friendly"
+bonus = 1.4
+
+[profile_mapping.semantic_domains.social_calculator.types.support]
+category = "friendly"
+bonus = 1.2
+
+[profile_mapping.semantic_domains.social_calculator.types.gentle_humor]
+category = "friendly"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.remembering_details]
+category = "friendly"
+bonus = 1.3
+
+[profile_mapping.semantic_domains.social_calculator.types.apology]
+category = "friendly"
+bonus = 1.1
+
+[profile_mapping.semantic_domains.social_calculator.types.affection_expression]
+category = "friendly"
+bonus = 1.4
+
+[profile_mapping.semantic_domains.social_calculator.types.casual_chat]
+category = "neutral"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.information_request]
+category = "neutral"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.topic_change]
+category = "neutral"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.brief_response]
+category = "neutral"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.factual_statement]
+category = "neutral"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.question]
+category = "neutral"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.observation]
+category = "neutral"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.greeting]
+category = "neutral"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.farewell]
+category = "neutral"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.unclear_intent]
+category = "neutral"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.cold_response]
+category = "unfriendly"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.passive_aggressive]
+category = "unfriendly"
+bonus = 1.3
+
+[profile_mapping.semantic_domains.social_calculator.types.dismissive]
+category = "unfriendly"
+bonus = 1.1
+
+[profile_mapping.semantic_domains.social_calculator.types.sarcastic_criticism]
+category = "unfriendly"
+bonus = 1.2
+
+[profile_mapping.semantic_domains.social_calculator.types.ignoring_boundaries]
+category = "unfriendly"
+bonus = 1.3
+
+[profile_mapping.semantic_domains.social_calculator.types.condescending]
+category = "unfriendly"
+bonus = 1.2
+
+[profile_mapping.semantic_domains.social_calculator.types.backhanded_compliment]
+category = "unfriendly"
+bonus = 1.1
+
+[profile_mapping.semantic_domains.social_calculator.types.manipulation]
+category = "unfriendly"
+bonus = 1.5
+
+[profile_mapping.semantic_domains.social_calculator.types.gaslighting]
+category = "unfriendly"
+bonus = 1.8
+
+[profile_mapping.semantic_domains.social_calculator.types.blame_shifting]
+category = "unfriendly"
+bonus = 1.3
+
+[profile_mapping.semantic_domains.social_calculator.types.direct_insult]
+category = "hostile"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.personal_attack]
+category = "hostile"
+bonus = 1.2
+
+[profile_mapping.semantic_domains.social_calculator.types.value_denial]
+category = "hostile"
+bonus = 1.5
+
+[profile_mapping.semantic_domains.social_calculator.types.existence_threat]
+category = "hostile"
+bonus = 1.8
+
+[profile_mapping.semantic_domains.social_calculator.types.dehumanizing]
+category = "hostile"
+bonus = 1.5
+
+[profile_mapping.semantic_domains.social_calculator.types.violent_language]
+category = "hostile"
+bonus = 1.3
+
+[profile_mapping.semantic_domains.social_calculator.types.bullying]
+category = "hostile"
+bonus = 1.4
+
+[profile_mapping.semantic_domains.social_calculator.types.group_attack]
+category = "hostile"
+bonus = 1.3
+
+[profile_mapping.semantic_domains.social_calculator.types.sexual_harassment]
+category = "harassing"
+bonus = 1.3
+
+[profile_mapping.semantic_domains.social_calculator.types.repeated_stalking]
+category = "harassing"
+bonus = 1.2
+
+[profile_mapping.semantic_domains.social_calculator.types.spam_flooding]
+category = "harassing"
+bonus = 1.0
+
+[profile_mapping.semantic_domains.social_calculator.types.violent_threat]
+category = "harassing"
+bonus = 1.5
+
+[profile_mapping.semantic_domains.social_calculator.types.doxxing_threat]
+category = "harassing"
+bonus = 1.8
+
+[profile_mapping.semantic_domains.social_calculator.types.forced_interaction]
+category = "harassing"
+bonus = 1.2
+
+[profile_mapping.semantic_domains.social_calculator.types.objectification]
+category = "harassing"
+bonus = 1.3
+
+[profile_mapping.semantic_domains.social_calculator.types.explicit_content]
+category = "harassing"
+bonus = 1.5
+
 [profile_mapping.semantic_domains.social_settlement]
 decay_rate_per_hour = 0.015
 saturation_steepness = 0.02

@@ -260,6 +260,16 @@ social_warmth = 0.77
 offset_decay_per_hour = 0.23
 positive_streak_coeff = 1.9
 
+[profile_mapping.semantic_domains.social_calculator.categories.hostile]
+acceleration_multiplier = 3.8
+
+[profile_mapping.semantic_domains.social_calculator.intents]
+flirt = 0.95
+
+[profile_mapping.semantic_domains.social_calculator.types.existence_threat]
+category = "hostile"
+bonus = 2.2
+
 [profile_mapping.semantic_domains.social_settlement]
 absolute_step_ceil = 12.0
 reversal_required_streak = 5
@@ -676,6 +686,9 @@ def main() -> None:
         assert hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"] == 0.91
         assert hub.resolve_module_view("personality_factors").values["social_warmth"] == 0.77
         assert hub.resolve_module_view("social_calculator").values["positive_streak_coeff"] == 1.9
+        assert hub.resolve_module_view("social_calculator").values["categories"]["hostile"]["acceleration_multiplier"] == 3.8
+        assert hub.resolve_module_view("social_calculator").values["intents"]["flirt"] == 0.95
+        assert hub.resolve_module_view("social_calculator").values["types"]["existence_threat"]["bonus"] == 2.2
         assert hub.resolve_module_view("social_settlement").values["absolute_step_ceil"] == 12.0
         assert hub.resolve_module_view("social_phase_tracker").values["trend_window_sec"] == 2222.0
         assert hub.resolve_module_view("social_phase_tracker").values["phase_weights"]["trusted"] == 1.23
@@ -735,6 +748,9 @@ def main() -> None:
             "energy_chat_ceiling": hub.resolve_module_view("energy_runtime").values["chat_value"]["ceiling"],
             "trigger_overflow_ratio": hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"],
             "social_streak_coeff": hub.resolve_module_view("social_calculator").values["positive_streak_coeff"],
+            "social_hostile_accel": hub.resolve_module_view("social_calculator").values["categories"]["hostile"]["acceleration_multiplier"],
+            "social_flirt_multiplier": hub.resolve_module_view("social_calculator").values["intents"]["flirt"],
+            "social_threat_bonus": hub.resolve_module_view("social_calculator").values["types"]["existence_threat"]["bonus"],
             "social_settlement_cap": hub.resolve_module_view("social_settlement").values["absolute_step_ceil"],
             "social_phase_trend_window": hub.resolve_module_view("social_phase_tracker").values["trend_window_sec"],
             "social_trusted_weight": hub.resolve_module_view("social_phase_tracker").values["phase_weights"]["trusted"],
