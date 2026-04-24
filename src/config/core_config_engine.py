@@ -187,8 +187,11 @@ class CoreSettingsHub:
 
     def energy_ceilings(self) -> Tuple[float, float]:
         """获取聊天精力值和思考值的上限"""
-        chat_ceil = float(self._deep_value("dual_pool_energy", "chat_value", "ceiling", fallback=100.0))
-        thinking_ceil = float(self._deep_value("dual_pool_energy", "thinking_power", "ceiling", fallback=100.0))
+        view = self.resolve_module_view("energy_runtime").values
+        chat_value = view.get("chat_value", {})
+        thinking_power = view.get("thinking_power", {})
+        chat_ceil = float(chat_value.get("ceiling", 100.0))
+        thinking_ceil = float(thinking_power.get("ceiling", 100.0))
         return (chat_ceil, thinking_ceil)
 
     def wait_timing_triple(self) -> Tuple[int, int, int]:
@@ -211,7 +214,7 @@ class CoreSettingsHub:
 
     def chat_pool_params(self) -> Dict[str, float]:
         """聊天值子段"""
-        sub = self._deep_value("dual_pool_energy", "chat_value", fallback={})
+        sub = self.resolve_module_view("energy_runtime").values.get("chat_value", {})
         if not isinstance(sub, dict):
             sub = {}
         return {
@@ -223,7 +226,7 @@ class CoreSettingsHub:
 
     def thinking_pool_params(self) -> Dict[str, float]:
         """思考值子段"""
-        sub = self._deep_value("dual_pool_energy", "thinking_power", fallback={})
+        sub = self.resolve_module_view("energy_runtime").values.get("thinking_power", {})
         if not isinstance(sub, dict):
             sub = {}
         return {
@@ -235,17 +238,22 @@ class CoreSettingsHub:
 
     def decay_params(self) -> Dict[str, float]:
         """衰减子段"""
-        sub = self._deep_value("dual_pool_energy", "decay", fallback={})
+        sub = self.resolve_module_view("energy_runtime").values.get("decay", {})
         if not isinstance(sub, dict):
             sub = {}
         return {
             "annoyance_decay_rate": float(sub.get("annoyance_decay_rate", 3.0)),
+            "chat_recovery_per_min": float(sub.get("chat_recovery_per_min", 5.0)),
+            "fatigue_decay_per_min": float(sub.get("fatigue_decay_per_min", 3.0)),
+            "annoyance_decay_per_min": float(sub.get("annoyance_decay_per_min", 3.0)),
             "min_recovery_gap_seconds": float(sub.get("min_recovery_gap_seconds", 6.0)),
         }
 
     def penalty_caps(self) -> Dict[str, float]:
         """各项惩罚上限"""
-        sec = self._section("penalty_caps")
+        sec = self.resolve_module_view("energy_runtime").values.get("penalty_caps", {})
+        if not isinstance(sec, dict):
+            sec = {}
         return {
             "trauma_cap": float(sec.get("trauma_cap", 0.6)),
             "annoyance_cap": float(sec.get("annoyance_cap", 0.5)),
@@ -269,7 +277,8 @@ class CoreSettingsHub:
 
     def emotion_annoy_count(self) -> int:
         """触发烦恼的重复次数"""
-        return int(self._value("emotion_stream", "annoyed_repeat_count", 3))
+        view = self.resolve_module_view("chat_emotion").values
+        return int(view.get("annoyance_repeat_threshold", 3))
 
     def voice_action_limit(self) -> int:
         """内心独白最多输出动作数"""
@@ -283,25 +292,25 @@ class CoreSettingsHub:
 
     def energy_overflow_ratio(self) -> float:
         """能量溢出触发比例"""
-        return float(self._value("trigger_thresholds", "energy_overflow_ratio", 0.85))
+        return float(self.resolve_module_view("trigger_runtime").values.get("energy_overflow_ratio", 0.85))
 
     def social_warmth_floor(self) -> float:
         """社交温度下限"""
-        return float(self._value("trigger_thresholds", "social_warmth_floor", 0.3))
+        return float(self.resolve_module_view("trigger_runtime").values.get("social_warmth_floor", 0.3))
 
     def plan_trigger_gap(self) -> float:
         """规划触发最小间隔"""
-        return float(self._value("trigger_thresholds", "plan_trigger_interval", 600.0))
+        return float(self.resolve_module_view("trigger_runtime").values.get("plan_trigger_interval", 600.0))
 
     def curiosity_threshold(self) -> float:
         """好奇心爆发阈值"""
-        return float(self._value("trigger_thresholds", "curiosity_spike_threshold", 0.7))
+        return float(self.resolve_module_view("trigger_runtime").values.get("curiosity_spike_threshold", 0.7))
 
     # ---- 人格滑块 ----
 
     def slider(self, name: str, fallback: float = 0.5) -> float:
         """读取单个人格滑块，限制在0~1"""
-        block = self._sections.get("personality_sliders")
+        block = self.resolve_module_view("personality_factors").values
         if not isinstance(block, dict):
             return fallback
         raw = block.get(name)
@@ -403,12 +412,22 @@ class CoreSettingsHub:
 
     def assemble_trigger_config(self) -> Dict[str, Any]:
         """组装触发系统的完整配置包"""
-        t = self._section("trigger_thresholds")
+        t = self.resolve_module_view("trigger_runtime").values
         return {
             "overflow_ratio": float(t.get("energy_overflow_ratio", 0.85)),
             "warmth_floor": float(t.get("social_warmth_floor", 0.3)),
             "plan_gap_sec": float(t.get("plan_trigger_interval", 600.0)),
             "curiosity_bar": float(t.get("curiosity_spike_threshold", 0.7)),
+        }
+
+    def dual_pool_energy(self) -> Dict[str, Any]:
+        """兼容导出双池能量结构，但内部来源已切到 energy_runtime 画像。"""
+        values = self.resolve_module_view("energy_runtime").values
+        return {
+            "chat_value": copy.deepcopy(values.get("chat_value", {})),
+            "thinking_power": copy.deepcopy(values.get("thinking_power", {})),
+            "decay": copy.deepcopy(values.get("decay", {})),
+            "penalty_caps": copy.deepcopy(values.get("penalty_caps", {})),
         }
 
     def assemble_voice_config(self) -> Dict[str, Any]:

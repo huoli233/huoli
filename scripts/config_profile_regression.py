@@ -241,6 +241,21 @@ default_persona = "anchor:{{name}}"
 storage_dir = "tmp/users"
 max_activities = 77
 
+[profile_mapping.semantic_domains.energy_runtime.chat_value]
+ceiling = 123.0
+
+[profile_mapping.semantic_domains.energy_runtime.decay]
+annoyance_decay_per_min = 4.2
+
+[profile_mapping.semantic_domains.energy_runtime.penalty_caps]
+trauma_cap = 0.71
+
+[profile_mapping.semantic_domains.trigger_runtime]
+energy_overflow_ratio = 0.91
+
+[profile_mapping.semantic_domains.personality_factors]
+social_warmth = 0.77
+
 [profile_mapping.semantic_domains.skill]
 trial_to_active_invocations = 6
 runtime_skill_cost = 0.4
@@ -402,6 +417,15 @@ semantic_domains = ["identity_anchor"]
 [profile_mapping.module_views.identity_user_persistence]
 semantic_domains = ["identity_user_persistence"]
 
+[profile_mapping.module_views.energy_runtime]
+semantic_domains = ["energy_runtime"]
+
+[profile_mapping.module_views.trigger_runtime]
+semantic_domains = ["trigger_runtime"]
+
+[profile_mapping.module_views.personality_factors]
+semantic_domains = ["personality_factors"]
+
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
 
@@ -503,6 +527,11 @@ def main() -> None:
         assert hub.resolve_module_view("identity_anchor").values["max_history"] == 55
         assert hub.resolve_module_view("identity_anchor").values["prompt_templates"]["default_persona"] == "anchor:{name}"
         assert hub.resolve_module_view("identity_user_persistence").values["storage_dir"] == "tmp/users"
+        assert hub.resolve_module_view("energy_runtime").values["chat_value"]["ceiling"] == 123.0
+        assert hub.resolve_module_view("energy_runtime").values["decay"]["annoyance_decay_per_min"] == 4.2
+        assert hub.resolve_module_view("energy_runtime").values["penalty_caps"]["trauma_cap"] == 0.71
+        assert hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"] == 0.91
+        assert hub.resolve_module_view("personality_factors").values["social_warmth"] == 0.77
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
         assert hub.resolve_module_view("adaptive_learning").values["expression_learn_temperature"] == 0.25
@@ -537,6 +566,8 @@ def main() -> None:
             "brain_waiter_timeout": hub.resolve_module_view("brain_waiter").values["desired_timeout_seconds"],
             "identity_bot_name": hub.resolve_module_view("identity_bot").values["nickname"],
             "identity_storage_dir": hub.resolve_module_view("identity_user_persistence").values["storage_dir"],
+            "energy_chat_ceiling": hub.resolve_module_view("energy_runtime").values["chat_value"]["ceiling"],
+            "trigger_overflow_ratio": hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "jargon_thresholds": hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"],

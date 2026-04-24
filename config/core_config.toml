@@ -1546,6 +1546,47 @@ file_lock_cleanup_interval_seconds = 600.0
 file_lock_stale_seconds = 3600.0
 max_activities = 100
 
+[profile_mapping.semantic_domains.energy_runtime]
+
+[profile_mapping.semantic_domains.energy_runtime.chat_value]
+ceiling = 100.0
+recovery_rate_per_min = 5.0
+cost_per_reply = 15.0
+cost_per_peek = 5.0
+
+[profile_mapping.semantic_domains.energy_runtime.thinking_power]
+ceiling = 100.0
+cost_per_think = 3.0
+cost_per_reply = 8.0
+recovery_rate_per_sec = 0.005
+
+[profile_mapping.semantic_domains.energy_runtime.decay]
+annoyance_decay_rate = 3.0
+min_recovery_gap_seconds = 6.0
+chat_recovery_per_min = 5.0
+fatigue_decay_per_min = 3.0
+annoyance_decay_per_min = 3.0
+
+[profile_mapping.semantic_domains.energy_runtime.penalty_caps]
+trauma_cap = 0.6
+annoyance_cap = 0.5
+frequency_bonus_cap = 0.3
+
+[profile_mapping.semantic_domains.trigger_runtime]
+energy_overflow_ratio = 0.85
+social_warmth_floor = 0.3
+plan_trigger_interval = 600.0
+curiosity_spike_threshold = 0.7
+
+[profile_mapping.semantic_domains.personality_factors]
+sensitivity = 0.6
+tolerance = 0.4
+reactiveness = 0.5
+recovery_speed = 0.5
+social_warmth = 0.6
+curiosity_drive = 0.6
+reply_eagerness = 0.5
+
 [profile_mapping.semantic_domains.heartflow_runtime]
 focus_channels = []
 initiative_interval_sec = 300.0
@@ -1864,3 +1905,18 @@ profile_name = "identity_anchor_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["identity_user_persistence"]
 profile_name = "identity_user_persistence_view"
+
+[profile_mapping.module_views.energy_runtime]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["energy_runtime"]
+profile_name = "energy_runtime_view"
+
+[profile_mapping.module_views.trigger_runtime]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["trigger_runtime"]
+profile_name = "trigger_runtime_view"
+
+[profile_mapping.module_views.personality_factors]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["personality_factors"]
+profile_name = "personality_factors_view"
