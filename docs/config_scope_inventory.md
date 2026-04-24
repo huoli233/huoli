@@ -29,10 +29,10 @@
 | --- | --- | --- | --- | --- | --- |
 | dialogue_orchestration | 对话编排 | 15 | 9 | 6 | 0 |
 | emotion_psychology | 情绪与心理 | 3 | 2 | 1 | 0 |
-| identity_persona | 身份与人格 | 9 | 6 | 2 | 1 |
+| identity_persona | 身份与人格 | 9 | 5 | 3 | 1 |
 | interface_observability | 界面与可观测 | 4 | 3 | 1 | 0 |
 | learning_adaptation | 学习与自适应 | 2 | 1 | 1 | 0 |
-| memory_knowledge | 记忆与知识 | 12 | 8 | 4 | 0 |
+| memory_knowledge | 记忆与知识 | 12 | 5 | 7 | 0 |
 | perception_context | 感知与上下文 | 13 | 11 | 2 | 0 |
 | runtime_resources | 运行资源与开关 | 4 | 3 | 1 | 0 |
 | safety_guard | 安全与防护 | 4 | 4 | 0 | 0 |
@@ -92,13 +92,13 @@
 | heartflow_runtime | 对话编排 / 主动与回复 | mixed | 已接入 | focus_channels, quiet_threshold_sec, max_initiative_per_hour | heartflow_runtime |
 | identity_anchor | 身份与人格 / 身份档案 | mixed | 已接入 | prompt_templates | identity_anchor |
 | identity_bot | 身份与人格 / 身份档案 | mixed | 已接入 | nickname, alias_names, character_age, interests, lore, personality_core, relationships, reply_style, visual_features, identity_templates, role_visual_profiles, skill_prompt_templates | identity_bot |
-| identity_user_persistence | 身份与人格 / 身份档案 | system | 已接入 | - | identity_user_persistence |
+| identity_user_persistence | 身份与人格 / 身份档案 | mixed | 已接入 | max_activities | identity_user_persistence |
 | injection_detection | 安全与防护 / 风险检测 | system | 已接入 | - | injection_detection |
 | inner_voice | 对话编排 / 主动与回复 | mixed | 已接入 | waiting_thoughts, fallback_action | inner_voice |
 | memory | 记忆与知识 / 容量与衰减 | mixed | 已接入 | short_term_limit, temporary_ttl_seconds, reactivation_cooldown_seconds, reactivation_max_candidates, emotion_reactivation_threshold, boredom_reactivation_threshold | memory |
-| memory_capacity | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_capacity |
-| memory_decay | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_decay |
-| memory_dedup | 记忆与知识 / 容量与衰减 | system | 已接入 | - | memory_dedup |
+| memory_capacity | 记忆与知识 / 容量与衰减 | mixed | 已接入 | review_interval_seconds, max_count_by_tier | memory_capacity |
+| memory_decay | 记忆与知识 / 容量与衰减 | mixed | 已接入 | decay_rate_per_hour, forget_threshold, min_age_for_decay_seconds | memory_decay |
+| memory_dedup | 记忆与知识 / 容量与衰减 | mixed | 已接入 | similarity_threshold | memory_dedup |
 | memory_retrieval | 记忆与知识 / 检索与召回 | mixed | 已接入 | bm25_weight, vector_weight | memory_retrieval |
 | message_processor | 对话编排 / 路由与生成 | system | 已接入 | - | message_processor |
 | model_routing | 对话编排 / 路由与生成 | system | 已接入 | - | model_routing |

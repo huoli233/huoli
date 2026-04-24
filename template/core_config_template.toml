@@ -1837,7 +1837,9 @@ system_only_keys = ["overload_ratio_threshold", "overload_amnesia_threshold", "o
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory_capacity"]
 profile_name = "memory_capacity_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["review_interval_seconds", "max_count_by_tier"]
+system_only_keys = ["llm_timeout_seconds"]
 
 [profile_mapping.module_views.memory_retrieval]
 base_refs = ["runtime_defaults"]
@@ -1851,13 +1853,17 @@ system_only_keys = ["rrf_k"]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory_decay"]
 profile_name = "memory_decay_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["decay_rate_per_hour", "forget_threshold", "min_age_for_decay_seconds"]
+system_only_keys = ["cycle_interval_seconds", "max_batch_for_llm"]
 
 [profile_mapping.module_views.memory_dedup]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["memory_dedup"]
 profile_name = "memory_dedup_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["similarity_threshold"]
+system_only_keys = ["scan_interval_seconds", "max_pairs_per_scan", "merge_top_k"]
 
 [profile_mapping.module_views.context]
 base_refs = ["runtime_defaults"]
@@ -2177,7 +2183,9 @@ system_only_keys = ["max_history"]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["identity_user_persistence"]
 profile_name = "identity_user_persistence_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["max_activities"]
+system_only_keys = ["storage_dir", "file_lock_cleanup_interval_seconds", "file_lock_stale_seconds"]
 
 [profile_mapping.module_views.energy_runtime]
 base_refs = ["runtime_defaults"]

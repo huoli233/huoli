@@ -384,6 +384,9 @@ system_only_keys = ["overload_ratio_threshold", "overload_amnesia_threshold", "o
 
 [profile_mapping.module_views.memory_capacity]
 semantic_domains = ["memory_capacity"]
+edit_scope = "mixed"
+user_editable_keys = ["review_interval_seconds", "max_count_by_tier"]
+system_only_keys = ["llm_timeout_seconds"]
 
 [profile_mapping.module_views.memory_retrieval]
 semantic_domains = ["memory_retrieval"]
@@ -393,9 +396,15 @@ system_only_keys = ["rrf_k"]
 
 [profile_mapping.module_views.memory_decay]
 semantic_domains = ["memory_decay"]
+edit_scope = "mixed"
+user_editable_keys = ["decay_rate_per_hour", "forget_threshold", "min_age_for_decay_seconds"]
+system_only_keys = ["cycle_interval_seconds", "max_batch_for_llm"]
 
 [profile_mapping.module_views.memory_dedup]
 semantic_domains = ["memory_dedup"]
+edit_scope = "mixed"
+user_editable_keys = ["similarity_threshold"]
+system_only_keys = ["scan_interval_seconds", "max_pairs_per_scan", "merge_top_k"]
 
 [profile_mapping.module_views.vision]
 timeout_seconds = 12.0
@@ -560,6 +569,9 @@ system_only_keys = ["max_history"]
 
 [profile_mapping.module_views.identity_user_persistence]
 semantic_domains = ["identity_user_persistence"]
+edit_scope = "mixed"
+user_editable_keys = ["max_activities"]
+system_only_keys = ["storage_dir", "file_lock_cleanup_interval_seconds", "file_lock_stale_seconds"]
 
 [profile_mapping.module_views.energy_runtime]
 semantic_domains = ["energy_runtime"]
@@ -679,14 +691,23 @@ def main() -> None:
         assert memory.fallback_used is False
         assert memory.edit_scope == "mixed"
         assert memory.user_editable_keys == ("short_term_limit", "temporary_ttl_seconds", "reactivation_cooldown_seconds", "reactivation_max_candidates", "emotion_reactivation_threshold", "boredom_reactivation_threshold")
-        assert hub.resolve_module_view("memory_capacity").values["review_interval_seconds"] == 333
-        assert hub.resolve_module_view("memory_capacity").values["max_count_by_tier"]["working"] == 222
+        memory_capacity = hub.resolve_module_view("memory_capacity")
+        assert memory_capacity.values["review_interval_seconds"] == 333
+        assert memory_capacity.values["max_count_by_tier"]["working"] == 222
+        assert memory_capacity.edit_scope == "mixed"
+        assert memory_capacity.user_editable_keys == ("review_interval_seconds", "max_count_by_tier")
         memory_retrieval = hub.resolve_module_view("memory_retrieval")
         assert memory_retrieval.values["rrf_k"] == 77
         assert memory_retrieval.edit_scope == "mixed"
         assert memory_retrieval.user_editable_keys == ("bm25_weight", "vector_weight")
-        assert hub.resolve_module_view("memory_decay").values["forget_threshold"] == 0.22
-        assert hub.resolve_module_view("memory_dedup").values["similarity_threshold"] == 0.88
+        memory_decay = hub.resolve_module_view("memory_decay")
+        assert memory_decay.values["forget_threshold"] == 0.22
+        assert memory_decay.edit_scope == "mixed"
+        assert memory_decay.user_editable_keys == ("decay_rate_per_hour", "forget_threshold", "min_age_for_decay_seconds")
+        memory_dedup = hub.resolve_module_view("memory_dedup")
+        assert memory_dedup.values["similarity_threshold"] == 0.88
+        assert memory_dedup.edit_scope == "mixed"
+        assert memory_dedup.user_editable_keys == ("similarity_threshold",)
 
         vision = hub.resolve_module_view("vision", scenario="image_high_risk")
         assert vision.values["reply_suppressed"] is True
@@ -791,7 +812,10 @@ def main() -> None:
         assert identity_anchor.values["prompt_templates"]["default_persona"] == "anchor:{name}"
         assert identity_anchor.edit_scope == "mixed"
         assert identity_anchor.user_editable_keys == ("prompt_templates",)
-        assert hub.resolve_module_view("identity_user_persistence").values["storage_dir"] == "tmp/users"
+        identity_user_persistence = hub.resolve_module_view("identity_user_persistence")
+        assert identity_user_persistence.values["storage_dir"] == "tmp/users"
+        assert identity_user_persistence.edit_scope == "mixed"
+        assert identity_user_persistence.user_editable_keys == ("max_activities",)
         assert hub.resolve_module_view("energy_runtime").values["chat_value"]["ceiling"] == 123.0
         assert hub.resolve_module_view("energy_runtime").values["decay"]["annoyance_decay_per_min"] == 4.2
         assert hub.resolve_module_view("energy_runtime").values["penalty_caps"]["trauma_cap"] == 0.71
@@ -867,6 +891,9 @@ def main() -> None:
             "phase_timing_scope": phase_timing.edit_scope,
             "memory_rrf_k": memory_retrieval.values["rrf_k"],
             "memory_retrieval_scope": memory_retrieval.edit_scope,
+            "memory_capacity_scope": memory_capacity.edit_scope,
+            "memory_decay_scope": memory_decay.edit_scope,
+            "memory_dedup_scope": memory_dedup.edit_scope,
             "inner_voice_mention_floor": hub.resolve_module_view("inner_voice").values["mention_min_desire"],
             "frequency_skip_limit": hub.resolve_module_view("frequency_control").values["skip_limit"],
             "harassment_block_threshold": hub.resolve_module_view("harassment_detection").values["block_threshold"],
@@ -882,7 +909,8 @@ def main() -> None:
             "identity_bot_name": hub.resolve_module_view("identity_bot").values["nickname"],
             "identity_bot_scope": identity_bot.edit_scope,
             "identity_anchor_scope": identity_anchor.edit_scope,
-            "identity_storage_dir": hub.resolve_module_view("identity_user_persistence").values["storage_dir"],
+            "identity_storage_dir": identity_user_persistence.values["storage_dir"],
+            "identity_user_persistence_scope": identity_user_persistence.edit_scope,
             "energy_chat_ceiling": hub.resolve_module_view("energy_runtime").values["chat_value"]["ceiling"],
             "trigger_overflow_ratio": hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"],
             "social_streak_coeff": hub.resolve_module_view("social_calculator").values["positive_streak_coeff"],
