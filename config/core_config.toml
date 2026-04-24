@@ -1587,6 +1587,87 @@ social_warmth = 0.6
 curiosity_drive = 0.6
 reply_eagerness = 0.5
 
+[profile_mapping.semantic_domains.perception_group_sense]
+burst_msg_count = 15
+burst_msg_count_alt = 8
+burst_user_count = 4
+burst_density_threshold = 0.5
+burst_msg_count_density = 10
+active_msg_count = 6
+active_user_count = 3
+stable_msg_count = 2
+silence_cold_threshold = 600.0
+silence_dead_threshold = 1800.0
+controversy_short_msg_length = 30
+controversy_exchange_rate = 0.1
+controversy_min_exchanges = 3
+activity_window_seconds = 300
+silence_topic_threshold = 600
+speaker_window_seconds = 300
+history_max_size = 500
+
+[profile_mapping.semantic_domains.perception_self_sense]
+max_history_size = 50
+energy_decay_rate = 0.01
+mood_sensitivity = 0.5
+
+[profile_mapping.semantic_domains.perception_user_relation]
+familiar_threshold = 5
+newcomer_window_hours = 24
+trust_threshold = 0.7
+intimacy_decay_rate = 0.01
+cache_ttl_seconds = 3600
+max_cache_size = 1000
+
+[profile_mapping.semantic_domains.perception_user_state]
+model_weight = 0.6
+rule_weight = 0.4
+window_size = 200
+
+[profile_mapping.semantic_domains.perception_user_state.interval_tiers]
+tier1 = 60
+tier2 = 300
+tier3 = 600
+
+[profile_mapping.semantic_domains.perception_user_state.interval_scores]
+tier1 = 0.9
+tier2 = 0.7
+tier3 = 0.5
+tier4 = 0.25
+
+[profile_mapping.semantic_domains.perception_user_state.freq_tiers]
+tier1 = 10
+tier2 = 5
+tier3 = 3
+
+[profile_mapping.semantic_domains.perception_user_state.freq_scores]
+tier1 = 1.0
+tier2 = 0.8
+tier3 = 0.6
+tier4 = 0.3
+
+[profile_mapping.semantic_domains.perception_user_state.length_tiers]
+tier1 = 30
+tier2 = 10
+tier3 = 5
+
+[profile_mapping.semantic_domains.perception_user_state.length_scores]
+tier1 = 0.85
+tier2 = 0.6
+tier3 = 0.4
+tier4 = 0.25
+
+[profile_mapping.semantic_domains.perception_user_state.weights]
+interval = 0.25
+freq = 0.20
+length = 0.15
+init = 0.25
+question = 0.15
+
+[profile_mapping.semantic_domains.perception_user_state.verdict_thresholds]
+want_to_chat = 0.6
+not_want_to_chat = 0.35
+
 [profile_mapping.semantic_domains.heartflow_runtime]
 focus_channels = []
 initiative_interval_sec = 300.0
@@ -1920,3 +2001,23 @@ profile_name = "trigger_runtime_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["personality_factors"]
 profile_name = "personality_factors_view"
+
+[profile_mapping.module_views.perception_group_sense]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["perception_group_sense"]
+profile_name = "perception_group_sense_view"
+
+[profile_mapping.module_views.perception_self_sense]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["perception_self_sense"]
+profile_name = "perception_self_sense_view"
+
+[profile_mapping.module_views.perception_user_relation]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["perception_user_relation"]
+profile_name = "perception_user_relation_view"
+
+[profile_mapping.module_views.perception_user_state]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["perception_user_state"]
+profile_name = "perception_user_state_view"

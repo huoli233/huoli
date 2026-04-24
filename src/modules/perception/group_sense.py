@@ -1,10 +1,10 @@
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.perception.runtime_config import perception_module_view
 
 logger = get_logger("群感知")
 
@@ -49,8 +49,8 @@ class ControversySignals:
 class GroupSense:
     """群聊态势感知 - 纯代码分析，零LLM调用"""
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self, config_engine: Optional[Any] = None):
+        del config_engine
         self._last_message_times: Dict[str, float] = {}
         self._last_bot_reply_times: Dict[str, float] = {}
         self._recent_speakers: Dict[str, List[Tuple[str, float]]] = (
@@ -63,57 +63,44 @@ class GroupSense:
 
     def _load_config(self):
         """加载配置参数"""
-        self._burst_msg_count = self._config.get(
-            "group_sense", "burst_msg_count", 15
+        config = perception_module_view("perception_group_sense")
+        self._burst_msg_count = int(config.get("burst_msg_count", 15))
+        self._burst_msg_count_alt = int(config.get("burst_msg_count_alt", 8))
+        self._burst_user_count = int(config.get("burst_user_count", 4))
+        self._burst_density_threshold = float(
+            config.get("burst_density_threshold", 0.5)
         )
-        self._burst_msg_count_alt = self._config.get(
-            "group_sense", "burst_msg_count_alt", 8
+        self._burst_msg_count_density = int(
+            config.get("burst_msg_count_density", 10)
         )
-        self._burst_user_count = self._config.get(
-            "group_sense", "burst_user_count", 4
+        self._active_msg_count = int(config.get("active_msg_count", 6))
+        self._active_user_count = int(config.get("active_user_count", 3))
+        self._stable_msg_count = int(config.get("stable_msg_count", 2))
+        self._silence_cold_threshold = float(
+            config.get("silence_cold_threshold", 600.0)
         )
-        self._burst_density_threshold = self._config.get(
-            "group_sense", "burst_density_threshold", 0.5
+        self._silence_dead_threshold = float(
+            config.get("silence_dead_threshold", 1800.0)
         )
-        self._burst_msg_count_density = self._config.get(
-            "group_sense", "burst_msg_count_density", 10
+        self._controversy_short_msg_length = int(
+            config.get("controversy_short_msg_length", 30)
         )
-        self._active_msg_count = self._config.get(
-            "group_sense", "active_msg_count", 6
+        self._controversy_exchange_rate = float(
+            config.get("controversy_exchange_rate", 0.1)
         )
-        self._active_user_count = self._config.get(
-            "group_sense", "active_user_count", 3
+        self._controversy_min_exchanges = int(
+            config.get("controversy_min_exchanges", 3)
         )
-        self._stable_msg_count = self._config.get(
-            "group_sense", "stable_msg_count", 2
+        self._activity_window_seconds = float(
+            config.get("activity_window_seconds", 300)
         )
-        self._silence_cold_threshold = self._config.get(
-            "group_sense", "silence_cold_threshold", 600.0
+        self._silence_topic_threshold = float(
+            config.get("silence_topic_threshold", 600)
         )
-        self._silence_dead_threshold = self._config.get(
-            "group_sense", "silence_dead_threshold", 1800.0
+        self._speaker_window_seconds = float(
+            config.get("speaker_window_seconds", 300)
         )
-        self._controversy_short_msg_length = self._config.get(
-            "group_sense", "controversy_short_msg_length", 30
-        )
-        self._controversy_exchange_rate = self._config.get(
-            "group_sense", "controversy_exchange_rate", 0.1
-        )
-        self._controversy_min_exchanges = self._config.get(
-            "group_sense", "controversy_min_exchanges", 3
-        )
-        self._activity_window_seconds = self._config.get(
-            "group_sense", "activity_window_seconds", 300
-        )
-        self._silence_topic_threshold = self._config.get(
-            "group_sense", "silence_topic_threshold", 600
-        )
-        self._speaker_window_seconds = self._config.get(
-            "group_sense", "speaker_window_seconds", 300
-        )
-        self._history_max_size = self._config.get(
-            "group_sense", "history_max_size", 500
-        )
+        self._history_max_size = int(config.get("history_max_size", 500))
 
     def analyze(
         self,
@@ -535,7 +522,7 @@ _group_sense_instance: Optional[GroupSense] = None
 
 
 def get_group_sense(
-    config_engine: Optional[ConfigEngine] = None,
+    config_engine: Optional[Any] = None,
 ) -> GroupSense:
     """获取群聊感知单例"""
     global _group_sense_instance

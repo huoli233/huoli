@@ -1,10 +1,10 @@
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, Optional
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.perception.runtime_config import perception_dict, perception_float, perception_int
 
 logger = get_logger("用户状态")
 
@@ -254,10 +254,10 @@ class UserStateDetector:
 
     def __init__(
         self,
-        config_engine: Optional[ConfigEngine] = None,
+        config_engine: Optional[Any] = None,
         model_understand: Optional[Any] = None,
     ):
-        self._config = config_engine or ConfigEngine.get_instance()
+        del config_engine
         self._model = model_understand
         self._logs: Dict[str, _InteractionLog] = {}
         self._model_weight: float = 0.6
@@ -268,45 +268,44 @@ class UserStateDetector:
 
     def _load_config(self):
         """加载配置"""
-        self._model_weight = self._config.get(
-            "user_state", "model_weight", 0.6
-        )
-        self._rule_weight = self._config.get("user_state", "rule_weight", 0.4)
-        self._window_size = self._config.get("user_state", "window_size", 200)
+        module_name = "perception_user_state"
+        self._model_weight = perception_float(module_name, "model_weight", 0.6)
+        self._rule_weight = perception_float(module_name, "rule_weight", 0.4)
+        self._window_size = perception_int(module_name, "window_size", 200)
 
         self._thresholds = ScoringThresholds(
-            interval_tiers=self._config.get(
-                "user_state",
+            interval_tiers=perception_dict(
+                module_name,
                 "interval_tiers",
                 {"tier1": 60, "tier2": 300, "tier3": 600},
             ),
-            interval_scores=self._config.get(
-                "user_state",
+            interval_scores=perception_dict(
+                module_name,
                 "interval_scores",
                 {"tier1": 0.9, "tier2": 0.7, "tier3": 0.5, "tier4": 0.25},
             ),
-            freq_tiers=self._config.get(
-                "user_state",
+            freq_tiers=perception_dict(
+                module_name,
                 "freq_tiers",
                 {"tier1": 10, "tier2": 5, "tier3": 3},
             ),
-            freq_scores=self._config.get(
-                "user_state",
+            freq_scores=perception_dict(
+                module_name,
                 "freq_scores",
                 {"tier1": 1.0, "tier2": 0.8, "tier3": 0.6, "tier4": 0.3},
             ),
-            length_tiers=self._config.get(
-                "user_state",
+            length_tiers=perception_dict(
+                module_name,
                 "length_tiers",
                 {"tier1": 30, "tier2": 10, "tier3": 5},
             ),
-            length_scores=self._config.get(
-                "user_state",
+            length_scores=perception_dict(
+                module_name,
                 "length_scores",
                 {"tier1": 0.85, "tier2": 0.6, "tier3": 0.4, "tier4": 0.25},
             ),
-            weights=self._config.get(
-                "user_state",
+            weights=perception_dict(
+                module_name,
                 "weights",
                 {
                     "interval": 0.25,
@@ -316,8 +315,8 @@ class UserStateDetector:
                     "question": 0.15,
                 },
             ),
-            verdict_thresholds=self._config.get(
-                "user_state",
+            verdict_thresholds=perception_dict(
+                module_name,
                 "verdict_thresholds",
                 {"want_to_chat": 0.6, "not_want_to_chat": 0.35},
             ),
@@ -499,7 +498,7 @@ _user_state_detector_instance: Optional[UserStateDetector] = None
 
 
 def get_user_state_detector(
-    config_engine: Optional[ConfigEngine] = None,
+    config_engine: Optional[Any] = None,
     model_understand: Optional[Any] = None,
 ) -> UserStateDetector:
     """获取用户状态检测器单例"""

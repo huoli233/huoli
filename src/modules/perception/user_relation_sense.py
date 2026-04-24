@@ -2,8 +2,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.perception.runtime_config import perception_module_view
 
 logger = get_logger("用户关系感知")
 
@@ -49,8 +49,8 @@ class RelationStats:
 class UserRelationSense:
     """用户关系感知 - 获取用户关系数据并格式化为简明标签"""
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self, config_engine: Optional[Any] = None):
+        del config_engine
         self._relation_cache: Dict[str, RelationInfo] = {}
         self._interaction_counts: Dict[str, Dict[str, int]] = {}
         self._last_interaction_times: Dict[str, Dict[str, float]] = {}
@@ -59,24 +59,21 @@ class UserRelationSense:
 
     def _load_config(self):
         """加载配置参数"""
-        self._familiar_threshold = self._config.get(
-            "user_relation", "familiar_threshold", 5
+        config = perception_module_view("perception_user_relation")
+        self._familiar_threshold = int(
+            config.get("familiar_threshold", 5)
         )
-        self._newcomer_window_hours = self._config.get(
-            "user_relation", "newcomer_window_hours", 24
+        self._newcomer_window_hours = float(
+            config.get("newcomer_window_hours", 24)
         )
-        self._trust_threshold = self._config.get(
-            "user_relation", "trust_threshold", 0.7
+        self._trust_threshold = float(config.get("trust_threshold", 0.7))
+        self._intimacy_decay_rate = float(
+            config.get("intimacy_decay_rate", 0.01)
         )
-        self._intimacy_decay_rate = self._config.get(
-            "user_relation", "intimacy_decay_rate", 0.01
+        self._cache_ttl_seconds = float(
+            config.get("cache_ttl_seconds", 3600)
         )
-        self._cache_ttl_seconds = self._config.get(
-            "user_relation", "cache_ttl_seconds", 3600
-        )
-        self._max_cache_size = self._config.get(
-            "user_relation", "max_cache_size", 1000
-        )
+        self._max_cache_size = int(config.get("max_cache_size", 1000))
 
     def set_adapter(self, adapter_func: Callable):
         """
@@ -366,7 +363,7 @@ _user_relation_sense_instance: Optional[UserRelationSense] = None
 
 
 def get_user_relation_sense(
-    config_engine: Optional[ConfigEngine] = None,
+    config_engine: Optional[Any] = None,
 ) -> UserRelationSense:
     """获取用户关系感知单例"""
     global _user_relation_sense_instance

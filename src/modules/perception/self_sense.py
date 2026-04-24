@@ -1,10 +1,10 @@
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.perception.runtime_config import perception_module_view
 
 logger = get_logger("自感知")
 
@@ -51,8 +51,8 @@ class SessionState:
 class SelfSense:
     """自我感知 - 汇总机器人自身的状态信息"""
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self, config_engine: Optional[Any] = None):
+        del config_engine
         self._sessions: Dict[str, SessionState] = {}
         self._global_start_time = time.time()
         self._global_reply_count = 0
@@ -61,14 +61,13 @@ class SelfSense:
 
     def _load_config(self):
         """加载配置参数"""
-        self._max_history_size = self._config.get(
-            "self_sense", "max_history_size", 50
+        config = perception_module_view("perception_self_sense")
+        self._max_history_size = int(config.get("max_history_size", 50))
+        self._energy_decay_rate = float(
+            config.get("energy_decay_rate", 0.01)
         )
-        self._energy_decay_rate = self._config.get(
-            "self_sense", "energy_decay_rate", 0.01
-        )
-        self._mood_sensitivity = self._config.get(
-            "self_sense", "mood_sensitivity", 0.5
+        self._mood_sensitivity = float(
+            config.get("mood_sensitivity", 0.5)
         )
 
     def get_status(self, stream_id: Optional[str] = None) -> SelfStatus:
@@ -371,7 +370,7 @@ class SelfSense:
 _self_sense_instance: Optional[SelfSense] = None
 
 
-def get_self_sense(config_engine: Optional[ConfigEngine] = None) -> SelfSense:
+def get_self_sense(config_engine: Optional[Any] = None) -> SelfSense:
     """获取自我感知单例"""
     global _self_sense_instance
     if _self_sense_instance is None:
