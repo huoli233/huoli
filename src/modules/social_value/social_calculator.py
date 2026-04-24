@@ -2,12 +2,13 @@ import time
 import math
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, Optional
+from typing import Deque, Dict
 from src.common.config.config_engine import (
     ConfigEngine,
     get_default_config_engine,
 )
 from src.common.config.config_engine import AlgorithmParams
+from src.modules.social_value.runtime_config import social_value_module_view
 
 
 @dataclass
@@ -46,9 +47,7 @@ class SocialCalculator:
 
     def _load_config(self):
         """从配置加载所有阈值"""
-        if not self._config:
-            raise RuntimeError("配置引擎未设置，无法加载社交计算器阈值")
-        social_cfg = self._config.get_social_config()
+        social_cfg = social_value_module_view("social_calculator")
         self._offset_decay_per_hour = float(
             social_cfg.get("offset_decay_per_hour", 0.15)
         )

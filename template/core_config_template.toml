@@ -1526,6 +1526,90 @@ social_warmth = 0.6
 curiosity_drive = 0.6
 reply_eagerness = 0.5
 
+[profile_mapping.semantic_domains.social_calculator]
+offset_decay_per_hour = 0.15
+positive_streak_coeff = 1.5
+negative_streak_coeff = 2.0
+min_change_threshold = 0.001
+min_elapsed_hours = 0.01
+
+[profile_mapping.semantic_domains.social_settlement]
+decay_rate_per_hour = 0.015
+saturation_steepness = 0.02
+reversal_amplifier = 1.35
+reversal_required_streak = 3
+polarization_drag = 0.5
+frequency_drag = 0.15
+large_step_threshold = 15.0
+large_step_compress_rate = 0.6
+severity_floor_cap = 0.5
+severity_ceil_cap = 2.0
+absolute_step_ceil = 20.0
+newcomer_interaction_bar = 10.0
+newcomer_softening = 0.6
+trauma_alarm_level = 5.0
+trauma_negative_amplify = 0.25
+first_encounter_seed = 5.0
+
+[profile_mapping.semantic_domains.social_phase_tracker]
+trend_window_sec = 3600.0
+trend_improving_threshold = 3.0
+trend_declining_threshold = -3.0
+stage_change_cooldown_sec = 120.0
+protection_ratio = 0.35
+impression_update_interval = 3600.0
+
+[profile_mapping.semantic_domains.social_phase_tracker.milestones]
+first_trust = 30.0
+stable_friendship = 55.0
+high_trust = 75.0
+
+[profile_mapping.semantic_domains.social_phase_tracker.phase_bands]
+hostile = [-100.0, -45.0]
+stranger = [-45.0, -10.0]
+acquaintance = [-10.0, 20.0]
+familiar = [20.0, 45.0]
+close = [45.0, 70.0]
+trusted = [70.0, 101.0]
+
+[profile_mapping.semantic_domains.social_phase_tracker.phase_weights]
+hostile = 0.3
+stranger = 0.6
+acquaintance = 0.8
+familiar = 0.9
+close = 1.0
+trusted = 1.1
+
+[profile_mapping.semantic_domains.social_phase_tracker.phase_descriptions]
+hostile = "关系紧张"
+stranger = "不太熟悉"
+acquaintance = "有些熟悉"
+familiar = "比较熟悉"
+close = "关系亲密"
+trusted = "非常信任"
+
+[profile_mapping.semantic_domains.social_affect_fuser]
+group_window_limit = 30
+min_effective_text_length = 2
+support_relief_per_hit = 0.05
+support_relief_cap = 0.3
+attack_pressure_per_hit = 0.08
+attack_pressure_cap = 0.4
+support_keywords = ["支持", "说得对", "同意", "+1", "确实", "有道理", "正确", "没错", "就是", "我也觉得", "赞同", "顶", "好", "棒"]
+attack_keywords = ["傻", "烦", "滚", "闭嘴", "有病", "恶心", "讨厌", "去死", "废物", "垃圾", "智障", "脑残", "白痴", "蠢", "笨"]
+
+[profile_mapping.semantic_domains.social_value_core]
+social_decay_per_hour = 0.015
+social_damping_polarization_weight = 0.5
+social_damping_interaction_weight = 0.15
+social_single_step_min = 0.5
+social_single_step_max = 2.0
+social_new_user_threshold = 10.0
+social_new_user_factor = 0.6
+social_trauma_sensitive_threshold = 5.0
+social_trauma_sensitive_boost = 0.25
+social_new_user_initial = 5.0
+
 [profile_mapping.semantic_domains.perception_group_sense]
 burst_msg_count = 15
 burst_msg_count_alt = 8
@@ -2017,6 +2101,31 @@ profile_name = "trigger_runtime_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["personality_factors"]
 profile_name = "personality_factors_view"
+
+[profile_mapping.module_views.social_calculator]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["social_calculator"]
+profile_name = "social_calculator_view"
+
+[profile_mapping.module_views.social_settlement]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["social_settlement"]
+profile_name = "social_settlement_view"
+
+[profile_mapping.module_views.social_phase_tracker]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["social_phase_tracker"]
+profile_name = "social_phase_tracker_view"
+
+[profile_mapping.module_views.social_affect_fuser]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["social_affect_fuser"]
+profile_name = "social_affect_fuser_view"
+
+[profile_mapping.module_views.social_value_core]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["social_value_core"]
+profile_name = "social_value_core_view"
 
 [profile_mapping.module_views.perception_group_sense]
 base_refs = ["runtime_defaults"]

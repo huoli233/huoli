@@ -5,8 +5,9 @@ from collections import deque
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any, Deque, Dict, List, Optional, Tuple
-from src.common.config.config_engine import ConfigEngine, get_default_config_engine
 from src.common.logger import get_logger
+from src.modules.social_value.runtime_config import social_value_dict
+from src.modules.social_value.runtime_config import social_value_float
 
 logger = get_logger("phase_tracker")
 
@@ -54,6 +55,19 @@ PHASE_DESCRIPTION: Dict[int, str] = {
     RelationPhase.FAMILIAR:     "比较熟悉",
     RelationPhase.CLOSE:        "关系亲密",
     RelationPhase.TRUSTED:      "非常信任",
+}
+
+_PHASE_NAME_TO_VALUE: Dict[str, int] = {
+    "hostile": RelationPhase.HOSTILE,
+    "stranger": RelationPhase.STRANGER,
+    "acquaintance": RelationPhase.ACQUAINTANCE,
+    "familiar": RelationPhase.FAMILIAR,
+    "close": RelationPhase.CLOSE,
+    "trusted": RelationPhase.TRUSTED,
+}
+
+_PHASE_VALUE_TO_NAME: Dict[int, str] = {
+    value: name for name, value in _PHASE_NAME_TO_VALUE.items()
 }
 
 
@@ -335,9 +349,8 @@ class PhaseTracker:
     持久化通过可选适配器完成（与旧 RelationshipTracker 兼容）。
     """
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
+    def __init__(self, config_engine: Optional[object] = None):
         self._dossiers: Dict[str, BondDossier] = {}
-        self._cfg_hub = config_engine or get_default_config_engine()
         self._adapter = None
         self._bg_tasks: set = set()
         self._minter = ImpressionMinter()
@@ -349,6 +362,9 @@ class PhaseTracker:
         self._center_guard_ratio: float = 0.35
         self._impression_refresh_interval: float = 3600.0
         self._achievement_gates: Dict[str, float] = {}
+        self._phase_bands: Dict[int, Tuple[float, float]] = dict(PHASE_BAND)
+        self._phase_weights: Dict[int, float] = dict(PHASE_WEIGHT)
+        self._phase_descriptions: Dict[int, str] = dict(PHASE_DESCRIPTION)
         self._load_tuning()
 
     def attach_adapter(self, adapter) -> None:
@@ -360,24 +376,69 @@ class PhaseTracker:
     # ================================================================
 
     def _load_tuning(self) -> None:
-        """从配置引擎加载调优参数"""
+        """从配置画像加载调优参数"""
         default_gates = {
             "first_trust": 30.0,
             "stable_friendship": 55.0,
             "high_trust": 75.0,
         }
-        cfg = self._cfg_hub.get_relationship_config()
-        self._trend_window_sec = float(cfg.get("trend_window_sec", 3600.0))
-        self._trend_rise_bar = float(cfg.get("trend_improving_threshold", 3.0))
-        self._trend_fall_bar = float(cfg.get("trend_declining_threshold", -3.0))
-        self._transition_cooldown_sec = float(cfg.get("stage_change_cooldown_sec", 120.0))
-        self._center_guard_ratio = float(cfg.get("protection_ratio", 0.35))
-        self._impression_refresh_interval = float(cfg.get("impression_update_interval", 3600.0))
-        gates = cfg.get("milestones", default_gates)
+        self._trend_window_sec = social_value_float(
+            "social_phase_tracker", "trend_window_sec", 3600.0
+        )
+        self._trend_rise_bar = social_value_float(
+            "social_phase_tracker", "trend_improving_threshold", 3.0
+        )
+        self._trend_fall_bar = social_value_float(
+            "social_phase_tracker", "trend_declining_threshold", -3.0
+        )
+        self._transition_cooldown_sec = social_value_float(
+            "social_phase_tracker", "stage_change_cooldown_sec", 120.0
+        )
+        self._center_guard_ratio = social_value_float(
+            "social_phase_tracker", "protection_ratio", 0.35
+        )
+        self._impression_refresh_interval = social_value_float(
+            "social_phase_tracker", "impression_update_interval", 3600.0
+        )
+        gates = social_value_dict(
+            "social_phase_tracker", "milestones", default_gates
+        )
         if isinstance(gates, dict):
             self._achievement_gates = {k: float(v) for k, v in gates.items()}
         else:
             self._achievement_gates = default_gates
+        self._phase_bands = self._normalize_phase_bands(
+            social_value_dict(
+                "social_phase_tracker",
+                "phase_bands",
+                {
+                    name: [low, high]
+                    for name, (low, high) in {
+                        _PHASE_VALUE_TO_NAME[k]: v for k, v in PHASE_BAND.items()
+                    }.items()
+                },
+            )
+        )
+        self._phase_weights = self._normalize_phase_weights(
+            social_value_dict(
+                "social_phase_tracker",
+                "phase_weights",
+                {
+                    _PHASE_VALUE_TO_NAME[k]: v
+                    for k, v in PHASE_WEIGHT.items()
+                },
+            )
+        )
+        self._phase_descriptions = self._normalize_phase_descriptions(
+            social_value_dict(
+                "social_phase_tracker",
+                "phase_descriptions",
+                {
+                    _PHASE_VALUE_TO_NAME[k]: v
+                    for k, v in PHASE_DESCRIPTION.items()
+                },
+            )
+        )
 
     # ================================================================
     #  核心操作
@@ -444,12 +505,12 @@ class PhaseTracker:
         dossier = self._ensure_dossier(uid, channel_id)
         if dossier.custom_nick:
             return dossier.custom_nick
-        return PHASE_DESCRIPTION.get(dossier.current_phase, "有些熟悉")
+        return self._phase_descriptions.get(dossier.current_phase, "有些熟悉")
 
     def phase_weight_of(self, uid: str, channel_id: str) -> float:
         """获取阶段权重因子（用于能量/回复计算）"""
         phase = self._ensure_dossier(uid, channel_id).current_phase
-        return PHASE_WEIGHT.get(phase, 0.8)
+        return self._phase_weights.get(phase, 0.8)
 
     def trend_of(self, uid: str, channel_id: str) -> str:
         """获取关系趋势标签"""
@@ -572,7 +633,7 @@ class PhaseTracker:
 
     def _score_to_phase(self, score: float) -> int:
         """分值 → 阶段映射"""
-        for phase_val, (low, high) in PHASE_BAND.items():
+        for phase_val, (low, high) in self._phase_bands.items():
             if low <= score < high:
                 return phase_val
         if score <= -100.0:
@@ -615,7 +676,7 @@ class PhaseTracker:
         if candidate == RelationPhase.HOSTILE:
             return True
         # 中心保护区：分值离当前阶段中心不够远时阻止跃迁
-        band = PHASE_BAND.get(dossier.current_phase)
+        band = self._phase_bands.get(dossier.current_phase)
         if band is None:
             return True
         low, high = band
@@ -639,7 +700,7 @@ class PhaseTracker:
 
     def get_phase_bands(self) -> Dict[str, Tuple[float, float]]:
         """导出阶段区间配置（供外部查询/调试）"""
-        return {f"phase_{k}": v for k, v in PHASE_BAND.items()}
+        return {f"phase_{k}": v for k, v in self._phase_bands.items()}
 
     def get_achievement_gates(self) -> Dict[str, float]:
         """导出里程碑门槛"""
@@ -657,6 +718,50 @@ class PhaseTracker:
                 "impression_refresh_interval": self._impression_refresh_interval,
             },
         }
+
+    def _normalize_phase_bands(
+        self, bands: Dict[str, Any]
+    ) -> Dict[int, Tuple[float, float]]:
+        normalized = dict(PHASE_BAND)
+        for name, raw_band in bands.items():
+            phase_value = _PHASE_NAME_TO_VALUE.get(str(name).lower())
+            if phase_value is None:
+                continue
+            if (
+                isinstance(raw_band, list)
+                and len(raw_band) == 2
+                and all(isinstance(item, (int, float)) for item in raw_band)
+            ):
+                normalized[phase_value] = (
+                    float(raw_band[0]),
+                    float(raw_band[1]),
+                )
+        return normalized
+
+    def _normalize_phase_weights(
+        self, weights: Dict[str, Any]
+    ) -> Dict[int, float]:
+        normalized = dict(PHASE_WEIGHT)
+        for name, value in weights.items():
+            phase_value = _PHASE_NAME_TO_VALUE.get(str(name).lower())
+            if phase_value is None:
+                continue
+            try:
+                normalized[phase_value] = float(value)
+            except Exception:
+                continue
+        return normalized
+
+    def _normalize_phase_descriptions(
+        self, descriptions: Dict[str, Any]
+    ) -> Dict[int, str]:
+        normalized = dict(PHASE_DESCRIPTION)
+        for name, value in descriptions.items():
+            phase_value = _PHASE_NAME_TO_VALUE.get(str(name).lower())
+            if phase_value is None:
+                continue
+            normalized[phase_value] = str(value)
+        return normalized
 
 
 # ================================================================

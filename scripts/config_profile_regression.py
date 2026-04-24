@@ -256,6 +256,39 @@ energy_overflow_ratio = 0.91
 [profile_mapping.semantic_domains.personality_factors]
 social_warmth = 0.77
 
+[profile_mapping.semantic_domains.social_calculator]
+offset_decay_per_hour = 0.23
+positive_streak_coeff = 1.9
+
+[profile_mapping.semantic_domains.social_settlement]
+absolute_step_ceil = 12.0
+reversal_required_streak = 5
+
+[profile_mapping.semantic_domains.social_phase_tracker]
+trend_window_sec = 2222.0
+impression_update_interval = 4444.0
+
+[profile_mapping.semantic_domains.social_phase_tracker.milestones]
+first_trust = 33.0
+
+[profile_mapping.semantic_domains.social_phase_tracker.phase_bands]
+trusted = [66.0, 101.0]
+
+[profile_mapping.semantic_domains.social_phase_tracker.phase_weights]
+trusted = 1.23
+
+[profile_mapping.semantic_domains.social_phase_tracker.phase_descriptions]
+trusted = "超信任"
+
+[profile_mapping.semantic_domains.social_affect_fuser]
+support_relief_cap = 0.25
+group_window_limit = 18
+support_keywords = ["站你"]
+
+[profile_mapping.semantic_domains.social_value_core]
+social_new_user_initial = 6.5
+social_single_step_max = 3.3
+
 [profile_mapping.semantic_domains.perception_group_sense]
 burst_msg_count = 21
 
@@ -476,6 +509,21 @@ semantic_domains = ["trigger_runtime"]
 [profile_mapping.module_views.personality_factors]
 semantic_domains = ["personality_factors"]
 
+[profile_mapping.module_views.social_calculator]
+semantic_domains = ["social_calculator"]
+
+[profile_mapping.module_views.social_settlement]
+semantic_domains = ["social_settlement"]
+
+[profile_mapping.module_views.social_phase_tracker]
+semantic_domains = ["social_phase_tracker"]
+
+[profile_mapping.module_views.social_affect_fuser]
+semantic_domains = ["social_affect_fuser"]
+
+[profile_mapping.module_views.social_value_core]
+semantic_domains = ["social_value_core"]
+
 [profile_mapping.module_views.perception_group_sense]
 semantic_domains = ["perception_group_sense"]
 
@@ -627,6 +675,12 @@ def main() -> None:
         assert hub.resolve_module_view("energy_runtime").values["penalty_caps"]["trauma_cap"] == 0.71
         assert hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"] == 0.91
         assert hub.resolve_module_view("personality_factors").values["social_warmth"] == 0.77
+        assert hub.resolve_module_view("social_calculator").values["positive_streak_coeff"] == 1.9
+        assert hub.resolve_module_view("social_settlement").values["absolute_step_ceil"] == 12.0
+        assert hub.resolve_module_view("social_phase_tracker").values["trend_window_sec"] == 2222.0
+        assert hub.resolve_module_view("social_phase_tracker").values["phase_weights"]["trusted"] == 1.23
+        assert hub.resolve_module_view("social_affect_fuser").values["support_relief_cap"] == 0.25
+        assert hub.resolve_module_view("social_value_core").values["social_new_user_initial"] == 6.5
         assert hub.resolve_module_view("perception_group_sense").values["burst_msg_count"] == 21
         assert hub.resolve_module_view("perception_self_sense").values["max_history_size"] == 66
         assert hub.resolve_module_view("perception_user_relation").values["familiar_threshold"] == 9
@@ -680,6 +734,12 @@ def main() -> None:
             "identity_storage_dir": hub.resolve_module_view("identity_user_persistence").values["storage_dir"],
             "energy_chat_ceiling": hub.resolve_module_view("energy_runtime").values["chat_value"]["ceiling"],
             "trigger_overflow_ratio": hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"],
+            "social_streak_coeff": hub.resolve_module_view("social_calculator").values["positive_streak_coeff"],
+            "social_settlement_cap": hub.resolve_module_view("social_settlement").values["absolute_step_ceil"],
+            "social_phase_trend_window": hub.resolve_module_view("social_phase_tracker").values["trend_window_sec"],
+            "social_trusted_weight": hub.resolve_module_view("social_phase_tracker").values["phase_weights"]["trusted"],
+            "social_support_cap": hub.resolve_module_view("social_affect_fuser").values["support_relief_cap"],
+            "social_core_initial": hub.resolve_module_view("social_value_core").values["social_new_user_initial"],
             "perception_burst_count": hub.resolve_module_view("perception_group_sense").values["burst_msg_count"],
             "persona_pool_cap": hub.resolve_module_view("persona_controller").values["max_personas"],
             "perception_behavior_cap": hub.resolve_module_view("perception_behavior").values["memory_cap"],

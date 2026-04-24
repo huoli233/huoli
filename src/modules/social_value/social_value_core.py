@@ -1,15 +1,11 @@
 import time
 from typing import Dict, Any, Optional
-from src.common.config.config_engine import (
-    ConfigEngine,
-    get_default_config_engine,
-)
 from src.common.logger import get_logger
 from src.modules.social_value.models import (
-    SocialValueRecord,
     SocialUpdateResult,
 )
 from src.modules.social_value.social_calculator import SocialCalculator
+from src.modules.social_value.runtime_config import social_value_module_view
 from src.modules.social_value.social_storage import SocialStorage
 
 logger = get_logger("社交价值核心")
@@ -26,11 +22,10 @@ class SocialValueCore:
         self,
         calculator: SocialCalculator,
         storage: SocialStorage,
-        config_engine: Optional[ConfigEngine] = None,
+        config_engine: Optional[object] = None,
     ):
         self._calculator = calculator
         self._storage = storage
-        self._config_engine = config_engine or get_default_config_engine()
         self._runtime_cfg = self._load_runtime_config()
 
     def _load_runtime_config(self) -> Dict[str, float]:
@@ -44,10 +39,9 @@ class SocialValueCore:
             "social_new_user_factor": 0.6,
             "social_trauma_sensitive_threshold": 5.0,
             "social_trauma_sensitive_boost": 0.25,
+            "social_new_user_initial": 5.0,
         }
-        if self._config_engine is None:
-            return cfg
-        module_cfg = self._config_engine.get_social_config()
+        module_cfg = social_value_module_view("social_value_core")
         if isinstance(module_cfg, dict):
             for key in cfg.keys():
                 if key in module_cfg:
@@ -507,7 +501,6 @@ class SocialValueCore:
                 severity = 0.3
                 intent = "friendly"
         current_social = context.get("current_social", 0.0)
-        current_trust = context.get("current_trust", 0.0)
         if current_social < -30 and behavior_type in [
             "casual_chat",
             "friendly_chat",

@@ -1,12 +1,9 @@
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
-from src.common.config.config_engine import (
-    ConfigEngine,
-    get_default_config_engine,
-)
 from src.common.logger import get_logger
 from src.modules.social_value.social_calculator import SocialCalculator
+from src.modules.social_value.runtime_config import social_value_module_view
 from src.modules.social_value.social_storage import SocialStorage
 from src.modules.social_value.models import (
     SocialValueRecord,
@@ -85,11 +82,10 @@ class SettlementEngine:
         self,
         calculator: SocialCalculator,
         storage: SocialStorage,
-        config_engine: Optional[ConfigEngine] = None,
+        config_engine: Optional[object] = None,
     ):
         self._calc = calculator
         self._store = storage
-        self._cfg_hub = config_engine or get_default_config_engine()
         # 方向连续性记录（按 user_id 索引）
         self._direction_books: Dict[str, DirectionLedger] = {}
         # 运行时配置缓存
@@ -100,7 +96,7 @@ class SettlementEngine:
     # ================================================================
 
     def _assemble_tuning(self) -> Dict[str, float]:
-        """从两套配置源合并为统一调优参数"""
+        """从配置画像合并为统一调优参数"""
         base = {
             # 衰减
             "decay_rate_per_hour": 0.015,
@@ -129,7 +125,7 @@ class SettlementEngine:
             # 新用户初始值
             "first_encounter_seed": 5.0,
         }
-        module_cfg = self._cfg_hub.get_social_config()
+        module_cfg = social_value_module_view("social_settlement")
         if isinstance(module_cfg, dict):
             for key in list(base.keys()):
                 if key in module_cfg:
@@ -684,6 +680,12 @@ class SettlementEngine:
             },
         }
 
+    def get_behavior_category(self, behavior_type: str, intent: str) -> str:
+        try:
+            return self._calc.get_category_params(behavior_type, intent).category
+        except Exception:
+            return ""
+
 
 _settlement_singleton = None
 
@@ -692,9 +694,7 @@ def get_settlement_engine() -> "SettlementEngine":
     """获取SettlementEngine单例（9步富管线结算引擎）"""
     global _settlement_singleton
     if _settlement_singleton is None:
-        _calc = SocialCalculator(get_default_config_engine())
+        _calc = SocialCalculator()
         _store = SocialStorage()
-        _settlement_singleton = SettlementEngine(
-            _calc, _store, get_default_config_engine()
-        )
+        _settlement_singleton = SettlementEngine(_calc, _store)
     return _settlement_singleton

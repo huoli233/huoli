@@ -1,10 +1,6 @@
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
-from src.common.config.config_engine import (
-    ConfigEngine,
-    get_default_config_engine,
-)
 from src.common.logger import get_logger
 from src.modules.social_value.settlement_engine import (
     SettlementEngine,
@@ -16,11 +12,12 @@ from src.modules.social_value.phase_tracker import (
     PhaseTransition,
     PersonaImpression,
     BondDossier,
-    PHASE_WEIGHT,
     PHASE_DESCRIPTION,
-    get_phase_tracker,
 )
 from src.modules.social_value.social_calculator import SocialCalculator
+from src.modules.social_value.runtime_config import social_value_float
+from src.modules.social_value.runtime_config import social_value_int
+from src.modules.social_value.runtime_config import social_value_list
 from src.modules.social_value.social_storage import SocialStorage
 from src.modules.social_value.models import SocialUpdateResult
 
@@ -124,15 +121,78 @@ class SocialAffectFuser:
         self,
         calculator: Optional[SocialCalculator] = None,
         storage: Optional[SocialStorage] = None,
-        config_engine: Optional[ConfigEngine] = None,
+        config_engine: Optional[object] = None,
     ):
-        cfg = config_engine or get_default_config_engine()
-        calc = calculator or SocialCalculator(cfg)
+        calc = calculator or SocialCalculator()
         store = storage or SocialStorage()
-        self._settlement = SettlementEngine(calc, store, cfg)
-        self._phase = PhaseTracker(cfg)
+        self._settlement = SettlementEngine(calc, store)
+        self._phase = PhaseTracker()
         self._emotion_reader = None
-        self._cfg_hub = cfg
+        self._group_window_limit = social_value_int(
+            "social_affect_fuser", "group_window_limit", 30
+        )
+        self._min_effective_text_length = social_value_int(
+            "social_affect_fuser", "min_effective_text_length", 2
+        )
+        self._support_relief_per_hit = social_value_float(
+            "social_affect_fuser", "support_relief_per_hit", 0.05
+        )
+        self._support_relief_cap = social_value_float(
+            "social_affect_fuser", "support_relief_cap", 0.30
+        )
+        self._attack_pressure_per_hit = social_value_float(
+            "social_affect_fuser", "attack_pressure_per_hit", 0.08
+        )
+        self._attack_pressure_cap = social_value_float(
+            "social_affect_fuser", "attack_pressure_cap", 0.40
+        )
+        self._support_keywords = [
+            str(item)
+            for item in social_value_list(
+                "social_affect_fuser",
+                "support_keywords",
+                [
+                    "支持",
+                    "说得对",
+                    "同意",
+                    "+1",
+                    "确实",
+                    "有道理",
+                    "正确",
+                    "没错",
+                    "就是",
+                    "我也觉得",
+                    "赞同",
+                    "顶",
+                    "好",
+                    "棒",
+                ],
+            )
+        ]
+        self._attack_keywords = [
+            str(item)
+            for item in social_value_list(
+                "social_affect_fuser",
+                "attack_keywords",
+                [
+                    "傻",
+                    "烦",
+                    "滚",
+                    "闭嘴",
+                    "有病",
+                    "恶心",
+                    "讨厌",
+                    "去死",
+                    "废物",
+                    "垃圾",
+                    "智障",
+                    "脑残",
+                    "白痴",
+                    "蠢",
+                    "笨",
+                ],
+            )
+        ]
 
     def bind_emotion_reader(self, reader) -> None:
         """绑定外部 EmotionTracker 实例（Layer 3 情绪中继）"""
@@ -277,43 +337,10 @@ class SocialAffectFuser:
             - 缓和系数: 0.0-0.3，每条支持消息减少5%负面，上限30%
             - 压力上升系数: 0.0-0.4，每条攻击消息增加8%压力，上限40%
         """
-        _support_keywords = [
-            "支持",
-            "说得对",
-            "同意",
-            "+1",
-            "确实",
-            "有道理",
-            "正确",
-            "没错",
-            "就是",
-            "我也觉得",
-            "赞同",
-            "顶",
-            "好",
-            "棒",
-        ]
-        _attack_keywords = [
-            "傻",
-            "烦",
-            "滚",
-            "闭嘴",
-            "有病",
-            "恶心",
-            "讨厌",
-            "去死",
-            "废物",
-            "垃圾",
-            "智障",
-            "脑残",
-            "白痴",
-            "蠢",
-            "笨",
-        ]
         _support_count = 0
         _attack_count = 0
         _recent_texts = []
-        for _msg in recent_messages[-30:]:
+        for _msg in recent_messages[-self._group_window_limit:]:
             _uid = str(getattr(_msg, "user_id", "") or "").strip()
             if not _uid or _uid == bot_user_id:
                 continue
@@ -327,19 +354,25 @@ class SocialAffectFuser:
                 .lower()
                 .strip()
             )
-            if not _text or len(_text) < 2:
+            if not _text or len(_text) < self._min_effective_text_length:
                 continue
             _recent_texts.append(_text)
-            for _kw in _support_keywords:
+            for _kw in self._support_keywords:
                 if _kw in _text:
                     _support_count += 1
                     break
-            for _kw in _attack_keywords:
+            for _kw in self._attack_keywords:
                 if _kw in _text:
                     _attack_count += 1
                     break
-        _support_relief = min(0.30, _support_count * 0.05)
-        _pressure_rise = min(0.40, _attack_count * 0.08)
+        _support_relief = min(
+            self._support_relief_cap,
+            _support_count * self._support_relief_per_hit,
+        )
+        _pressure_rise = min(
+            self._attack_pressure_cap,
+            _attack_count * self._attack_pressure_per_hit,
+        )
         if _support_count > 0 or _attack_count > 0:
             logger.debug(
                 f"[群环境调制] channel={channel_id[:8]} "
@@ -396,19 +429,18 @@ class SocialAffectFuser:
         """[已弃用] 兼容旧版 SocialValueCore.update()，无外部调用者"""
         result = await self.evaluate(user_id, channel_id, content, context)
         behavior_signal = context.get("behavior_signal", {})
-        category = ""
-        try:
-            from src.common.config.config_engine import (
-                get_default_config_engine,
-            )
-
-            params = get_default_config_engine().get_params(
-                (behavior_signal.get("behavior_type", "neutral") if isinstance(behavior_signal, dict) else "neutral"),
-                (behavior_signal.get("intent", "other") if isinstance(behavior_signal, dict) else "other"),
-            )
-            category = params.category
-        except Exception as _e:
-            logger.debug(f"异常: {_e}")
+        category = self._settlement.get_behavior_category(
+            (
+                behavior_signal.get("behavior_type", "neutral")
+                if isinstance(behavior_signal, dict)
+                else "neutral"
+            ),
+            (
+                behavior_signal.get("intent", "other")
+                if isinstance(behavior_signal, dict)
+                else "other"
+            ),
+        )
         return self._settlement.build_legacy_update_result(
             result.settlement,
             behavior_signal if isinstance(behavior_signal, dict) else {},
@@ -464,8 +496,8 @@ class SocialAffectFuser:
         snap = AffectSnapshot(
             social_score=score,
             phase=phase_val,
-            phase_label=dossier.custom_nick or PHASE_DESCRIPTION.get(phase_val, "有些熟悉"),
-            phase_weight=PHASE_WEIGHT.get(phase_val, 0.8),
+            phase_label=self._phase.readable_phase(user_id, channel_id),
+            phase_weight=self._phase.phase_weight_of(user_id, channel_id),
             trend=dossier.trend_label,
             user_id=user_id,
             channel_id=channel_id,
@@ -484,7 +516,7 @@ class SocialAffectFuser:
                     snap.emotion_valence = float(emo_state.get("valence", 0.0))
                     snap.emotion_label = str(emo_state.get("label", ""))
             except Exception as _e:
-                logger.debug(f"{self.log_prefix} 异常: {_e}")
+                logger.debug(f"[社交融合] 异常: {_e}")
         return snap
 
     def collect_diagnostics(self) -> Dict[str, Any]:
