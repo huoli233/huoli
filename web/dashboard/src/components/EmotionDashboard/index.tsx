@@ -474,6 +474,8 @@ type ConfigScopeSnapshot = {
   modules: ConfigScopeModule[];
 };
 
+type ScopeFilter = "all" | "editable" | "user" | "mixed" | "system";
+
 const severityRank: Record<string, number> = {
   critical: 5,
   high: 4,
@@ -622,6 +624,8 @@ export function EmotionDashboard() {
   const [connectionState, setConnectionState] = useState("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [configScopeError, setConfigScopeError] = useState("");
+  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("editable");
+  const [scopeQuery, setScopeQuery] = useState("");
   const reconnectTimerRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
@@ -660,13 +664,36 @@ export function EmotionDashboard() {
   const initiativeState = packet?.presentation?.initiative_state;
   const displayPolicy = packet?.presentation?.display_policy ?? fallbackDisplayPolicy;
   const configScopeGroups = useMemo(() => {
-    const modules = configScope?.modules ?? [];
+    const query = scopeQuery.trim().toLowerCase();
+    const modules = (configScope?.modules ?? []).filter((item) => {
+      if (scopeFilter === "editable" && item.scope === "system") {
+        return false;
+      }
+      if (scopeFilter !== "all" && scopeFilter !== "editable" && item.scope !== scopeFilter) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      const haystack = [
+        item.module,
+        item.scope,
+        ...item.semantic_domains,
+        ...item.user_editable_keys,
+        ...item.system_only_keys,
+      ]
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(query);
+    });
     return {
       user: modules.filter((item) => item.scope === "user"),
       mixed: modules.filter((item) => item.scope === "mixed"),
       system: modules.filter((item) => item.scope === "system"),
     };
-  }, [configScope]);
+  }, [configScope, scopeFilter, scopeQuery]);
+  const configScopeVisibleCount =
+    configScopeGroups.user.length + configScopeGroups.mixed.length + configScopeGroups.system.length;
   const selectedOverview = (overview?.channels ?? []).find(
     (channel) => channel.channel_id === selectedChannel,
   );
@@ -1625,7 +1652,7 @@ export function EmotionDashboard() {
             <h2>配置分级</h2>
             <span>
               {configScope
-                ? `${configScope.summary.editable} / ${configScope.summary.total} 可调 · ${formatClock(configScope.updated_at)}`
+                ? `${configScopeVisibleCount} / ${configScope.summary.total} 当前显示 · ${formatClock(configScope.updated_at)}`
                 : "等待配置分级"}
             </span>
           </div>
@@ -1654,47 +1681,81 @@ export function EmotionDashboard() {
                 </div>
               </div>
 
-              <div className="scope-columns">
-                {(["user", "mixed", "system"] as const).map((scope) => {
-                  const modules = configScopeGroups[scope];
-                  return (
-                    <div className="scope-column" key={scope}>
-                      <div className="scope-column-header">
-                        <h3>{scopeLabel(scope)}</h3>
-                        <span>{modules.length} 个模块</span>
-                      </div>
-                      {modules.length === 0 ? (
-                        <div className="empty-state inline">当前没有这一类模块。</div>
-                      ) : (
-                        <div className="scope-module-list">
-                          {modules.map((item) => (
-                            <article className="scope-module-row" key={item.module}>
-                              <div className="scope-module-head">
-                                <strong>{item.module}</strong>
-                                <span className={`scope-badge scope-badge-${scope}`}>{scopeLabel(scope)}</span>
-                              </div>
-                              <p className="scope-domain-text">
-                                语义域：{item.semantic_domains.length > 0 ? item.semantic_domains.join(", ") : "无"}
-                              </p>
-                              {item.user_editable_keys.length > 0 ? (
-                                <div className="scope-chip-row">
-                                  {item.user_editable_keys.map((key) => (
-                                    <span className="scope-chip" key={`${item.module}-${key}`}>
-                                      {key}
-                                    </span>
-                                  ))}
-                                </div>
-                              ) : (
-                                <p className="scope-note">用户不可直接修改，系统锁定 {item.system_key_count} 项。</p>
-                              )}
-                            </article>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="scope-toolbar">
+                <div className="scope-filter-row">
+                  {([
+                    ["editable", "只看可调"],
+                    ["all", "全部"],
+                    ["user", "用户可改"],
+                    ["mixed", "部分可改"],
+                    ["system", "系统级"],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`scope-filter-chip${scopeFilter === value ? " is-active" : ""}`}
+                      onClick={() => setScopeFilter(value)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <label className="scope-search">
+                  <span>搜索模块 / 语义域 / 键</span>
+                  <input
+                    type="search"
+                    value={scopeQuery}
+                    onChange={(event) => setScopeQuery(event.target.value)}
+                    placeholder="比如 memory、identity、cooldown..."
+                  />
+                </label>
               </div>
+
+              {configScopeVisibleCount === 0 ? (
+                <div className="empty-state">当前筛选条件下没有匹配模块。</div>
+              ) : (
+                <div className="scope-columns">
+                  {(["user", "mixed", "system"] as const).map((scope) => {
+                    const modules = configScopeGroups[scope];
+                    return (
+                      <div className="scope-column" key={scope}>
+                        <div className="scope-column-header">
+                          <h3>{scopeLabel(scope)}</h3>
+                          <span>{modules.length} 个模块</span>
+                        </div>
+                        {modules.length === 0 ? (
+                          <div className="empty-state inline">当前没有这一类模块。</div>
+                        ) : (
+                          <div className="scope-module-list">
+                            {modules.map((item) => (
+                              <article className="scope-module-row" key={item.module}>
+                                <div className="scope-module-head">
+                                  <strong>{item.module}</strong>
+                                  <span className={`scope-badge scope-badge-${scope}`}>{scopeLabel(scope)}</span>
+                                </div>
+                                <p className="scope-domain-text">
+                                  语义域：{item.semantic_domains.length > 0 ? item.semantic_domains.join(", ") : "无"}
+                                </p>
+                                {item.user_editable_keys.length > 0 ? (
+                                  <div className="scope-chip-row">
+                                    {item.user_editable_keys.map((key) => (
+                                      <span className="scope-chip" key={`${item.module}-${key}`}>
+                                        {key}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="scope-note">用户不可直接修改，系统锁定 {item.system_key_count} 项。</p>
+                                )}
+                              </article>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
         </section>

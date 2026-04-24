@@ -578,6 +578,60 @@ body {
   letter-spacing: -0.03em;
 }
 
+.scope-toolbar {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.scope-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scope-filter-chip {
+  appearance: none;
+  border: 1px solid rgba(35, 26, 21, 0.1);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.scope-filter-chip.is-active {
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--accent-3);
+  border-color: rgba(37, 99, 235, 0.24);
+}
+
+.scope-search {
+  display: grid;
+  gap: 6px;
+}
+
+.scope-search span {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.scope-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 11px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(35, 26, 21, 0.1);
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text);
+  font: inherit;
+}
+
 .scope-columns {
   display: grid;
   grid-template-columns: 0.9fr 1.3fr 1.2fr;
@@ -720,6 +774,10 @@ body {
 
   .policy-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scope-toolbar {
+    grid-template-columns: 1fr;
   }
 }
 
