@@ -972,6 +972,12 @@ class ProactiveContextPromptMixin:
     ) -> Dict[str, Any]:
         """把身份、群态势和内容状态真正接入拒绝回复链。"""
         result = {"should_skip": False, "reason": "", "source": ""}
+        if not isinstance(identity_context, dict):
+            identity_context = {
+                "identity": "default",
+                "response_mode": "normal",
+                "has_conflict": False,
+            }
         merged_group_signal = (
             group_context_signal
             if isinstance(group_context_signal, dict)
@@ -1096,4 +1102,3 @@ class ProactiveContextPromptMixin:
                 logger.info(f"{self.log_prefix} 😤 厌烦值{annoyance:.1f}但决定回复，可能表达不满")
 
         return result
-

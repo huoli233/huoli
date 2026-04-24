@@ -547,7 +547,16 @@ class LoopMainDriverMixin:
         except asyncio.TimeoutError:
             logger.warning(f"{self.log_prefix} ⚠️ 阶段2.5超时({_stage25_timeout:.0f}s)，跳过未完成任务")
             _stage25_results = [None] * 11
-        identity_context = _stage25_results[0] if not isinstance(_stage25_results[0], Exception) else {"identity": "default", "response_mode": "normal", "has_conflict": False}
+        _identity_default = {
+            "identity": "default",
+            "response_mode": "normal",
+            "has_conflict": False,
+        }
+        identity_context = (
+            _stage25_results[0]
+            if isinstance(_stage25_results[0], dict)
+            else _identity_default
+        )
         self_reply_risk = _stage25_results[2] if not isinstance(_stage25_results[2], Exception) else {"is_self_reply": False, "similarity": 0.0}
         group_sense_result = _stage25_results[7] if not isinstance(_stage25_results[7], Exception) else {}
         preprocessor_signal = _stage25_results[8] if not isinstance(_stage25_results[8], Exception) else {}
