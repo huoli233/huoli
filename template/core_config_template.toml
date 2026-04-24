@@ -1927,7 +1927,9 @@ edit_scope = "system"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["personality"]
 profile_name = "personality_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["default_blend_duration_sec", "persona_auto_revert_sec", "persona_pool_capacity"]
+system_only_keys = ["bond_saturation_steepness", "bond_reversal_multiplier", "bond_reversal_min_streak", "bond_large_delta_threshold", "bond_large_delta_dampen_rate", "bond_step_ceiling", "chaos_sensitivity", "chaos_natural_decay_per_hour", "mask_base_armor", "mask_strain_rate", "mask_recovery_rate", "crisis_persona_chaos_threshold"]
 
 [profile_mapping.module_views.phase_timing]
 base_refs = ["runtime_defaults"]
@@ -2264,25 +2266,30 @@ edit_scope = "system"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["affection_dynamics"]
 profile_name = "affection_dynamics_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["max_affection", "max_trust", "max_annoyance"]
 
 [profile_mapping.module_views.persona_controller]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["persona_controller"]
 profile_name = "persona_controller_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["max_personas", "default_duration"]
 
 [profile_mapping.module_views.persona_generator]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["persona_generator"]
 profile_name = "persona_generator_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["max_history", "switch_cooldown"]
 
 [profile_mapping.module_views.persona_switcher]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["persona_switcher"]
 profile_name = "persona_switcher_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["auto_revert_default_seconds", "transition_duration_seconds", "trauma_switch_duration_seconds"]
+system_only_keys = ["transition_revert_buffer_seconds", "time_balance_max_seconds", "primary_base_weight", "primary_time_balance_scale", "trauma_impact_cap", "trauma_impact_scale", "primary_weight_floor", "primary_weight_ceiling", "transition_phase_1_ratio", "transition_phase_2_ratio", "transition_phase_3_ratio"]
 
 [profile_mapping.module_views.perception_behavior]
 base_refs = ["runtime_defaults"]

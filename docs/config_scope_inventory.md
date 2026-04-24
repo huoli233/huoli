@@ -29,7 +29,7 @@
 | --- | --- | --- | --- | --- | --- |
 | dialogue_orchestration | 对话编排 | 15 | 9 | 6 | 0 |
 | emotion_psychology | 情绪与心理 | 3 | 2 | 1 | 0 |
-| identity_persona | 身份与人格 | 9 | 5 | 3 | 1 |
+| identity_persona | 身份与人格 | 9 | 0 | 8 | 1 |
 | interface_observability | 界面与可观测 | 4 | 3 | 1 | 0 |
 | learning_adaptation | 学习与自适应 | 2 | 1 | 1 | 0 |
 | memory_knowledge | 记忆与知识 | 12 | 5 | 7 | 0 |
@@ -74,7 +74,7 @@
 | 三级模块类型 | 一级/二级路径 | 编辑分级 | 四层映射状态 | 用户可改键 | 绑定语义域 |
 | --- | --- | --- | --- | --- | --- |
 | adaptive_learning | 学习与自适应 / 学习与自适应 | mixed | 已接入 | priority_feedback_enabled, vocabulary_limit, mood_vocabulary_limit | adaptive_learning |
-| affection_dynamics | 身份与人格 / 人格动态 | system | 已接入 | - | affection_dynamics |
+| affection_dynamics | 身份与人格 / 人格动态 | mixed | 已接入 | max_affection, max_trust, max_annoyance | affection_dynamics |
 | brain_chat_runtime | 对话编排 / 路由与生成 | system | 已接入 | - | brain_chat_runtime |
 | brain_pfc_action | 对话编排 / 路由与生成 | system | 已接入 | - | brain_pfc_action |
 | brain_pfc_goal | 对话编排 / 路由与生成 | system | 已接入 | - | brain_pfc_goal |
@@ -114,10 +114,10 @@
 | perception_understand | 感知与上下文 / 语义理解 | system | 已接入 | - | perception_understand |
 | perception_user_relation | 感知与上下文 / 用户感知 | system | 已接入 | - | perception_user_relation |
 | perception_user_state | 感知与上下文 / 用户感知 | system | 已接入 | - | perception_user_state |
-| persona_controller | 身份与人格 / 人格动态 | system | 已接入 | - | persona_controller |
-| persona_generator | 身份与人格 / 人格动态 | system | 已接入 | - | persona_generator |
-| persona_switcher | 身份与人格 / 人格动态 | system | 已接入 | - | persona_switcher |
-| personality | 身份与人格 / 人格动态 | system | 已接入 | - | personality |
+| persona_controller | 身份与人格 / 人格动态 | mixed | 已接入 | max_personas, default_duration | persona_controller |
+| persona_generator | 身份与人格 / 人格动态 | mixed | 已接入 | max_history, switch_cooldown | persona_generator |
+| persona_switcher | 身份与人格 / 人格动态 | mixed | 已接入 | auto_revert_default_seconds, transition_duration_seconds, trauma_switch_duration_seconds | persona_switcher |
+| personality | 身份与人格 / 人格动态 | mixed | 已接入 | default_blend_duration_sec, persona_auto_revert_sec, persona_pool_capacity | personality |
 | personality_factors | 身份与人格 / 性格因子 | user | 已接入 | sensitivity, tolerance, reactiveness, recovery_speed, social_warmth, curiosity_drive, reply_eagerness | personality_factors |
 | phase_timing | 对话编排 / 阶段与调度 | mixed | 已接入 | rest_default_seconds, peek_chance_ratio, max_idle_wait_seconds, max_chase_count, phase_idle_timeout_seconds | phase_timing |
 | proactive_decider | 对话编排 / 主动与回复 | mixed | 已接入 | activation_bar, reply_grace_period_sec, silence_full_score_sec, max_pending_events | proactive_decider |

@@ -274,6 +274,11 @@ energy_overflow_ratio = 0.91
 [profile_mapping.semantic_domains.personality_factors]
 social_warmth = 0.77
 
+[profile_mapping.semantic_domains.personality]
+persona_pool_capacity = 12
+default_blend_duration_sec = 44.0
+persona_auto_revert_sec = 333.0
+
 [profile_mapping.semantic_domains.social_calculator]
 offset_decay_per_hour = 0.23
 positive_streak_coeff = 1.9
@@ -584,6 +589,12 @@ semantic_domains = ["personality_factors"]
 edit_scope = "user"
 user_editable_keys = ["sensitivity", "tolerance", "reactiveness", "recovery_speed", "social_warmth", "curiosity_drive", "reply_eagerness"]
 
+[profile_mapping.module_views.personality]
+semantic_domains = ["personality"]
+edit_scope = "mixed"
+user_editable_keys = ["default_blend_duration_sec", "persona_auto_revert_sec", "persona_pool_capacity"]
+system_only_keys = ["bond_saturation_steepness", "bond_reversal_multiplier", "bond_reversal_min_streak", "bond_large_delta_threshold", "bond_large_delta_dampen_rate", "bond_step_ceiling", "chaos_sensitivity", "chaos_natural_decay_per_hour", "mask_base_armor", "mask_strain_rate", "mask_recovery_rate", "crisis_persona_chaos_threshold"]
+
 [profile_mapping.module_views.social_calculator]
 semantic_domains = ["social_calculator"]
 edit_scope = "system"
@@ -614,15 +625,24 @@ semantic_domains = ["perception_user_state"]
 
 [profile_mapping.module_views.affection_dynamics]
 semantic_domains = ["affection_dynamics"]
+edit_scope = "mixed"
+user_editable_keys = ["max_affection", "max_trust", "max_annoyance"]
 
 [profile_mapping.module_views.persona_controller]
 semantic_domains = ["persona_controller"]
+edit_scope = "mixed"
+user_editable_keys = ["max_personas", "default_duration"]
 
 [profile_mapping.module_views.persona_generator]
 semantic_domains = ["persona_generator"]
+edit_scope = "mixed"
+user_editable_keys = ["max_history", "switch_cooldown"]
 
 [profile_mapping.module_views.persona_switcher]
 semantic_domains = ["persona_switcher"]
+edit_scope = "mixed"
+user_editable_keys = ["auto_revert_default_seconds", "transition_duration_seconds", "trauma_switch_duration_seconds"]
+system_only_keys = ["transition_revert_buffer_seconds", "time_balance_max_seconds", "primary_base_weight", "primary_time_balance_scale", "trauma_impact_cap", "trauma_impact_scale", "primary_weight_floor", "primary_weight_ceiling", "transition_phase_1_ratio", "transition_phase_2_ratio", "transition_phase_3_ratio"]
 
 [profile_mapping.module_views.perception_behavior]
 semantic_domains = ["perception_behavior"]
@@ -824,6 +844,10 @@ def main() -> None:
         assert personality_factors.values["social_warmth"] == 0.77
         assert personality_factors.edit_scope == "user"
         assert "social_warmth" in personality_factors.user_editable_keys
+        personality = hub.resolve_module_view("personality")
+        assert personality.values["persona_pool_capacity"] == 12
+        assert personality.edit_scope == "mixed"
+        assert personality.user_editable_keys == ("default_blend_duration_sec", "persona_auto_revert_sec", "persona_pool_capacity")
         social_calculator = hub.resolve_module_view("social_calculator")
         assert social_calculator.values["positive_streak_coeff"] == 1.9
         assert social_calculator.values["categories"]["hostile"]["acceleration_multiplier"] == 3.8
@@ -840,10 +864,18 @@ def main() -> None:
         assert hub.resolve_module_view("perception_user_relation").values["familiar_threshold"] == 9
         assert hub.resolve_module_view("perception_user_state").values["model_weight"] == 0.7
         assert hub.resolve_module_view("perception_user_state").values["verdict_thresholds"]["want_to_chat"] == 0.68
-        assert hub.resolve_module_view("affection_dynamics").values["max_annoyance"] == 88.0
-        assert hub.resolve_module_view("persona_controller").values["max_personas"] == 12
-        assert hub.resolve_module_view("persona_generator").values["switch_cooldown"] == 240.0
-        assert hub.resolve_module_view("persona_switcher").values["transition_duration_seconds"] == 44.0
+        affection_dynamics = hub.resolve_module_view("affection_dynamics")
+        assert affection_dynamics.values["max_annoyance"] == 88.0
+        assert affection_dynamics.edit_scope == "mixed"
+        persona_controller = hub.resolve_module_view("persona_controller")
+        assert persona_controller.values["max_personas"] == 12
+        assert persona_controller.edit_scope == "mixed"
+        persona_generator = hub.resolve_module_view("persona_generator")
+        assert persona_generator.values["switch_cooldown"] == 240.0
+        assert persona_generator.edit_scope == "mixed"
+        persona_switcher = hub.resolve_module_view("persona_switcher")
+        assert persona_switcher.values["transition_duration_seconds"] == 44.0
+        assert persona_switcher.edit_scope == "mixed"
         assert hub.resolve_module_view("perception_behavior").values["memory_cap"] == 77
         assert hub.resolve_module_view("perception_buffer").values["recent_show_count"] == 8
         assert hub.resolve_module_view("perception_group_atmosphere").values["max_history"] == 66
@@ -923,6 +955,7 @@ def main() -> None:
             "social_support_cap": hub.resolve_module_view("social_affect_fuser").values["support_relief_cap"],
             "social_core_initial": hub.resolve_module_view("social_value_core").values["social_new_user_initial"],
             "personality_scope": personality_factors.edit_scope,
+            "persona_runtime_scope": personality.edit_scope,
             "memory_scope": memory.edit_scope,
             "heartflow_decision_scope": heartflow_decision.edit_scope,
             "proactive_scope": proactive_decider.edit_scope,
