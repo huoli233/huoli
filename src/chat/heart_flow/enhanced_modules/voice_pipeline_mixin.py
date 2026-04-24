@@ -594,6 +594,7 @@ class EnhancedVoicePipelineMixin:
         is_proactive: 主动路径使用独立冷却计时器，不受被动路径影响
         """
         source_label = source or ("proactive" if is_proactive else "reactive")
+        peek_source = "peek" in str(source_label or "").strip().lower()
         cooldown_anchor = self._last_proactive_voice_ts if is_proactive else self._last_voice_ts
         _level, _, _, _ = self._compute_llm_call_level(
             now,
@@ -617,6 +618,21 @@ class EnhancedVoicePipelineMixin:
             except Exception as exc:
                 logger.debug(f"{self.log_prefix} 行为Governor评估异常(voice): {exc}")
                 _behavior = None
+        if (
+            peek_source
+            and _level > 0
+            and _behavior is not None
+            and not bool(getattr(_behavior, "allow_generation", True))
+            and str(getattr(_behavior, "reply_mode", "") or "").strip().lower() == "observe"
+        ):
+            # 窥屏态的内心独白是“先产生主观反应，再决定要不要升级参与”，
+            # 不应被外部回复门控提前掐断。
+            _behavior = dataclass_replace(
+                _behavior,
+                allow_generation=True,
+                model_tier="small",
+            )
+            logger.debug(f"{self.log_prefix} 👁 窥屏内心独白放行：先形成主观反应，再决定是否升级参与")
         _model_governor = self._evaluate_model_governor(
             now=now,
             desired_level=_level,
@@ -626,8 +642,14 @@ class EnhancedVoicePipelineMixin:
             source=source_label,
             behavior_verdict=_behavior,
         )
-        if _model_governor.tier == "skip" or _level == 0:
+        if _level == 0:
             logger.info(f"{self.log_prefix} 动态阈值判定: {source_label} 跳过小模型(level=0)")
+            return False
+        if _model_governor.tier == "skip":
+            logger.info(
+                f"{self.log_prefix} 🎛️ 模型Governor拦截({source_label}): "
+                f"{self._summarize_model_governor(_model_governor)}"
+            )
             return False
         if _model_governor.tier == "large" and (is_proactive or "proactive" in source_label):
             self._record_large_model_usage(now=now, is_proactive=True)
@@ -1289,4 +1311,3 @@ class EnhancedVoicePipelineMixin:
         except Exception as _e:
             logger.debug(f"异常: {_e}")
         return self._normalize_relation_snapshot(base_view)
-
