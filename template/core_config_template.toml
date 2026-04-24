@@ -1817,13 +1817,17 @@ behavior_check_interval_seconds = 2400.0
 base_refs = ["runtime_defaults", "model_defaults"]
 semantic_domains = ["model_routing"]
 profile_name = "model_routing_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["complexity_threshold", "skip_low_value_threshold", "high_risk_threshold"]
+system_only_keys = ["default_model_path", "large_model_path", "model_cooldown_seconds", "model_fail_threshold", "tool_incompat_cooldown_seconds"]
 
 [profile_mapping.module_views.schedule]
 base_refs = ["runtime_defaults"]
 semantic_domains = ["schedule"]
 profile_name = "schedule_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["default_idle_minutes", "idle_trigger_seconds", "proactive_reply_cooldown_seconds", "priority_boost_on_mention", "llm_perception_enabled", "perception_engagement_threshold"]
+system_only_keys = ["active_user_cleanup_interval_seconds", "backend_event_cooldown_seconds", "backend_status_log_enabled", "backend_status_log_interval_sec", "cache_cleanup_interval_seconds", "chatter_cleanup_interval_seconds", "cleanup_chat_instances_interval_seconds", "cleanup_error_backoff_seconds", "cleanup_initial_delay_seconds", "cleanup_loop_interval_seconds", "context_cleanup_interval_seconds", "expression_learning_interval_seconds", "max_concurrent_thinks", "memory_cleanup_interval_seconds", "memory_governance_interval_seconds", "perception_max_tokens", "queue_capacity", "retry_max_count", "session_cleanup_interval_seconds", "session_max_age_days", "session_storage_dir", "skill_patrol_interval_seconds", "task_cancel_timeout_seconds", "task_shutdown_timeout_seconds", "telemetry_heartbeat_interval_seconds", "temp_files_cleanup_interval_seconds", "think_timeout_seconds"]
 
 [profile_mapping.module_views.memory]
 base_refs = ["runtime_defaults"]
@@ -1915,7 +1919,9 @@ edit_scope = "system"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["runtime_tuning"]
 profile_name = "runtime_tuning_view"
-edit_scope = "system"
+edit_scope = "mixed"
+user_editable_keys = ["autosave_interval_seconds", "flow_planner_slow_threshold_seconds", "heartfc_perception_cooldown_sec", "heartfc_voice_cooldown_sec"]
+system_only_keys = ["flow_planner_timeout_seconds", "heartfc_dormant_poll_sec", "heartfc_energy_drain_floor", "heartfc_post_message_retry_sec", "heartfc_tick_floor_sec", "vlm_concurrency_limit"]
 
 [profile_mapping.module_views.heartfc_thresholds]
 base_refs = ["runtime_defaults"]

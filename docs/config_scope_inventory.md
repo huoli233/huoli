@@ -27,11 +27,11 @@
 
 | 一级类型 | 中文名 | 三级模块数 | system | mixed | user |
 | --- | --- | --- | --- | --- | --- |
-| dialogue_orchestration | 对话编排 | 15 | 9 | 6 | 0 |
+| dialogue_orchestration | 对话编排 | 15 | 7 | 8 | 0 |
 | emotion_psychology | 情绪与心理 | 3 | 2 | 1 | 0 |
 | identity_persona | 身份与人格 | 9 | 0 | 8 | 1 |
 | interface_observability | 界面与可观测 | 4 | 3 | 1 | 0 |
-| learning_adaptation | 学习与自适应 | 2 | 1 | 1 | 0 |
+| learning_adaptation | 学习与自适应 | 2 | 0 | 2 | 0 |
 | memory_knowledge | 记忆与知识 | 12 | 5 | 7 | 0 |
 | perception_context | 感知与上下文 | 13 | 11 | 2 | 0 |
 | runtime_resources | 运行资源与开关 | 4 | 3 | 1 | 0 |
@@ -101,7 +101,7 @@
 | memory_dedup | 记忆与知识 / 容量与衰减 | mixed | 已接入 | similarity_threshold | memory_dedup |
 | memory_retrieval | 记忆与知识 / 检索与召回 | mixed | 已接入 | bm25_weight, vector_weight | memory_retrieval |
 | message_processor | 对话编排 / 路由与生成 | system | 已接入 | - | message_processor |
-| model_routing | 对话编排 / 路由与生成 | system | 已接入 | - | model_routing |
+| model_routing | 对话编排 / 路由与生成 | mixed | 已接入 | complexity_threshold, skip_low_value_threshold, high_risk_threshold | model_routing |
 | module_switches | 运行资源与开关 / 频控与开关 | mixed | 已接入 | heartflow_enabled, proactive_enabled, silence_watcher_enabled, inner_voice_enabled | module_switches |
 | perception_behavior | 感知与上下文 / 用户感知 | system | 已接入 | - | perception_behavior |
 | perception_buffer | 感知与上下文 / 语义理解 | system | 已接入 | - | perception_buffer |
@@ -129,8 +129,8 @@
 | recall_self_behavior | 记忆与知识 / 回想与纠错 | system | 已接入 | - | recall_self_behavior |
 | recall_shuffle | 记忆与知识 / 回想与纠错 | mixed | 已接入 | probability, wrong_word_map, shuffle_types | recall_shuffle |
 | recall_typo | 记忆与知识 / 回想与纠错 | mixed | 已接入 | probability, extra_chars, wrong_char_map | recall_typo |
-| runtime_tuning | 学习与自适应 / 运行调优 | system | 已接入 | - | runtime_tuning |
-| schedule | 对话编排 / 阶段与调度 | system | 已接入 | - | schedule |
+| runtime_tuning | 学习与自适应 / 运行调优 | mixed | 已接入 | autosave_interval_seconds, flow_planner_slow_threshold_seconds, heartfc_perception_cooldown_sec, heartfc_voice_cooldown_sec | runtime_tuning |
+| schedule | 对话编排 / 阶段与调度 | mixed | 已接入 | default_idle_minutes, idle_trigger_seconds, proactive_reply_cooldown_seconds, priority_boost_on_mention, llm_perception_enabled, perception_engagement_threshold | schedule |
 | skill | 对话编排 / 技能调度 | mixed | 已接入 | sticker_daily_ceiling, sticker_dispatch_threshold | skill |
 | social_affect_fuser | 创伤与关系 / 社交关系 | system | 已接入 | - | social_affect_fuser |
 | social_calculator | 创伤与关系 / 社交关系 | system | 已接入 | - | social_calculator |

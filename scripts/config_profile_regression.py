@@ -84,6 +84,10 @@ task_cancel_timeout_seconds = 7.0
 telemetry_heartbeat_interval_seconds = 123.0
 expression_learning_interval_seconds = 456.0
 
+[profile_mapping.semantic_domains.runtime_tuning]
+autosave_interval_seconds = 321.0
+heartfc_voice_cooldown_sec = 9.0
+
 [profile_mapping.semantic_domains.phase_timing]
 max_idle_wait_seconds = 99
 phase_idle_timeout_seconds = 222.0
@@ -421,9 +425,21 @@ system_only_keys = ["vlm_temperature", "vlm_timeout_seconds", "gif_frame_limit",
 
 [profile_mapping.module_views.model_routing]
 semantic_domains = ["model_routing"]
+edit_scope = "mixed"
+user_editable_keys = ["complexity_threshold", "skip_low_value_threshold", "high_risk_threshold"]
+system_only_keys = ["default_model_path", "large_model_path", "model_cooldown_seconds", "model_fail_threshold", "tool_incompat_cooldown_seconds"]
 
 [profile_mapping.module_views.schedule]
 semantic_domains = ["schedule"]
+edit_scope = "mixed"
+user_editable_keys = ["default_idle_minutes", "idle_trigger_seconds", "proactive_reply_cooldown_seconds", "priority_boost_on_mention", "llm_perception_enabled", "perception_engagement_threshold"]
+system_only_keys = ["active_user_cleanup_interval_seconds", "backend_event_cooldown_seconds", "backend_status_log_enabled", "backend_status_log_interval_sec", "cache_cleanup_interval_seconds", "chatter_cleanup_interval_seconds", "cleanup_chat_instances_interval_seconds", "cleanup_error_backoff_seconds", "cleanup_initial_delay_seconds", "cleanup_loop_interval_seconds", "context_cleanup_interval_seconds", "expression_learning_interval_seconds", "max_concurrent_thinks", "memory_cleanup_interval_seconds", "memory_governance_interval_seconds", "perception_max_tokens", "queue_capacity", "retry_max_count", "session_cleanup_interval_seconds", "session_max_age_days", "session_storage_dir", "skill_patrol_interval_seconds", "task_cancel_timeout_seconds", "task_shutdown_timeout_seconds", "telemetry_heartbeat_interval_seconds", "temp_files_cleanup_interval_seconds", "think_timeout_seconds"]
+
+[profile_mapping.module_views.runtime_tuning]
+semantic_domains = ["runtime_tuning"]
+edit_scope = "mixed"
+user_editable_keys = ["autosave_interval_seconds", "flow_planner_slow_threshold_seconds", "heartfc_perception_cooldown_sec", "heartfc_voice_cooldown_sec"]
+system_only_keys = ["flow_planner_timeout_seconds", "heartfc_dormant_poll_sec", "heartfc_energy_drain_floor", "heartfc_post_message_retry_sec", "heartfc_tick_floor_sec", "vlm_concurrency_limit"]
 
 [profile_mapping.module_views.phase_timing]
 semantic_domains = ["phase_timing"]
@@ -743,11 +759,19 @@ def main() -> None:
 
         schedule = hub.resolve_module_view("schedule")
         assert schedule.fallback_used is False
-        assert schedule.edit_scope == "system"
+        assert schedule.edit_scope == "mixed"
+        assert schedule.user_editable_keys == ("default_idle_minutes", "idle_trigger_seconds", "proactive_reply_cooldown_seconds", "priority_boost_on_mention", "llm_perception_enabled", "perception_engagement_threshold")
         assert schedule.values["proactive_reply_cooldown_seconds"] == 45.0
         assert hub.assemble_scheduler_config()["cooldown_sec"] == 45.0
         assert hub.assemble_scheduler_config()["task_cancel_timeout_sec"] == 7.0
-        assert hub.resolve_module_view("model_routing").values["model_fail_threshold"] == 4
+        model_routing = hub.resolve_module_view("model_routing")
+        assert model_routing.values["model_fail_threshold"] == 4
+        assert model_routing.edit_scope == "mixed"
+        assert model_routing.user_editable_keys == ("complexity_threshold", "skip_low_value_threshold", "high_risk_threshold")
+        runtime_tuning = hub.resolve_module_view("runtime_tuning")
+        assert runtime_tuning.values["autosave_interval_seconds"] == 321.0
+        assert runtime_tuning.edit_scope == "mixed"
+        assert runtime_tuning.user_editable_keys == ("autosave_interval_seconds", "flow_planner_slow_threshold_seconds", "heartfc_perception_cooldown_sec", "heartfc_voice_cooldown_sec")
         phase_timing = hub.resolve_module_view("phase_timing")
         assert phase_timing.values["max_idle_wait_seconds"] == 99
         assert phase_timing.edit_scope == "mixed"
@@ -916,7 +940,9 @@ def main() -> None:
             "schedule_fallback_used": schedule.fallback_used,
             "schedule_edit_scope": schedule.edit_scope,
             "schedule_cooldown_sec": hub.assemble_scheduler_config()["cooldown_sec"],
-            "model_fail_threshold": hub.resolve_module_view("model_routing").values["model_fail_threshold"],
+            "model_fail_threshold": model_routing.values["model_fail_threshold"],
+            "model_routing_scope": model_routing.edit_scope,
+            "runtime_tuning_scope": runtime_tuning.edit_scope,
             "context_reply_tokens": hub.resolve_module_view("context").values["reply_context_max_tokens"],
             "context_scope": context.edit_scope,
             "phase_idle_timeout": phase_timing.values["phase_idle_timeout_seconds"],
