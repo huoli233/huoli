@@ -3,8 +3,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.modcore.dynamic_persona.runtime_config import dynamic_persona_module_view
 
 logger = get_logger("affection_dynamics")
 
@@ -289,8 +289,8 @@ _affection_dynamics_instance: Optional["AffectionDynamicsManager"] = None
 class AffectionDynamicsManager:
     """情感动力学管理器"""
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self, config_engine: Optional[Any] = None):
+        del config_engine
         self._emotion_contagion = EmotionContagion()
         self._context_analyzer = ConversationContextAnalyzer()
         self._affection_triggers = AffectionTriggers()
@@ -298,7 +298,7 @@ class AffectionDynamicsManager:
         self._load_config()
 
     def _load_config(self):
-        affection_cfg = self._config.get("affection_dynamics", {})
+        affection_cfg = dynamic_persona_module_view("affection_dynamics")
         self._max_affection = affection_cfg.get("max_affection", 100.0)
         self._max_trust = affection_cfg.get("max_trust", 100.0)
         self._max_annoyance = affection_cfg.get("max_annoyance", 100.0)

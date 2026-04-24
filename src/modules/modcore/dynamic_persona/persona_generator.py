@@ -1,12 +1,9 @@
 import time
-import uuid
-import random
-import json
-from typing import Optional, Dict, List, Any, Tuple
+from typing import Optional, Dict, List, Any
 from dataclasses import dataclass, field
 from enum import Enum
 from src.common.logger import get_logger
-from src.common.config.config_engine import ConfigEngine
+from src.modules.modcore.dynamic_persona.runtime_config import dynamic_persona_module_view
 
 logger = get_logger("人格生成器")
 
@@ -416,8 +413,8 @@ class PersonaGenerator:
     包含模板记忆系统和交互学习系统。
     """
 
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self, config_engine: Optional[Any] = None):
+        del config_engine
         self._generated_personas: Dict[str, PersonaProfile] = {}
         self._persona_history: List[Dict] = []
         self._max_history = 100
@@ -429,7 +426,7 @@ class PersonaGenerator:
         self._load_config()
 
     def _load_config(self) -> None:
-        persona_cfg = self._config.get("persona_generator", {})
+        persona_cfg = dynamic_persona_module_view("persona_generator")
         self._max_history = persona_cfg.get("max_history", 100)
         self._switch_cooldown = persona_cfg.get("switch_cooldown", 180.0)
 

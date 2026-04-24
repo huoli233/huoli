@@ -2,8 +2,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
+from src.modules.modcore.dynamic_persona.runtime_config import dynamic_persona_module_view
 
 logger = get_logger("人格控制器")
 
@@ -88,10 +88,10 @@ class PersonaController:
 
     def __init__(
         self,
-        config_engine: Optional[ConfigEngine] = None,
+        config_engine: Optional[Any] = None,
         stream_id: str = "default",
     ):
-        self._config = config_engine or ConfigEngine.get_instance()
+        del config_engine
         self._stream_id = stream_id
         self._main_persona: Optional[DynamicPersona] = None
         self._persona_pool: Dict[str, DynamicPersona] = {}
@@ -100,7 +100,7 @@ class PersonaController:
         self._load_config()
 
     def _load_config(self):
-        persona_cfg = self._config.get("persona", {})
+        persona_cfg = dynamic_persona_module_view("persona_controller")
         self._max_personas = persona_cfg.get("max_personas", self.MAX_PERSONAS)
         self._default_duration = persona_cfg.get(
             "default_duration", self.DEFAULT_DURATION

@@ -1607,6 +1607,35 @@ question = 0.15
 want_to_chat = 0.6
 not_want_to_chat = 0.35
 
+[profile_mapping.semantic_domains.affection_dynamics]
+max_affection = 100.0
+max_trust = 100.0
+max_annoyance = 100.0
+
+[profile_mapping.semantic_domains.persona_controller]
+max_personas = 10
+default_duration = 300.0
+
+[profile_mapping.semantic_domains.persona_generator]
+max_history = 100
+switch_cooldown = 180.0
+
+[profile_mapping.semantic_domains.persona_switcher]
+auto_revert_default_seconds = 300.0
+trauma_switch_duration_seconds = 600.0
+transition_duration_seconds = 60.0
+transition_revert_buffer_seconds = 300.0
+time_balance_max_seconds = 1800.0
+primary_base_weight = 0.6
+primary_time_balance_scale = 0.2
+trauma_impact_cap = 0.5
+trauma_impact_scale = 0.05
+primary_weight_floor = 0.2
+primary_weight_ceiling = 0.8
+transition_phase_1_ratio = 0.2
+transition_phase_2_ratio = 0.6
+transition_phase_3_ratio = 0.2
+
 [profile_mapping.semantic_domains.heartflow_runtime]
 focus_channels = []
 initiative_interval_sec = 300.0
@@ -1960,3 +1989,23 @@ profile_name = "perception_user_relation_view"
 base_refs = ["runtime_defaults"]
 semantic_domains = ["perception_user_state"]
 profile_name = "perception_user_state_view"
+
+[profile_mapping.module_views.affection_dynamics]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["affection_dynamics"]
+profile_name = "affection_dynamics_view"
+
+[profile_mapping.module_views.persona_controller]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["persona_controller"]
+profile_name = "persona_controller_view"
+
+[profile_mapping.module_views.persona_generator]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["persona_generator"]
+profile_name = "persona_generator_view"
+
+[profile_mapping.module_views.persona_switcher]
+base_refs = ["runtime_defaults"]
+semantic_domains = ["persona_switcher"]
+profile_name = "persona_switcher_view"

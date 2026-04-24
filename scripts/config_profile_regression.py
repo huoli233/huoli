@@ -271,6 +271,19 @@ model_weight = 0.7
 [profile_mapping.semantic_domains.perception_user_state.verdict_thresholds]
 want_to_chat = 0.68
 
+[profile_mapping.semantic_domains.affection_dynamics]
+max_annoyance = 88.0
+
+[profile_mapping.semantic_domains.persona_controller]
+max_personas = 12
+
+[profile_mapping.semantic_domains.persona_generator]
+switch_cooldown = 240.0
+
+[profile_mapping.semantic_domains.persona_switcher]
+transition_duration_seconds = 44.0
+primary_base_weight = 0.55
+
 [profile_mapping.semantic_domains.skill]
 trial_to_active_invocations = 6
 runtime_skill_cost = 0.4
@@ -453,6 +466,18 @@ semantic_domains = ["perception_user_relation"]
 [profile_mapping.module_views.perception_user_state]
 semantic_domains = ["perception_user_state"]
 
+[profile_mapping.module_views.affection_dynamics]
+semantic_domains = ["affection_dynamics"]
+
+[profile_mapping.module_views.persona_controller]
+semantic_domains = ["persona_controller"]
+
+[profile_mapping.module_views.persona_generator]
+semantic_domains = ["persona_generator"]
+
+[profile_mapping.module_views.persona_switcher]
+semantic_domains = ["persona_switcher"]
+
 [profile_mapping.module_views.context]
 semantic_domains = ["context"]
 
@@ -564,6 +589,10 @@ def main() -> None:
         assert hub.resolve_module_view("perception_user_relation").values["familiar_threshold"] == 9
         assert hub.resolve_module_view("perception_user_state").values["model_weight"] == 0.7
         assert hub.resolve_module_view("perception_user_state").values["verdict_thresholds"]["want_to_chat"] == 0.68
+        assert hub.resolve_module_view("affection_dynamics").values["max_annoyance"] == 88.0
+        assert hub.resolve_module_view("persona_controller").values["max_personas"] == 12
+        assert hub.resolve_module_view("persona_generator").values["switch_cooldown"] == 240.0
+        assert hub.resolve_module_view("persona_switcher").values["transition_duration_seconds"] == 44.0
         assert hub.resolve_module_view("skill").values["trial_to_active_invocations"] == 6
         assert hub.resolve_module_view("adaptive_learning").values["unknown_term_min_count"] == 4
         assert hub.resolve_module_view("adaptive_learning").values["expression_learn_temperature"] == 0.25
@@ -601,6 +630,7 @@ def main() -> None:
             "energy_chat_ceiling": hub.resolve_module_view("energy_runtime").values["chat_value"]["ceiling"],
             "trigger_overflow_ratio": hub.resolve_module_view("trigger_runtime").values["energy_overflow_ratio"],
             "perception_burst_count": hub.resolve_module_view("perception_group_sense").values["burst_msg_count"],
+            "persona_pool_cap": hub.resolve_module_view("persona_controller").values["max_personas"],
             "skill_trial_invocations": hub.resolve_module_view("skill").values["trial_to_active_invocations"],
             "adaptive_learning_limit": hub.resolve_module_view("adaptive_learning").values["max_learning_items"],
             "jargon_thresholds": hub.resolve_module_view("adaptive_learning").values["jargon_infer_thresholds"],

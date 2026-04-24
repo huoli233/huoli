@@ -2,14 +2,13 @@ import asyncio
 import time
 from typing import Any, Callable, Dict, List, Optional
 
-from src.common.config.config_engine import ConfigEngine
 from src.common.logger import get_logger
 from src.common.task_utils import safe_create_task
 from src.modules.modcore.dynamic_persona.persona_controller import (
     DynamicPersona,
-    PersonaController,
     get_persona_controller,
 )
+from src.modules.modcore.dynamic_persona.runtime_config import dynamic_persona_module_view
 
 logger = get_logger("人格切换")
 
@@ -21,17 +20,59 @@ class PersonaSwitcher:
     支持基于创伤状态的紧急切换。
     """
 
-    PRIMARY_WEIGHT = 0.5
-    AUXILIARY_WEIGHT = 0.5
-    TIME_BALANCE_MAX = 1800.0
-
-    def __init__(self, config_engine: Optional[ConfigEngine] = None):
-        self._config = config_engine or ConfigEngine.get_instance()
+    def __init__(self, config_engine: Optional[Any] = None):
+        del config_engine
         self._pending_reverts: Dict[str, asyncio.Task] = {}
         self._switch_callbacks: List[Callable] = []
         self._transitions: Dict[str, Dict[str, Any]] = {}
         self._last_switch_time: Dict[str, float] = {}
         self._transition_tasks: Dict[str, asyncio.Task] = {}
+        self._load_config()
+
+    def _load_config(self) -> None:
+        config = dynamic_persona_module_view("persona_switcher")
+        self._auto_revert_default_seconds = float(
+            config.get("auto_revert_default_seconds", 300.0)
+        )
+        self._trauma_switch_duration_seconds = float(
+            config.get("trauma_switch_duration_seconds", 600.0)
+        )
+        self._transition_duration_seconds = float(
+            config.get("transition_duration_seconds", 60.0)
+        )
+        self._transition_revert_buffer_seconds = float(
+            config.get("transition_revert_buffer_seconds", 300.0)
+        )
+        self._time_balance_max_seconds = float(
+            config.get("time_balance_max_seconds", 1800.0)
+        )
+        self._primary_base_weight = float(
+            config.get("primary_base_weight", 0.6)
+        )
+        self._primary_time_balance_scale = float(
+            config.get("primary_time_balance_scale", 0.2)
+        )
+        self._trauma_impact_cap = float(
+            config.get("trauma_impact_cap", 0.5)
+        )
+        self._trauma_impact_scale = float(
+            config.get("trauma_impact_scale", 0.05)
+        )
+        self._primary_weight_floor = float(
+            config.get("primary_weight_floor", 0.2)
+        )
+        self._primary_weight_ceiling = float(
+            config.get("primary_weight_ceiling", 0.8)
+        )
+        self._transition_phase_1_ratio = float(
+            config.get("transition_phase_1_ratio", 0.2)
+        )
+        self._transition_phase_2_ratio = float(
+            config.get("transition_phase_2_ratio", 0.6)
+        )
+        self._transition_phase_3_ratio = float(
+            config.get("transition_phase_3_ratio", 0.2)
+        )
 
     def register_callback(self, callback: Callable) -> None:
         self._switch_callbacks.append(callback)
@@ -56,6 +97,11 @@ class PersonaSwitcher:
         reason: str = "",
     ) -> bool:
         controller = get_persona_controller()
+        duration_seconds = (
+            self._auto_revert_default_seconds
+            if duration_seconds is None
+            else duration_seconds
+        )
         success = controller.switch_persona(
             stream_id, persona_id, duration_seconds, reason
         )
@@ -92,7 +138,7 @@ class PersonaSwitcher:
     ) -> bool:
         controller = get_persona_controller()
         if duration_seconds is None:
-            duration_seconds = 600.0
+            duration_seconds = self._trauma_switch_duration_seconds
         trauma_personas = [
             p
             for p in controller.list_personas()
@@ -168,9 +214,14 @@ class PersonaSwitcher:
         self,
         stream_id: str,
         to_persona_id: str,
-        transition_duration: float = 60.0,
+        transition_duration: Optional[float] = None,
         reason: str = "",
     ) -> bool:
+        transition_duration = (
+            self._transition_duration_seconds
+            if transition_duration is None
+            else transition_duration
+        )
         controller = get_persona_controller()
         to_persona = controller.get_persona(to_persona_id)
         if not to_persona:
@@ -192,7 +243,10 @@ class PersonaSwitcher:
             "stage": "starting",
         }
         success = await self.switch_with_auto_revert(
-            stream_id, to_persona_id, transition_duration + 300, reason
+            stream_id,
+            to_persona_id,
+            transition_duration + self._transition_revert_buffer_seconds,
+            reason,
         )
         if success:
             task = safe_create_task(
@@ -204,8 +258,8 @@ class PersonaSwitcher:
 
     async def _update_phases(self, stream_id: str, duration: float) -> None:
         try:
-            phase_1 = duration * 0.2
-            phase_2 = duration * 0.6
+            phase_1 = duration * self._transition_phase_1_ratio
+            phase_2 = duration * self._transition_phase_2_ratio
             await asyncio.sleep(phase_1)
             if stream_id in self._transitions:
                 self._transitions[stream_id]["phase"] = "blending"
@@ -214,7 +268,7 @@ class PersonaSwitcher:
             if stream_id in self._transitions:
                 self._transitions[stream_id]["phase"] = "completing"
                 self._transitions[stream_id]["stage"] = "ending"
-            await asyncio.sleep(duration * 0.2)
+            await asyncio.sleep(duration * self._transition_phase_3_ratio)
             self._transitions.pop(stream_id, None)
             self._transition_tasks.pop(stream_id, None)
         except asyncio.CancelledError:
@@ -242,24 +296,29 @@ class PersonaSwitcher:
         controller = get_persona_controller()
         active_persona = controller.get_active_persona(stream_id)
         main_persona = controller.get_main_persona()
-        primary = 0.6
-        auxiliary = 0.4
+        primary = self._primary_base_weight
+        auxiliary = 1.0 - primary
         if not active_persona or not main_persona:
             return {"primary": primary, "auxiliary": auxiliary}
         now = time.time()
         last_switch = self._last_switch_time.get(stream_id, now)
-        time_diff = min(now - last_switch, self.TIME_BALANCE_MAX)
-        time_balance = time_diff / self.TIME_BALANCE_MAX
+        time_diff = min(now - last_switch, self._time_balance_max_seconds)
+        time_balance = time_diff / max(self._time_balance_max_seconds, 1.0)
         is_main = active_persona.persona_id == main_persona.persona_id
         if is_main:
-            primary += 0.2 * time_balance
+            primary += self._primary_time_balance_scale * time_balance
         else:
-            primary -= 0.2 * time_balance
-        trauma_impact = min(0.5, trauma_score * 0.05)
+            primary -= self._primary_time_balance_scale * time_balance
+        trauma_impact = min(
+            self._trauma_impact_cap, trauma_score * self._trauma_impact_scale
+        )
         if not is_main:
             auxiliary += trauma_impact
             primary -= trauma_impact
-        primary = max(0.2, min(0.8, primary))
+        primary = max(
+            self._primary_weight_floor,
+            min(self._primary_weight_ceiling, primary),
+        )
         auxiliary = 1.0 - primary
         return {"primary": primary, "auxiliary": auxiliary}
 
