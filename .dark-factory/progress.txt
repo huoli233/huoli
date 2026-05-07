@@ -1,0 +1,16 @@
+## 2026-05-07 - Task: WebUI 状态栏命名与状态导出同步
+
+### What was done:
+- 收口状态栏与监控总览的命名，统一为“会话”语义，移除可见的旧群聊文案残留。
+- 补齐状态导出安全字段的别名兼容与预测同步字段，避免前后端契约不一致。
+- 增加状态回归脚本，覆盖安全字段、安全总览隐藏内网会话、预测同步状态和状态页文案契约。
+
+### Testing:
+- `uv run python scripts/heartflow_state_regression.py` 通过。
+- `uv run ruff check src/chat/heart_flow/heartfc_state_exporter.py src/chat/heart_flow/speak_prediction_engine.py src/webui/services/state_monitor.py scripts/heartflow_state_regression.py` 通过。
+- `npm run build` 通过。
+- 使用 headless Chrome 打开 `http://127.0.0.1:18081/dashboard/` 复核，页面已渲染，且新命名文案可见，旧状态栏文案未出现。
+
+### Notes:
+- 仓库当前未提供 `.dark-factory/task.json`，本轮按会话内 todo 执行并记录进度。
+- 远程同步和本地提交还未完成。

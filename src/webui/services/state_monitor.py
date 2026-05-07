@@ -189,7 +189,7 @@ def _label_family(value: Any) -> str:
         "mask": "伪装",
         "conditioning": "调教",
         "runtime": "运行",
-        "scene": "群聊",
+        "scene": "会话氛围",
         "circadian": "昼夜",
     }.get(str(value or "").strip().lower(), str(value or "") or "状态")
 
@@ -218,7 +218,7 @@ def _label_source(value: Any) -> str:
         "trauma_load": "创伤负荷",
         "surface_mask": "表层伪装",
         "tempo": "节奏控制",
-        "group_climate": "群聊气候",
+        "group_climate": "会话氛围",
         "pending_response": "待回应状态",
         "circadian_rhythm": "昼夜节律",
         "memory_stack": "记忆栈",
@@ -375,7 +375,7 @@ def _label_execution_stage(value: Any) -> str:
         "pipeline_early_exit": "输入早退出",
         "dashboard_hard_block": "仪表盘硬阻断",
         "pattern_route_skip": "群体模式硬路由",
-        "scene_constraint_skip": "群场景硬约束",
+        "scene_constraint_skip": "会话场景硬约束",
         "decision_runtime_skip": "初裁直接跳过",
         "voice_action_rest": "内心要求休息",
         "voice_action_disengage": "内心要求放下会话",
@@ -821,7 +821,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         signals.append(
             _signal_card(
                 key="scene_heat_score",
-                label="群聊升温",
+                label="会话升温",
                 family="scene",
                 severity="medium" if scene_heat_score < scene_cfg["scene_heat_high"] else "high",
                 value=scene_heat_score,
@@ -1245,8 +1245,8 @@ def _build_timeline(
             {
                 "at": time.time(),
                 "label": "场景热度",
-                "detail": f"当前群聊热度为 {scene_heat}",
-                "family": "群聊",
+                "detail": f"当前会话热度为 {scene_heat}",
+                "family": "会话",
             }
         )
     return generated
@@ -1607,13 +1607,19 @@ def _build_safety_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     safety = domains.get("safety_runtime", {})
     if not isinstance(safety, dict):
         safety = {}
+    level = safety.get("level", safety.get("overall_level_label", safety.get("safety_level", "安全")))
+    score = safety.get("score", safety.get("overall_score", 0.0))
+    blocked = safety.get("blocked") if "blocked" in safety else safety.get("block_reply", False)
+    dominant = safety.get("dominant_threat", safety.get("dominant", safety.get("threat", "")))
+    bar_penalty = safety.get("bar_penalty", safety.get("bar_delta", 0.0))
+    evidence = safety.get("threat_evidence_summary", safety.get("action", dominant))
     return {
-        "safety_level": str(safety.get("level", "") or "安全"),
-        "safety_score": round(_safe_float(safety.get("score", 0.0)), 4),
-        "blocked": bool(safety.get("blocked", False)),
-        "dominant_threat": str(safety.get("dominant_threat", "") or ""),
-        "bar_penalty": round(_safe_float(safety.get("bar_penalty", 0.0)), 4),
-        "threat_evidence_summary": str(safety.get("threat_evidence_summary", "") or "暂无显著风险"),
+        "safety_level": str(level or "安全"),
+        "safety_score": round(_safe_float(score), 4),
+        "blocked": bool(blocked),
+        "dominant_threat": str(dominant or ""),
+        "bar_penalty": round(_safe_float(bar_penalty), 4),
+        "threat_evidence_summary": str(evidence or "暂无显著风险"),
     }
 
 
@@ -1670,7 +1676,7 @@ def _build_participant_impacts(
         if bool(participant.get("is_current_target", False)):
             labels.append("当前焦点")
         if in_current_scene:
-            labels.append("当前群相关")
+            labels.append("当前会话相关")
         if recent_speaker:
             labels.append("近5分钟发言")
         if recent_targeted_interaction:
@@ -1810,7 +1816,7 @@ def _build_dynamic_trace(
         "loneliness_load": "孤独负荷",
         "environment_fatigue_load": "环境疲劳",
         "initiative_drive": "主动意愿",
-        "scene_heat_score": "群聊热度",
+        "scene_heat_score": "会话热度",
         "safety_score": "安全风险",
         "chat_percent": "聊天值",
         "thinking_percent": "思考值",
@@ -1820,7 +1826,7 @@ def _build_dynamic_trace(
         "loneliness_load": "未回应次数与群聊活跃度共同影响",
         "environment_fatigue_load": "话题重复度、静默时长和精力共同影响",
         "initiative_drive": "内在时钟、情绪驱动、好奇心和疲劳共同影响",
-        "scene_heat_score": "群聊消息频率、活跃人数、互动质量和氛围共同影响",
+        "scene_heat_score": "会话消息频率、活跃人数、互动质量和氛围共同影响",
         "safety_score": "安全边界融合的威胁信号共同影响",
         "chat_percent": "聊天资源账本的消耗与恢复事件共同影响",
         "thinking_percent": "思考资源账本的消耗与恢复事件共同影响",
@@ -1889,7 +1895,7 @@ def _build_display_policy() -> Dict[str, list[str]]:
             "浅睡/深睡/熬穿/黎明恢复/睡眠债",
             "烦躁/压力/创伤/混乱/伪装",
             "关系好感/信任显著偏高或偏低",
-            "冷却窗口/等待时长/重新接入/群聊升温",
+            "冷却窗口/等待时长/重新接入/会话升温",
         ],
         "detail": [
             "资源账本的聊天值和思考值",
@@ -1897,7 +1903,7 @@ def _build_display_policy() -> Dict[str, list[str]]:
             "情绪账本、主动驱动和当前感受",
             "记忆栈、记忆过载、回忆录和知识条目",
             "主动意图、待结算事件和后台随机事件",
-            "群聊感知、话题焦点、活跃人数",
+            "会话感知、话题焦点、活跃人数",
             "目标用户关系、好感、信任、压力",
             "发言预测的驱动和抑制因素",
         ],
@@ -2070,6 +2076,7 @@ async def build_monitor_overview() -> Dict[str, Any]:
     return {
         "updated_at": time.time(),
         "active_count": overview.get("active_count", 0),
+        "hidden_internal_count": overview.get("hidden_internal_count", 0),
         "channels": overview.get("channels", []),
     }
 

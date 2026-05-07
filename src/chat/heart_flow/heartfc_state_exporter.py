@@ -433,13 +433,19 @@ def _extract_safety_runtime(runtime: Dict[str, Any]) -> Dict[str, Any]:
     safety = runtime.get("cached_safety_assessment", {})
     if not isinstance(safety, dict):
         safety = {}
+    level = safety.get("level", safety.get("overall_level_label", safety.get("safety_level", "")))
+    score = safety.get("score", safety.get("overall_score", 0.0))
+    dominant = safety.get("dominant_threat", safety.get("dominant", safety.get("threat", "")))
+    blocked = safety.get("block_reply") if "block_reply" in safety else safety.get("blocked", False)
+    bar_penalty = safety.get("bar_delta", safety.get("bar_penalty", 0.0))
+    evidence = safety.get("threat_evidence_summary", safety.get("action", dominant))
     return {
-        "level": str(safety.get("level", "") or ""),
-        "score": round(_safe_float(safety.get("score", 0.0)), 4),
-        "dominant_threat": str(safety.get("dominant", "") or ""),
-        "blocked": bool(safety.get("block_reply", False)),
-        "bar_penalty": round(_safe_float(safety.get("bar_delta", 0.0)), 4),
-        "threat_evidence_summary": str(safety.get("action", "") or ""),
+        "level": str(level or ""),
+        "score": round(_safe_float(score), 4),
+        "dominant_threat": str(dominant or ""),
+        "blocked": bool(blocked),
+        "bar_penalty": round(_safe_float(bar_penalty), 4),
+        "threat_evidence_summary": str(evidence or ""),
     }
 
 

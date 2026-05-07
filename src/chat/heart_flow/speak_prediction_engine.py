@@ -265,6 +265,15 @@ class SpeakPredictionEngine:
             runtime_reason = ""
         runtime_model_path = str(runtime_verdict.get("model_path", "") or "")
         runtime_complexity_label = str(runtime_verdict.get("complexity_label", "") or "")
+        if execution_has_verdict:
+            runtime_sync_state = "execution"
+            runtime_sync_label = "已同步最终执行"
+        elif decision_has_verdict:
+            runtime_sync_state = "pre_execution"
+            runtime_sync_label = "仅同步前置裁定"
+        else:
+            runtime_sync_state = "baseline"
+            runtime_sync_label = "仅按基线估算"
         if runtime_has_verdict:
             if runtime_should_reply:
                 probability = max(probability, 0.56)
@@ -282,12 +291,19 @@ class SpeakPredictionEngine:
 
         last_plan = flow_runtime.get("last_reactive_plan", {}) if isinstance(flow_runtime, dict) else {}
         content_direction = ""
+        content_source = "baseline"
+        content_source_label = "基线方向"
         if isinstance(last_plan, dict):
             content_direction = str(last_plan.get("content_plan", "") or "").strip()
+            if content_direction:
+                content_source = "reactive_plan"
+                content_source_label = "已同步内容规划"
         if not content_direction and topic_focus:
             content_direction = f"围绕「{topic_focus[0]}」继续参与"
+            content_source = "topic_focus"
+            content_source_label = "按话题焦点估算"
         if not content_direction:
-            content_direction = "根据当前群聊状态自然接话"
+            content_direction = "根据当前会话状态自然接话"
 
         if memory_emergency or memory_load_ratio >= 0.8 or amnesia_pressure >= 0.6:
             reply_length = "简短"
@@ -348,7 +364,7 @@ class SpeakPredictionEngine:
         if should_reengage:
             driving_factors.append("当前阶段存在重新接入倾向")
         if scene_heat_score >= 0.55:
-            driving_factors.append(f"群聊热度较高({scene_heat_score:.2f})")
+            driving_factors.append(f"会话热度较高({scene_heat_score:.2f})")
         if rapport_score >= 20:
             driving_factors.append(f"当前用户好感较高({rapport_score:.1f})")
         if trust_score >= 65:
@@ -401,7 +417,7 @@ class SpeakPredictionEngine:
         if memoir_timeouts >= 3:
             suppressing_factors.append(f"回忆录连续超时({int(memoir_timeouts)}次)，抑制继续追问")
         if not driving_factors:
-            driving_factors.append("当前没有强驱动，主要依靠自然群聊节奏")
+            driving_factors.append("当前没有强驱动，主要依靠自然会话节奏")
         if not suppressing_factors:
             suppressing_factors.append("当前没有明显抑制因素")
 
@@ -418,6 +434,10 @@ class SpeakPredictionEngine:
             "complexity_label": runtime_complexity_label or "普通",
             "execution_stage": runtime_stage,
             "execution_action": runtime_action,
+            "runtime_sync_state": runtime_sync_state,
+            "runtime_sync_label": runtime_sync_label,
+            "content_source": content_source,
+            "content_source_label": content_source_label,
             "decision_label": decision_label,
             "decision_reason": decision_reason,
             "content_direction": content_direction,

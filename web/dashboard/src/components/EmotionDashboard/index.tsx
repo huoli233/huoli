@@ -114,6 +114,10 @@ type Prediction = {
   complexity_label?: string;
   execution_stage?: string;
   execution_action?: string;
+  runtime_sync_state?: string;
+  runtime_sync_label?: string;
+  content_source?: string;
+  content_source_label?: string;
   eta_seconds: number;
   eta_label: string;
   decision_label?: string;
@@ -486,8 +490,8 @@ const severityRank: Record<string, number> = {
 
 const fallbackDisplayPolicy: DisplayPolicy = {
   resident: ["精力储备", "内在心情", "注意状态", "社交姿态", "安全护盾", "流转阶段", "场景热度", "发言预测"],
-  active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "情绪低落/好奇心/社交欲显著变化", "浅睡/深睡/熬穿/黎明恢复/睡眠债", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/群聊升温"],
-  detail: ["资源账本的聊天值和思考值", "昼夜节律、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "群聊整体状态", "当前对象状态", "安全护盾细节", "值变化原因", "发言预测的驱动和抑制因素"],
+  active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "情绪低落/好奇心/社交欲显著变化", "浅睡/深睡/熬穿/黎明恢复/睡眠债", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/会话升温"],
+  detail: ["资源账本的聊天值和思考值", "昼夜节律、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "会话整体状态", "当前对象状态", "安全护盾细节", "值变化原因", "发言预测的驱动和抑制因素"],
   hidden: ["内部阈值", "调试原因", "缓存字段", "旧命名残留", "纯计数器原值"],
 };
 
@@ -537,7 +541,7 @@ function humanExecutionStage(value: string | undefined): string {
     pipeline_early_exit: "输入早退出",
     dashboard_hard_block: "仪表盘硬阻断",
     pattern_route_skip: "群体模式硬路由",
-    scene_constraint_skip: "群场景硬约束",
+    scene_constraint_skip: "会话场景硬约束",
     decision_runtime_skip: "初裁直接跳过",
     voice_action_rest: "内心要求休息",
     voice_action_disengage: "内心要求放下会话",
@@ -564,10 +568,35 @@ function humanExecutionStage(value: string | undefined): string {
 }
 
 function channelOptionLabel(channel: OverviewChannel): string {
-  const typeLabel = channel.chat_type_label ?? (channel.chat_type === "group" ? "群聊" : "私聊");
+  const typeLabel = channel.chat_type_label ?? (channel.chat_type === "group" ? "群聊" : channel.chat_type === "private" ? "私聊" : "会话");
   const platformLabel = channel.platform_label ?? (channel.platform === "webui" ? "本地测试" : channel.platform || "本地");
   const name = channel.display_name || channel.channel_id.slice(0, 8);
   return `${typeLabel} · ${platformLabel} · ${name}`;
+}
+
+function conversationTypeLabel(channel: OverviewChannel | undefined): string {
+  if (!channel) {
+    return "等待会话";
+  }
+  return channel.chat_type_label ?? (channel.chat_type === "group" ? "群聊" : channel.chat_type === "private" ? "私聊" : "会话");
+}
+
+function conversationName(channel: OverviewChannel | undefined): string {
+  if (!channel) {
+    return "暂无活跃会话";
+  }
+  return channel.display_name || channel.target_user_id || channel.channel_id.slice(0, 12);
+}
+
+function conversationScopeLabel(channel: OverviewChannel | undefined): string {
+  if (!channel) {
+    return "会话";
+  }
+  return channel.chat_type === "group" ? "群聊" : channel.chat_type === "private" ? "私聊" : "会话";
+}
+
+function runtimeSyncLabel(prediction: Prediction | undefined): string {
+  return prediction?.runtime_sync_label ?? "等待裁定同步";
 }
 
 function countText(value: number | undefined | null, unit: string): string {
@@ -697,6 +726,7 @@ export function EmotionDashboard() {
   const selectedOverview = (overview?.channels ?? []).find(
     (channel) => channel.channel_id === selectedChannel,
   );
+  const selectedScopeLabel = conversationScopeLabel(selectedOverview);
   const predictionPercent =
     prediction?.probability_percent ?? Math.round((prediction?.speak_probability ?? 0) * 100);
 
@@ -865,12 +895,12 @@ export function EmotionDashboard() {
           <p className="eyebrow">火力状态监控</p>
           <h1>机器人实时状态栏</h1>
           <p className="subtle">
-            免登录查看。顶部显示常驻状态，卡片流只显示当前激活状态，关系、能量、群聊感知和预测依据放在详情区。
+            与 WebUI 会话同步显示。顶部显示常驻状态，卡片流只显示当前激活状态，关系、能量、会话感知和预测依据放在详情区。
           </p>
         </div>
         <div className="header-actions">
           <label className="channel-picker">
-            <span>选择群聊 / 私聊</span>
+            <span>选择会话</span>
             <select
               value={selectedChannel}
               onChange={(event) => setSelectedChannel(event.target.value)}
@@ -894,13 +924,11 @@ export function EmotionDashboard() {
 
       <section className="command-grid">
         <article className="command-card">
-          <span>当前群聊 / 私聊</span>
-          <strong>{selectedOverview?.chat_type_label ?? "群聊 / 私聊"}</strong>
+          <span>当前会话</span>
+          <strong>{conversationTypeLabel(selectedOverview)}</strong>
           <p>
             {selectedOverview
-              ? `${selectedOverview.platform_label ?? selectedOverview.platform ?? "本地"} · ${
-                  selectedOverview.display_name || selectedOverview.channel_id.slice(0, 12)
-                }`
+              ? `${selectedOverview.platform_label ?? selectedOverview.platform ?? "本地"} · ${conversationName(selectedOverview)}`
               : "暂无活跃会话"}
             {overview?.hidden_internal_count ? ` · 已隐藏 ${overview.hidden_internal_count} 个本地测试会话` : ""}
           </p>
@@ -908,12 +936,12 @@ export function EmotionDashboard() {
         <article className="command-card is-score">
           <span>是否该聊</span>
           <strong>{predictionPercent}%</strong>
-          <p>{prediction?.decision_label ?? "等待状态"} · {modelPathLabel(prediction?.model_path)} · {prediction?.eta_label ?? "-"}</p>
+          <p>{prediction?.decision_label ?? "等待状态"} · {runtimeSyncLabel(prediction)} · {prediction?.eta_label ?? "-"}</p>
         </article>
         <article className="command-card">
           <span>最后同步</span>
           <strong>{packet?.updated_at ? formatClock(packet.updated_at) : "-"}</strong>
-          <p>{connectionLabel(connectionState)} · 状态页无需登录凭证</p>
+          <p>{connectionLabel(connectionState)} · {selectedScopeLabel}状态实时更新</p>
         </article>
       </section>
 
@@ -1362,7 +1390,7 @@ export function EmotionDashboard() {
 
         <section className="panel">
           <div className="panel-header">
-            <h2>群聊整体状态</h2>
+            <h2>会话整体状态</h2>
             <span>{groupStateDetail?.scene_heat_label ?? sceneContext?.scene_heat_label ?? humanSceneHeat(sceneContext?.scene_heat)}</span>
           </div>
           <div className="detail-grid">
@@ -1395,7 +1423,7 @@ export function EmotionDashboard() {
               <strong>{percent(groupStateDetail?.interaction_quality)}</strong>
             </div>
             <div className="detail-row">
-              <span>群聊烦躁 / 疲劳</span>
+              <span>会话烦躁 / 疲劳</span>
               <strong>{fixed(groupStateDetail?.vexation)} / {fixed(groupStateDetail?.weariness)}</strong>
             </div>
           </div>
@@ -1521,7 +1549,7 @@ export function EmotionDashboard() {
             </div>
           )}
           <p className="panel-note">
-            这里只展示除当前对象之外、对本轮关系判断影响更大的用户，便于区分“单人状态”和“群聊里其他人的影响”。
+            这里只展示除当前对象之外、对本轮关系判断影响更大的用户，便于区分“单人状态”和“会话里其他人的影响”。
           </p>
         </section>
 
@@ -1614,7 +1642,7 @@ export function EmotionDashboard() {
               <strong>{fixed(prediction?.resource_influence, 2)}</strong>
             </div>
             <div>
-              <span>群聊影响</span>
+              <span>会话影响</span>
               <strong>{fixed(prediction?.scene_influence, 2)}</strong>
             </div>
             <div>

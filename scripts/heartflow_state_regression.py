@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from src.chat.heart_flow.heartfc_state_exporter import _extract_safety_runtime, list_heartfc_chats
 from src.chat.heart_flow.speak_prediction_engine import SpeakPredictionEngine
 from src.chat.proactive.perception_engine import _RelationGauge
 from src.core.world_snapshot import (
@@ -20,7 +21,7 @@ from src.core.world_snapshot import (
     _set_relation_value,
 )
 from src.webui.app import create_app
-from src.webui.services.state_monitor import _build_participant_impacts
+from src.webui.services.state_monitor import _build_participant_impacts, _build_safety_detail
 
 
 REQUIRED_EARLY_STAGES = [
@@ -346,6 +347,136 @@ def check_world_snapshot_relation_contract() -> Dict[str, Any]:
     return {"zero_values_preserved": True, "negative_values_preserved": True}
 
 
+def check_statusbar_export_contract() -> Dict[str, Any]:
+    engine = SpeakPredictionEngine()
+
+    baseline = engine.predict(
+        channel_id="statusbar-baseline",
+        domains=_base_domains(),
+        dashboard_snapshot=_dashboard_snapshot(),
+    )
+    assert baseline["runtime_sync_state"] == "baseline"
+    assert baseline["runtime_sync_label"] == "仅按基线估算"
+    assert baseline["content_source"] == "topic_focus"
+    assert baseline["content_source_label"] == "按话题焦点估算"
+    assert "群聊" not in baseline["content_direction"]
+    assert all("群聊" not in item for item in baseline["driving_factors"])
+
+    planned_domains = _base_domains()
+    planned_domains["flow_runtime"] = {"last_reactive_plan": {"content_plan": "顺着上一轮继续回应"}}
+    planned = engine.predict(
+        channel_id="statusbar-planned",
+        domains=planned_domains,
+        dashboard_snapshot=_dashboard_snapshot(),
+    )
+    assert planned["content_source"] == "reactive_plan"
+    assert planned["content_source_label"] == "已同步内容规划"
+
+    safety_runtime = _extract_safety_runtime(
+        {
+            "cached_safety_assessment": {
+                "overall_level_label": "高风险",
+                "overall_score": 0.83,
+                "threat": "越界",
+                "blocked": True,
+                "bar_penalty": 0.31,
+                "threat_evidence_summary": "命中越界规则",
+            }
+        }
+    )
+    assert safety_runtime == {
+        "level": "高风险",
+        "score": 0.83,
+        "dominant_threat": "越界",
+        "blocked": True,
+        "bar_penalty": 0.31,
+        "threat_evidence_summary": "命中越界规则",
+    }
+    safety_detail = _build_safety_detail({"safety_runtime": safety_runtime})
+    assert safety_detail["safety_level"] == "高风险"
+    assert safety_detail["safety_score"] == 0.83
+    assert safety_detail["blocked"] is True
+    assert safety_detail["dominant_threat"] == "越界"
+    assert safety_detail["bar_penalty"] == 0.31
+    assert safety_detail["threat_evidence_summary"] == "命中越界规则"
+
+    service_source = (ROOT / "src/webui/services/state_monitor.py").read_text(encoding="utf-8")
+    dashboard_source = (ROOT / "web/dashboard/src/components/EmotionDashboard/index.tsx").read_text(encoding="utf-8")
+    forbidden_statusbar_text = [
+        "群聊 / 私聊",
+        "免登录查看",
+        "状态页无需登录凭证",
+        "群聊升温",
+        "群聊整体状态",
+        "群场景硬约束",
+        "当前群聊热度",
+        "群聊烦躁 / 疲劳",
+        "群聊里其他人的影响",
+        "群聊影响",
+    ]
+    for text in forbidden_statusbar_text:
+        assert text not in service_source, text
+        assert text not in dashboard_source, text
+    assert "会话升温" in service_source
+    assert "会话整体状态" in dashboard_source
+    assert "runtime_sync_label" in dashboard_source
+    return {"prediction_sync": True, "safety_aliases": True, "statusbar_copy": True}
+
+
+def check_monitor_overview_contract() -> Dict[str, Any]:
+    from src.chat.heart_flow.heartflow import heartflow
+    from src.chat.message_receive.chat_stream import ChatStream, get_chat_manager
+    from src.common.message_types.group_info import GroupInfo
+    from src.common.message_types.user_info import UserInfo
+
+    manager = get_chat_manager()
+    old_chats = dict(heartflow.heartflow_chat_list)
+    old_active_since = dict(heartflow._active_since)
+    old_streams = dict(manager.streams)
+    now = 123456.0
+    try:
+        public_id = "statusbar-public"
+        internal_id = "statusbar-internal"
+        public_chat = type("PublicChat", (), {"_last_user_id": "u-public"})()
+        internal_chat = type("InternalChat", (), {"_last_user_id": "u-internal"})()
+        heartflow.heartflow_chat_list.clear()
+        heartflow.heartflow_chat_list.update({public_id: public_chat, internal_id: internal_chat})
+        heartflow._active_since.clear()
+        heartflow._active_since.update({public_id: now, internal_id: now})
+        manager.streams[public_id] = ChatStream(
+            stream_id=public_id,
+            platform="qq",
+            user_info=UserInfo(user_id="u-public", user_nickname="公聊用户", platform="qq"),
+            group_info=GroupInfo(group_id="g-public", group_name="公开会话", platform="qq"),
+        )
+        manager.streams[internal_id] = ChatStream(
+            stream_id=internal_id,
+            platform="webui",
+            user_info=UserInfo(user_id="u-internal", user_nickname="本地测试", platform="webui"),
+        )
+
+        overview = list_heartfc_chats()
+        assert overview["active_count"] == 1
+        assert overview["hidden_internal_count"] == 1
+        assert len(overview["channels"]) == 1
+        channel = overview["channels"][0]
+        assert channel["channel_id"] == public_id
+        assert channel["chat_type"] == "group"
+        assert channel["chat_type_label"] == "群聊"
+        assert channel["platform_label"] == "QQ"
+        assert channel["display_name"] == "公开会话"
+        assert channel["is_internal_webui"] is False
+        assert channel["target_user_id"] == "u-public"
+    finally:
+        heartflow.heartflow_chat_list.clear()
+        heartflow.heartflow_chat_list.update(old_chats)
+        heartflow._active_since.clear()
+        heartflow._active_since.update(old_active_since)
+        manager.streams.clear()
+        manager.streams.update(old_streams)
+    return {"hidden_internal_count": True, "public_channel_naming": True}
+
+
 
 def check_webui_contract() -> Dict[str, Any]:
     client = TestClient(create_app())
@@ -382,6 +513,8 @@ def main() -> None:
         "memory_autonomy": check_memory_and_autonomy_contract(),
         "participants": check_participant_contract(),
         "world_snapshot_relation": check_world_snapshot_relation_contract(),
+        "statusbar_export": check_statusbar_export_contract(),
+        "monitor_overview": check_monitor_overview_contract(),
         "webui": check_webui_contract(),
     }
     print(json.dumps(results, ensure_ascii=False, indent=2))
