@@ -198,6 +198,11 @@ class TargetUserState:
     # 群友心理核心 (psychological_core)
     positive_dim: float = 0.0
     negative_dim: float = 0.0
+    # 模型/印象中枢给出的自由个人印象；旧关系阶段只保留为兼容字段，不再作为主画像。
+    personal_impression: str = ""
+    impression_labels: List[str] = field(default_factory=list)
+    impression_source: str = ""
+    impression_updated_at: float = 0.0
     # 群友印象备注
     impression_style: str = ""
     mood: str = "平静"
@@ -224,12 +229,12 @@ class TargetUserState:
         self.group_friend_name = str(value or "")
 
     def profile_summary(self) -> str:
-        """生成群友画像摘要字符串（从群友视角评价）"""
+        """生成以自由个人印象为主的用户画像摘要。"""
         bits: List[str] = []
-        if self.custom_label:
-            bits.append(f"群友标签={self.custom_label}")
-        if self.relationship_level is not None:
-            bits.append(f"群内关系级别={self.relationship_level}")
+        if self.personal_impression:
+            bits.append(f"个人印象={self.personal_impression}")
+        if self.impression_labels:
+            bits.append(f"印象标签={','.join(self.impression_labels[:5])}")
         if _metric_has_signal(self.social_value):
             bits.append(f"群社交度={self.social_value:.1f}")
         if _metric_has_signal(self.trust_value):
@@ -238,7 +243,7 @@ class TargetUserState:
             bits.append(f"群烦躁度={self.annoyance_value:.1f}")
         if self.mood and self.mood != "平静":
             bits.append(f"群印象气氛={self.mood}")
-        return " | ".join(bits)
+        return " | ".join(bits) or "个人印象=尚未形成稳定判断"
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +325,11 @@ class WorldSnapshot:
             "psychological_pressure": u.psychological_pressure,
             "trauma_score": u.trauma_score,
             "mood": u.mood,
+            "personal_impression": u.personal_impression,
+            "impression_labels": list(u.impression_labels),
+            "impression_source": u.impression_source,
+            "impression_updated_at": u.impression_updated_at,
+            "impression_style": u.impression_style,
             "attribute_influences": u.attribute_influences,
             "relation_value_sources": dict(u.relation_value_sources),
             "behavior_signal": {
@@ -407,6 +417,10 @@ class WorldSnapshot:
             "positive_dim": round(u.positive_dim, 2),
             "negative_dim": round(u.negative_dim, 2),
             "mood": u.mood,
+            "personal_impression": u.personal_impression,
+            "impression_labels": list(u.impression_labels),
+            "impression_source": u.impression_source,
+            "impression_updated_at": round(u.impression_updated_at, 3),
             "impression_style": u.impression_style,
             "profile_summary": u.profile_summary(),
             "attribute_influences": u.attribute_influences,
@@ -466,9 +480,14 @@ class WorldSnapshot:
         if sc.last_mood:
             memory_bits.append(f"上次气氛={sc.last_mood}")
         return {
-            "relation_contract_version": 2,
+            "relation_contract_version": 3,
             "unified_source": "world_snapshot",
-            "relationship": u.custom_label or "",
+            "relationship": u.personal_impression or "",
+            "personal_impression": u.personal_impression,
+            "impression_labels": list(u.impression_labels),
+            "impression_source": u.impression_source,
+            "impression_updated_at": round(u.impression_updated_at, 3),
+            "legacy_relationship_label": u.custom_label,
             "affection": u.affection,
             "trust": u.trust_value,
             "social_value": u.social_value,
@@ -513,6 +532,7 @@ def build_world_snapshot_sync(
         _collect_social_affect_sync(snap, channel_id, lookup)
         _collect_emotion_state_sync(snap, channel_id, lookup)
         _collect_psychological_state_sync(snap, channel_id, lookup)
+        _collect_personal_impression(snap, channel_id, lookup)
     _collect_session_memoir(snap, channel_id, lookup)
     _collect_ambient(snap, ambient)
     _reconcile_overlapping_values(snap)
@@ -579,6 +599,7 @@ async def build_world_snapshot(
     except asyncio.TimeoutError:
         logger.debug("世界快照采集超时(10s)，部分数据可能缺失")
     # 同步采集（非异步）
+    _collect_personal_impression(snap, channel_id, user_id or user_name)
     _collect_session_memoir(snap, channel_id, user_id or user_name)
     _collect_ambient(snap, ambient)
     _reconcile_overlapping_values(snap)
@@ -757,6 +778,43 @@ async def _collect_emotion_driven_state(snap: WorldSnapshot, channel_id: str) ->
         res.proactive_willingness = float(state.get("proactive_willingness", 0.0) or 0.0)
     except Exception as exc:
         logger.debug(f"[快照] 主观感受采集失败: {exc}")
+
+
+def _collect_personal_impression(snap: WorldSnapshot, channel_id: str, user_id: str) -> None:
+    """采集印象中枢里的自由个人印象，旧关系阶段只作为兼容字段保留。"""
+    if not user_id:
+        return
+    try:
+        from src.core.impression_evolution_hub import get_impression_hub
+
+        summary = get_impression_hub(channel_id).get_impression_summary(user_id)
+        if not summary.get("exists"):
+            return
+        u = snap.target_user
+        personal_impression = str(
+            summary.get("personal_impression") or summary.get("free_impression") or ""
+        ).strip()
+        if personal_impression:
+            u.personal_impression = personal_impression[:180]
+        labels = summary.get("impression_labels") or summary.get("tags") or []
+        if isinstance(labels, list):
+            normalized = []
+            for raw in labels:
+                label = str(raw or "").strip()
+                if label and label not in normalized:
+                    normalized.append(label[:24])
+                if len(normalized) >= 8:
+                    break
+            u.impression_labels = normalized
+        u.impression_source = str(summary.get("impression_source") or "impression_hub")
+        try:
+            u.impression_updated_at = float(summary.get("impression_updated_at", 0.0) or 0.0)
+        except (TypeError, ValueError):
+            u.impression_updated_at = 0.0
+        if not u.impression_style and summary.get("nickname"):
+            u.impression_style = str(summary.get("nickname") or "")
+    except Exception as exc:
+        logger.debug(f"[快照] 个人印象采集失败: {exc}")
 
 
 async def _collect_social_affect(snap: WorldSnapshot, channel_id: str, user_id: str) -> None:

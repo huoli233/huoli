@@ -576,8 +576,11 @@ class PrivateReplyer:
             "annoyance_value": 0.0,
             "psychological_pressure": 0.0,
             "trauma_score": 0.0,
-            "relationship_level": 2,
-            "custom_label": "",
+            "personal_impression": "",
+            "impression_labels": [],
+            "impression_source": "",
+            "impression_updated_at": 0.0,
+            "legacy_relationship_label": "",
         }
         if not chat_id or not user_id:
             return result
@@ -1118,12 +1121,15 @@ class PrivateReplyer:
             affection = self._metric_or_default(rapport.get("affection"), 0.0)
             annoyance = self._metric_or_default(rapport.get("annoyance_value"), 0.0)
             trauma_score = self._metric_or_default(rapport.get("trauma_score"), 0.0)
-            relationship_label = str(
-                rapport.get("relationship", "")
+            personal_impression = str(
+                rapport.get("personal_impression", "") or rapport.get("relationship", "") or ""
+            ).strip()
+            legacy_relationship_label = str(
+                rapport.get("legacy_relationship_label", "")
                 or rapport.get("custom_label", "")
                 or getattr(emo, "relationship", "")
                 or ""
-            )
+            ).strip()
             intimacy_val = getattr(emo, "intimacy", 0.0)
             pressure_val = self._metric_or_default(
                 rapport.get("psychological_pressure"),
@@ -1165,10 +1171,12 @@ class PrivateReplyer:
                     lines.append("当前状态: 你现在心情还行。")
                 elif affection < -30:
                     lines.append("当前状态: 你不太想多聊。")
-            if relationship_label and relationship_label != "陌生人":
-                lines.append(f"关系: 你和对方现在更像{relationship_label}，好感{affection:.0f}")
+            if personal_impression:
+                lines.append(f"个人印象: 你对对方的判断是{personal_impression}，好感{affection:.0f}")
+            elif legacy_relationship_label:
+                lines.append(f"个人印象: 旧关系备注是{legacy_relationship_label}，好感{affection:.0f}")
             elif affection != 0:
-                lines.append(f"关系: 好感大概{affection:.0f}")
+                lines.append(f"个人印象: 暂时没有稳定判断，好感大概{affection:.0f}")
             if annoyance >= 70:
                 lines.append("语气: 这轮冷一点、短一点，但别攻击。")
             elif annoyance >= 50:

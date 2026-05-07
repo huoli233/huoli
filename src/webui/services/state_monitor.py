@@ -1628,7 +1628,15 @@ def _build_current_user_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "user_id": str(relationship.get("user_id", "") or ""),
         "display_name": str(relationship.get("display_name", "当前目标") or "当前目标"),
-        "relationship_label": str(relationship.get("relationship_label", "陌生人") or "陌生人"),
+        "relationship_label": str(
+            relationship.get("personal_impression", "")
+            or relationship.get("relationship_label", "")
+            or relationship.get("legacy_relationship_label", "")
+            or ""
+        ),
+        "personal_impression": str(relationship.get("personal_impression", "") or ""),
+        "impression_labels": list(relationship.get("impression_labels", []) or []),
+        "legacy_relationship_label": str(relationship.get("legacy_relationship_label", "") or ""),
         "rapport_score": round(_safe_float(relationship.get("rapport_score", 0.0)), 2),
         "trust_score": round(_safe_float(relationship.get("trust_score", 0.0)), 2),
         "irritation_load": round(_safe_float(relationship.get("irritation_load", 0.0)), 2),
@@ -1702,7 +1710,15 @@ def _build_participant_impacts(
             {
                 "user_id": user_id,
                 "display_name": str(participant.get("display_name", "当前目标") or "当前目标"),
-                "relationship_label": str(participant.get("relationship_label", "陌生人") or "陌生人"),
+                "relationship_label": str(
+                    participant.get("personal_impression", "")
+                    or participant.get("relationship_label", "")
+                    or participant.get("legacy_relationship_label", "")
+                    or ""
+                ),
+                "personal_impression": str(participant.get("personal_impression", "") or ""),
+                "impression_labels": list(participant.get("impression_labels", []) or []),
+                "legacy_relationship_label": str(participant.get("legacy_relationship_label", "") or ""),
                 "rapport_score": round(_safe_float(participant.get("rapport_score", 0.0)), 2),
                 "trust_score": round(_safe_float(participant.get("trust_score", 0.0)), 2),
                 "irritation_load": round(_safe_float(participant.get("irritation_load", 0.0)), 2),
@@ -1728,7 +1744,15 @@ def _build_participant_impacts(
             {
                 "user_id": relationship.get("user_id", ""),
                 "display_name": relationship.get("display_name", "当前目标"),
-                "relationship_label": relationship.get("relationship_label", "陌生人"),
+                "relationship_label": (
+                    relationship.get("personal_impression", "")
+                    or relationship.get("relationship_label", "")
+                    or relationship.get("legacy_relationship_label", "")
+                    or ""
+                ),
+                "personal_impression": relationship.get("personal_impression", ""),
+                "impression_labels": list(relationship.get("impression_labels", []) or []),
+                "legacy_relationship_label": relationship.get("legacy_relationship_label", ""),
                 "rapport_score": relationship.get("rapport_score", 0.0),
                 "trust_score": relationship.get("trust_score", 0.0),
                 "irritation_load": relationship.get("irritation_load", 0.0),

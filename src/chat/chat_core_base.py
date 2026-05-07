@@ -624,7 +624,9 @@ class ChatCoreBase:
                 user_id=user_id,
             )
             relation_label = str(
-                rapport.get("relationship", "")
+                rapport.get("personal_impression", "")
+                or rapport.get("relationship", "")
+                or rapport.get("legacy_relationship_label", "")
                 or rapport.get("custom_label", "")
                 or "普通"
             )

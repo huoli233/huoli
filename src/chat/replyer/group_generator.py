@@ -232,8 +232,11 @@ class DefaultReplyer:
             "annoyance_value": 0.0,
             "psychological_pressure": 0.0,
             "trauma_score": 0.0,
-            "relationship_level": 2,
-            "custom_label": "",
+            "personal_impression": "",
+            "impression_labels": [],
+            "impression_source": "",
+            "impression_updated_at": 0.0,
+            "legacy_relationship_label": "",
         }
         if not chat_id or not user_id:
             return result
@@ -2313,12 +2316,15 @@ class DefaultReplyer:
             affection = self._metric_or_default(rapport.get("affection"), 0.0)
             annoyance = self._metric_or_default(rapport.get("annoyance_value"), 0.0)
             trauma_score = self._metric_or_default(rapport.get("trauma_score"), 0.0)
-            relationship_label = str(
-                rapport.get("relationship", "")
+            personal_impression = str(
+                rapport.get("personal_impression", "") or rapport.get("relationship", "") or ""
+            ).strip()
+            legacy_relationship_label = str(
+                rapport.get("legacy_relationship_label", "")
                 or rapport.get("custom_label", "")
                 or getattr(emo, "relationship", "")
                 or ""
-            )
+            ).strip()
             training_stage = (
                 getattr(emo, "training_stage", 0)
                 if isinstance(getattr(emo, "training_stage", None), (int, float))
@@ -2391,9 +2397,10 @@ class DefaultReplyer:
                     attitude_lines.append("心情不错")
                 elif affection < -30:
                     attitude_lines.append("不太想理这个人")
-            # ── 关系描述 ──
-            if relationship_label and relationship_label != "陌生人":
-                attitude_lines.append(f"你和对方的关系是：{relationship_label}(好感{affection:.0f})")
+            if personal_impression:
+                attitude_lines.append(f"你对这个人的个人印象：{personal_impression}(好感{affection:.0f})")
+            elif legacy_relationship_label:
+                attitude_lines.append(f"旧关系备注：{legacy_relationship_label}(好感{affection:.0f})")
             elif affection != 0:
                 attitude_lines.append(f"好感度: {affection:.0f}")
             if training_stage > 0:
@@ -2415,10 +2422,6 @@ class DefaultReplyer:
                 attitude_lines.append("你对这个人有些不耐烦了，你可以用简短冷淡的方式回复，但不要人身攻击。")
             elif annoyance >= 50:
                 attitude_lines.append("你有些烦躁，语气可以稍显冷淡")
-            if relationship_label == "陌生人" and affection > -30:
-                attitude_lines.append("对方是陌生人，你应该保持基本礼貌和中立态度，不要使用攻击性或侮辱性语言")
-            elif relationship_label == "陌生人" and affection <= -30:
-                attitude_lines.append("你不太喜欢这个人，态度冷淡，但不要进行人身攻击或使用侮辱性词汇")
             if emo.is_blocked:
                 attitude_lines.append("你已经屏蔽了这个人，不想搭理")
             # ── 好感阶段映射 ──
@@ -2471,13 +2474,19 @@ class DefaultReplyer:
                 if response_mode != "normal" and response_mode in mode_descriptions:
                     directive_fragments.append(mode_descriptions[response_mode])
                 affection = self._metric_or_default(rapport.get("affection"), psy_state.get("favor", 0.0))
-                relationship = str(
-                    rapport.get("relationship", "")
+                impression = str(
+                    rapport.get("personal_impression", "") or rapport.get("relationship", "") or ""
+                ).strip()
+                legacy_relationship = str(
+                    rapport.get("legacy_relationship_label", "")
                     or rapport.get("custom_label", "")
-                    or psy_state.get("relationship", "陌生人")
-                )
-                if relationship and relationship != "陌生人":
-                    directive_fragments.append(f"你和对方的关系是：{relationship}(好感{affection:.0f})")
+                    or psy_state.get("relationship", "")
+                    or ""
+                ).strip()
+                if impression:
+                    directive_fragments.append(f"你对这个人的个人印象：{impression}(好感{affection:.0f})")
+                elif legacy_relationship:
+                    directive_fragments.append(f"旧关系备注：{legacy_relationship}(好感{affection:.0f})")
                 elif affection != 0:
                     directive_fragments.append(f"好感度: {affection:.0f}")
                 user_state = tracker.get_user_state(user_id, create_if_missing=False)

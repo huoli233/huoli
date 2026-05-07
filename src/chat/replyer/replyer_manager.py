@@ -164,7 +164,9 @@ class ReplyerManager:
                 aliases=("annoyance",),
             )
             relation_label = str(
-                relation.get("relationship", "")
+                relation.get("personal_impression", "")
+                or relation.get("relationship", "")
+                or relation.get("legacy_relationship_label", "")
                 or relation.get("custom_label", "")
                 or ""
             )

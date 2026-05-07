@@ -907,8 +907,20 @@ def _extract_relationship_profile(chat: Any, world_state: Dict[str, Any]) -> Dic
         getattr(state, "interaction_count", world_target.get("interaction_count", 0))
     )
     relationship_label = str(
-        getattr(state, "relationship", world_target.get("custom_label", "")) or world_target.get("mood", "陌生人")
+        world_target.get("personal_impression", "")
+        or getattr(state, "relationship", world_target.get("custom_label", ""))
+        or world_target.get("mood", "")
     )
+    legacy_relationship_label = str(
+        world_target.get("legacy_relationship_label", "")
+        or world_target.get("custom_label", "")
+        or getattr(state, "relationship", "")
+        or ""
+    )
+    personal_impression = str(world_target.get("personal_impression", "") or relationship_label or "")
+    impression_labels = world_target.get("impression_labels", [])
+    if not isinstance(impression_labels, list):
+        impression_labels = []
     display_name = str(
         getattr(state, "nickname", "") or target_name or target_uid or "当前目标"
     )
@@ -916,6 +928,11 @@ def _extract_relationship_profile(chat: Any, world_state: Dict[str, Any]) -> Dic
         "user_id": target_uid,
         "display_name": display_name,
         "relationship_label": relationship_label,
+        "personal_impression": personal_impression,
+        "impression_labels": impression_labels[:8],
+        "impression_source": str(world_target.get("impression_source", "") or ""),
+        "impression_updated_at": _safe_float(world_target.get("impression_updated_at", 0.0)),
+        "legacy_relationship_label": legacy_relationship_label,
         "rapport_score": round(rapport_score, 2),
         "trust_score": round(trust_score, 2),
         "irritation_load": round(irritation_load, 2),
@@ -1106,7 +1123,10 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
         "rapport_trust": {
             "rapport_score": relation.get("rapport_score", 0.0),
             "trust_score": relation.get("trust_score", 0.0),
-            "relationship_label": relation.get("relationship_label", "陌生人"),
+            "relationship_label": relation.get("personal_impression", "") or relation.get("relationship_label", ""),
+            "personal_impression": relation.get("personal_impression", ""),
+            "impression_labels": list(relation.get("impression_labels", []) or []),
+            "legacy_relationship_label": relation.get("legacy_relationship_label", ""),
             "interaction_count": relation.get("interaction_count", 0),
         },
         "boundary_guard": {

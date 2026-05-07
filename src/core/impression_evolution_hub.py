@@ -69,6 +69,10 @@ class SubjectiveTagLayer:
     memorable_moments: List[str] = field(default_factory=list)
     custom_nickname: str = ""
     overall_feeling: str = "一般"
+    free_impression: str = ""
+    impression_labels: List[str] = field(default_factory=list)
+    impression_source: str = ""
+    impression_updated_at: float = 0.0
     last_updated: float = field(default_factory=time.time)
     humor_sense: float = 0.5
     empathy_level: float = 0.5
@@ -98,6 +102,10 @@ class SubjectiveTagLayer:
             "memorable_moments": self.memorable_moments[-5:],
             "custom_nickname": self.custom_nickname,
             "overall_feeling": self.overall_feeling,
+            "free_impression": self.free_impression,
+            "impression_labels": self.impression_labels[:8],
+            "impression_source": self.impression_source,
+            "impression_updated_at": round(self.impression_updated_at, 3),
         }
 
 
@@ -390,13 +398,15 @@ class UserImpression:
         parts = []
         if self.tags.custom_nickname:
             parts.append(f"昵称={self.tags.custom_nickname}")
-        if self.tags.overall_feeling != "一般":
+        if self.tags.free_impression:
+            parts.append(f"印象={self.tags.free_impression}")
+        elif self.tags.overall_feeling != "一般":
             parts.append(f"感觉={self.tags.overall_feeling}")
-        if self.narrative.relationship_stage != "陌生":
-            parts.append(f"阶段={self.narrative.relationship_stage}")
-        parts.append(f"互动{self.truth.total_interactions}次")
-        if self.tags.personality_tags:
+        if self.tags.impression_labels:
+            parts.append(f"标签=[{','.join(self.tags.impression_labels[:3])}]")
+        elif self.tags.personality_tags:
             parts.append(f"标签=[{','.join(self.tags.personality_tags[:3])}]")
+        parts.append(f"互动{self.truth.total_interactions}次")
         _style = self.interaction_style.style_label()
         if _style and _style != "未知":
             parts.append(f"风格={_style}")
@@ -572,6 +582,41 @@ class ImpressionEvolutionHub:
         imp = self.get_or_create(user_id)
         imp.tags.custom_nickname = nickname
 
+    @staticmethod
+    def _normalize_impression_labels(labels: Optional[List[Any]]) -> List[str]:
+        normalized: List[str] = []
+        for raw in labels or []:
+            label = str(raw or "").strip()
+            if not label or label in normalized:
+                continue
+            normalized.append(label[:24])
+            if len(normalized) >= 8:
+                break
+        return normalized
+
+    def update_free_impression(
+        self,
+        user_id: str,
+        impression: str,
+        *,
+        labels: Optional[List[Any]] = None,
+        user_name: str = "",
+        source: str = "model",
+    ) -> UserImpression:
+        """写入模型生成的自由个人印象，不再把关系阶段当作主画像。"""
+        imp = self.get_or_create(user_id, user_name)
+        now = time.time()
+        text = str(impression or "").strip()
+        if text:
+            imp.tags.free_impression = text[:180]
+        if labels is not None:
+            imp.tags.impression_labels = self._normalize_impression_labels(labels)
+        imp.tags.impression_source = str(source or "model").strip() or "model"
+        imp.tags.impression_updated_at = now
+        imp.tags.last_updated = now
+        imp.last_evolved_at = now
+        return imp
+
     def get_impression(self, user_id: str) -> Optional[UserImpression]:
         return self._impressions.get(user_id)
 
@@ -585,6 +630,11 @@ class ImpressionEvolutionHub:
             "display_name": imp.user_name,
             "nickname": imp.tags.custom_nickname,
             "tags": imp.tags.personality_tags,
+            "impression_labels": imp.tags.impression_labels,
+            "free_impression": imp.tags.free_impression,
+            "personal_impression": imp.tags.free_impression,
+            "impression_source": imp.tags.impression_source,
+            "impression_updated_at": round(imp.tags.impression_updated_at, 3),
             "narrative_type": imp.narrative.relationship_stage,
             "affection": round(
                 imp.truth.positive_interactions * 2.0 + imp.truth.shared_experience_count * 4.0,

@@ -81,6 +81,7 @@ class BoundaryContext:
     raw_text: str = ""
     text_length: int = 0
     rapport_label: str = ""
+    personal_impression: str = ""
     fondness: float = 0.0
     credence: float = 0.0
     mental_drain: float = 0.0
@@ -195,7 +196,12 @@ class SelfDialogueEngine:
                 mentioned_me=is_mentioned,
                 raw_text=raw_text,
                 text_length=len(raw_text),
-                rapport_label=rapport_data.get("relationship", ""),
+                rapport_label=str(rapport_data.get("legacy_relationship_label", "") or ""),
+                personal_impression=str(
+                    rapport_data.get("personal_impression", "")
+                    or rapport_data.get("relationship", "")
+                    or ""
+                ),
                 fondness=get_relation_number(
                     rapport_data,
                     "affection",
@@ -252,10 +258,7 @@ class SelfDialogueEngine:
                 relationship_level=int(
                     get_relation_number(rapport_data, "relationship_level", 2)
                 ),
-                custom_label=str(
-                    rapport_data.get("custom_label", "")
-                    or rapport_data.get("relationship", "")
-                ),
+                custom_label=str(rapport_data.get("custom_label", "") or ""),
                 trend_direction=str(
                     rapport_data.get("trend_direction", "稳定") or "稳定"
                 ),
@@ -506,20 +509,19 @@ class SelfDialogueEngine:
     def _describe_rapport(
         self, speaker_name: str, ctx: BoundaryContext
     ) -> str:
-        """根据好感度生成关系文字描述"""
+        """根据好感度和自由个人印象生成关系文字描述。"""
         aff = ctx.fondness
-        rel = ctx.rapport_label
+        impression = str(ctx.personal_impression or "").strip()
+        impression_note = f"你对{speaker_name}的个人印象是：{impression}。" if impression else ""
         if aff < -30:
-            return f"你非常讨厌{speaker_name}(好感{aff:.0f},{rel})，本能就想躲开或敷衍。"
+            return f"{impression_note}你对{speaker_name}明显反感(好感{aff:.0f})，本能就想躲开或敷衍。"
         if aff < -10:
-            return f"你对{speaker_name}印象不好(好感{aff:.0f},{rel})，容易先烦一下。"
+            return f"{impression_note}你对{speaker_name}印象偏负面(好感{aff:.0f})，容易先烦一下。"
         if aff < 10:
-            return f"你和{speaker_name}不太熟(好感{aff:.0f},{rel})，先别过度解读。"
+            return f"{impression_note}你还没完全看清{speaker_name}(好感{aff:.0f})，先别过度解读。"
         if aff < 40:
-            return f"你觉得{speaker_name}还不错(好感{aff:.0f},{rel})，可以自然接话。"
-        return (
-            f"你很喜欢{speaker_name}(好感{aff:.0f},{rel})，会想顺着多聊几句。"
-        )
+            return f"{impression_note}你对{speaker_name}整体还能自然接话(好感{aff:.0f})。"
+        return f"{impression_note}你对{speaker_name}挺有好感(好感{aff:.0f})，会想顺着多聊几句。"
 
     # ---- 状态描述 ----
 
@@ -562,12 +564,10 @@ class SelfDialogueEngine:
             parts.append("不信任这人")
         elif ctx.trust_value > 50:
             parts.append("信任这人")
-        if ctx.relationship_level == 0:
-            parts.append("关系很僵")
-        elif ctx.relationship_level >= 4:
-            parts.append("关系很好")
-        if ctx.custom_label:
-            parts.append(f"印象:{ctx.custom_label}")
+        if ctx.personal_impression:
+            parts.append(f"个人印象:{ctx.personal_impression}")
+        elif ctx.custom_label:
+            parts.append(f"旧关系备注:{ctx.custom_label}")
         if ctx.trend_direction == "下降":
             parts.append("关系在变差")
         elif ctx.trend_direction == "上升":
@@ -1091,6 +1091,10 @@ class SelfDialogueEngine:
             "relationship_level": 2,
             "custom_label": "",
             "trend_direction": "稳定",
+            "personal_impression": "",
+            "impression_labels": [],
+            "impression_source": "",
+            "impression_updated_at": 0.0,
             "profile_summary": "",
             "memory_summary": "",
             "execution_hint": "先形成一句短的心里话，再决定要不要回；如果要回，后续回复必须顺着这句心里话。",

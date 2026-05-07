@@ -547,7 +547,13 @@ class StrategyRelationStyleMixin:
 
     def _build_reply_style_context(self, relation_snapshot: Optional[Dict[str, Any]] = None) -> str:
         snapshot = self._resolve_relation_view(relation_snapshot)
-        relation_label = str(snapshot.get("custom_label") or "普通").strip() or "普通"
+        relation_label = str(
+            snapshot.get("personal_impression")
+            or snapshot.get("relationship")
+            or snapshot.get("legacy_relationship_label")
+            or snapshot.get("custom_label")
+            or "普通"
+        ).strip() or "普通"
         trust_value = float(snapshot.get("trust_value", 0.0) or 0.0)
         annoyance_value = float(snapshot.get("annoyance_value", 0.0) or 0.0)
         affection = float(snapshot.get("affection", 0.0) or 0.0)
@@ -634,7 +640,7 @@ class StrategyRelationStyleMixin:
             return payload[: max_chars - 1].rstrip("，。；、 ") + "。"
 
         lines: List[str] = []
-        _append(lines, f"你和对方算{relation_label}，按这个熟悉度自然说话。")
+        _append(lines, f"你对对方的个人印象是{relation_label}，按这个判断自然说话。")
 
         if trauma >= _trauma_thr:
             _append(lines, "你现在有点防备，回复别太满，先留点距离。")

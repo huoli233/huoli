@@ -129,6 +129,7 @@ class PlanningContext:
     social_value: float = 0.0
     trust_value: float = 0.0
     relationship_level: int = 2
+    personal_impression: str = ""
     custom_label: str = ""
     annoyance_value: float = 0.0
     affection: float = 0.0
@@ -580,7 +581,6 @@ class UnifiedPlanner(metaclass=SingletonMeta):
             consecutive_penalty = 0.0
             history = self._decision_history.get(channel_id, [])
             if history:
-                last = history[-1]
                 time_since_last = time.time() - self._last_planning_time.get(channel_id, 0)
                 if time_since_last < 60:
                     consecutive_penalty = 5.0
@@ -724,6 +724,7 @@ class UnifiedPlanner(metaclass=SingletonMeta):
         ctx.trauma_score = tu.trauma_score
         ctx.psychological_pressure = tu.psychological_pressure
         ctx.relationship_level = tu.relationship_level
+        ctx.personal_impression = str(getattr(tu, "personal_impression", "") or "")
         ctx.custom_label = tu.custom_label
 
         # 外部注入：重复压力与用户意图
@@ -879,7 +880,11 @@ class UnifiedPlanner(metaclass=SingletonMeta):
 
         context_summary = self._summarize_context(ctx.filtered_context)
         budget = ctx.thinking_budget
-        relationship_label = ctx.custom_label or self._get_level_description(ctx.relationship_level)
+        relationship_label = (
+            ctx.personal_impression
+            or ctx.custom_label
+            or self._get_level_description(ctx.relationship_level)
+        )
         identity_manager = get_bot_identity_manager()
         identity_prompt = identity_manager.get_identity_prompt()
         reply_style = str(getattr(global_config.personality, "reply_style", "") or "").strip()

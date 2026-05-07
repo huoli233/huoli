@@ -10,10 +10,18 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src.chat.heart_flow.heartfc_state_exporter import _extract_safety_runtime, list_heartfc_chats
+from src.chat.heart_flow.heartfc_state_exporter import (
+    _extract_relationship_profile,
+    _extract_safety_runtime,
+    list_heartfc_chats,
+)
+from src.chat.heart_flow.enhanced_modules.strategy_relation_style_mixin import StrategyRelationStyleMixin
 from src.chat.heart_flow.speak_prediction_engine import SpeakPredictionEngine
 from src.chat.proactive.perception_engine import _RelationGauge
+from src.core.impression_evolution_hub import get_impression_hub, remove_impression_hub
+from src.core.unified_planner import PlanningContext, UnifiedPlanner
 from src.core.world_snapshot import (
+    build_relation_rapport_snapshot,
     TargetUserState,
     WorldSnapshot,
     get_relation_number,
@@ -21,7 +29,11 @@ from src.core.world_snapshot import (
     _set_relation_value,
 )
 from src.webui.app import create_app
-from src.webui.services.state_monitor import _build_participant_impacts, _build_safety_detail
+from src.webui.services.state_monitor import (
+    _build_current_user_detail,
+    _build_participant_impacts,
+    _build_safety_detail,
+)
 
 
 REQUIRED_EARLY_STAGES = [
@@ -347,6 +359,125 @@ def check_world_snapshot_relation_contract() -> Dict[str, Any]:
     return {"zero_values_preserved": True, "negative_values_preserved": True}
 
 
+def check_dynamic_personal_impression_contract() -> Dict[str, Any]:
+    channel_id = "dynamic-impression-regression"
+    isolated_channel_id = "dynamic-impression-regression-isolated"
+    user_id = "impression-user"
+    remove_impression_hub(channel_id)
+    remove_impression_hub(isolated_channel_id)
+    try:
+        hub = get_impression_hub(channel_id)
+        hub.update_free_impression(
+            user_id,
+            "活泼可爱，喜欢突然抛梗",
+            labels=["活泼", "会接梗", "活泼", "  "],
+            user_name="印象用户",
+            source="regression",
+        )
+
+        rapport = build_relation_rapport_snapshot(channel_id=channel_id, user_id=user_id, user_name="印象用户")
+        assert rapport["relation_contract_version"] == 3
+        assert rapport["relationship"] == "活泼可爱，喜欢突然抛梗"
+        assert rapport["personal_impression"] == "活泼可爱，喜欢突然抛梗"
+        assert rapport["impression_labels"] == ["活泼", "会接梗"]
+        assert rapport["impression_source"] == "regression"
+        assert rapport["legacy_relationship_label"] != rapport["personal_impression"]
+        assert "群内关系级别" not in rapport["profile_summary"]
+        assert "个人印象=活泼可爱，喜欢突然抛梗" in rapport["profile_summary"]
+
+        world_state = {
+            "target": {
+                "group_friend_id": user_id,
+                "group_friend_name": "印象用户",
+                "personal_impression": rapport["personal_impression"],
+                "impression_labels": rapport["impression_labels"],
+                "impression_source": rapport["impression_source"],
+                "impression_updated_at": rapport["impression_updated_at"],
+                "custom_label": "好友",
+                "mood": "平静",
+                "affection": 12.0,
+                "trust_value": 7.0,
+                "annoyance_value": 0.0,
+                "interaction_count": 3,
+            }
+        }
+        chat = type(
+            "FakeChat",
+            (),
+            {"stream_id": "", "_last_user_id": user_id, "_last_proactive_target_user_id": ""},
+        )()
+        relation = _extract_relationship_profile(chat, world_state)
+        assert relation["relationship_label"] == "活泼可爱，喜欢突然抛梗"
+        assert relation["personal_impression"] == "活泼可爱，喜欢突然抛梗"
+        assert relation["impression_labels"] == ["活泼", "会接梗"]
+        assert relation["legacy_relationship_label"] == "好友"
+
+        detail = _build_current_user_detail({"relationship_profile": relation})
+        assert detail["relationship_label"] == "活泼可爱，喜欢突然抛梗"
+        assert detail["personal_impression"] == "活泼可爱，喜欢突然抛梗"
+        assert detail["legacy_relationship_label"] == "好友"
+
+        impacts = _build_participant_impacts(
+            {
+                "relationship_profile": {"user_id": user_id},
+                "relationship_population": {"participants": [dict(relation, is_current_target=True)]},
+            },
+            [],
+        )
+        assert impacts[0]["relationship_label"] == "活泼可爱，喜欢突然抛梗"
+        assert impacts[0]["personal_impression"] == "活泼可爱，喜欢突然抛梗"
+
+        isolated_rapport = build_relation_rapport_snapshot(
+            channel_id=isolated_channel_id,
+            user_id=user_id,
+            user_name="印象用户",
+        )
+        assert isolated_rapport["personal_impression"] == ""
+        assert isolated_rapport["relationship"] == ""
+        assert isolated_rapport["impression_labels"] == []
+
+        planner_ctx = PlanningContext(channel_id=channel_id, user_id=user_id)
+        planner_ctx.personal_impression = "活泼可爱，喜欢突然抛梗"
+        planner_ctx.custom_label = "好友"
+        planner_prompt = UnifiedPlanner()._build_decision_prompt(planner_ctx)
+        assert "- 对当前这位的印象: 活泼可爱，喜欢突然抛梗" in planner_prompt
+        assert "- 对当前这位的印象: 好友" not in planner_prompt
+
+        style_probe = type(
+            "StyleProbe",
+            (StrategyRelationStyleMixin,),
+            {
+                "stream_id": channel_id,
+                "log_prefix": "[regression]",
+                "_last_user_id": "",
+                "_resolve_relation_view": lambda self, relation_snapshot=None: dict(relation_snapshot or {}),
+                "_get_self_behavior_style_hints": lambda self, relation_snapshot=None: [],
+                "_is_acute_spamming": lambda self: False,
+            },
+        )()
+        style_context = style_probe._build_reply_style_context(
+            {
+                "personal_impression": "活泼可爱，喜欢突然抛梗",
+                "relationship": "好友",
+                "legacy_relationship_label": "好友",
+                "custom_label": "好友",
+                "trust_value": 7.0,
+                "affection": 12.0,
+            }
+        )
+        assert "你对对方的个人印象是活泼可爱，喜欢突然抛梗" in style_context
+        assert "你对对方的个人印象是好友" not in style_context
+        assert "你和对方算" not in style_context
+        return {
+            "dynamic_personal_impression": True,
+            "context_isolated": True,
+            "consumer_priority": True,
+        }
+    finally:
+        remove_impression_hub(channel_id)
+        remove_impression_hub(isolated_channel_id)
+
+
 def check_statusbar_export_contract() -> Dict[str, Any]:
     engine = SpeakPredictionEngine()
 
@@ -513,6 +644,7 @@ def main() -> None:
         "memory_autonomy": check_memory_and_autonomy_contract(),
         "participants": check_participant_contract(),
         "world_snapshot_relation": check_world_snapshot_relation_contract(),
+        "dynamic_personal_impression": check_dynamic_personal_impression_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),
         "webui": check_webui_contract(),
