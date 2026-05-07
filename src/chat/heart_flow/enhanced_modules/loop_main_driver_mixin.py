@@ -589,23 +589,24 @@ class LoopMainDriverMixin:
                     f"{self.log_prefix} 🌙 未知夜间动作已归一: {_raw_action!r} -> {_action}"
                 )
                 _night_result["action"] = _action
-            if _action in ("deep_sleep", "sleep_resist", "hard_block"):
-                if not self._is_force_wake_admin(incoming_batch, pinged_msg):
-                    logger.info(f"{self.log_prefix} 🌙 夜间节律拦截: {_night_result.get('reason', _action)}")
-                    self._last_flow_blocker = f"夜间节律拦截: {_night_result.get('reason', _action)}"
-                    self._store_gate_runtime(
-                        now=now,
-                        stage="night_gate_skip",
-                        reason=self._last_flow_blocker,
-                        source="night_gate",
-                        final_action="observe",
-                        next_action="observe",
-                        blocker=self._last_flow_blocker,
-                        extra_votes={"night_action": _action},
-                    )
-                    self._emit_flow_decision_summary("night_gate", "skip")
-                    await asyncio.sleep(_TICK_FLOOR_SEC)
-                    return True
+            if _action in ("deep_sleep", "hard_block") or (
+                _action == "sleep_resist" and not self._is_force_wake_admin(incoming_batch, pinged_msg)
+            ):
+                logger.info(f"{self.log_prefix} 🌙 夜间节律拦截: {_night_result.get('reason', _action)}")
+                self._last_flow_blocker = f"夜间节律拦截: {_night_result.get('reason', _action)}"
+                self._store_gate_runtime(
+                    now=now,
+                    stage="night_gate_skip",
+                    reason=self._last_flow_blocker,
+                    source="night_gate",
+                    final_action="observe",
+                    next_action="observe",
+                    blocker=self._last_flow_blocker,
+                    extra_votes={"night_action": _action},
+                )
+                self._emit_flow_decision_summary("night_gate", "skip")
+                await asyncio.sleep(_TICK_FLOOR_SEC)
+                return True
             if _action == "force_wake":
                 try:
                     _d6_fw = EnergyChainDimension.get_instance()
@@ -1278,9 +1279,13 @@ class LoopMainDriverMixin:
             harassment_signal=harassment_signal,
         )
         self._update_decision_trace(autonomy_guard_reason=str(autonomy_guard.get("reason", "") or ""))
-        if autonomy_guard["should_skip"] and not self._is_force_wake_admin(incoming_batch, pinged_msg):
+        _admin_force_active = self._is_force_wake_admin(incoming_batch, pinged_msg)
+        _autonomy_hard_skip = bool(autonomy_guard.get("hard_skip", False))
+        if autonomy_guard["should_skip"] and (not _admin_force_active or _autonomy_hard_skip):
             if autonomy_guard.get("source") == "content_state":
                 self._apply_content_state_skip(content_state_signal)
+            if _admin_force_active and _autonomy_hard_skip:
+                logger.info(f"{self.log_prefix} 👑 管理员强制唤醒受硬保护限制: {autonomy_guard['reason']}")
             self._emit_action_verdict("autonomy_block", autonomy_guard["reason"], time.time() - _t0)
             logger.info(
                 f"{self.log_prefix} 🚫 {autonomy_guard['reason']}，本轮不回复 | 管线耗时 {time.time() - _t0:.2f}s"
@@ -1288,13 +1293,17 @@ class LoopMainDriverMixin:
             self._last_flow_blocker = autonomy_guard["reason"]
             self._store_gate_runtime(
                 now=now,
-                stage="autonomy_guard_skip",
+                stage=("autonomy_guard_hard_skip" if _autonomy_hard_skip else "autonomy_guard_skip"),
                 reason=str(autonomy_guard["reason"] or "自治守卫阻断"),
                 source="autonomy_guard",
                 final_action="observe",
                 next_action="observe",
                 blocker=self._last_flow_blocker,
-                extra_votes={"autonomy_source": str(autonomy_guard.get("source", "") or "")},
+                extra_votes={
+                    "autonomy_source": str(autonomy_guard.get("source", "") or ""),
+                    "hard_skip": _autonomy_hard_skip,
+                    "admin_forced": _admin_force_active,
+                },
             )
             self._mark_decision_winner("autonomy_guard")
             self._apply_post_reply_state(did_reply=False, reason=autonomy_guard["reason"])
@@ -1304,7 +1313,7 @@ class LoopMainDriverMixin:
             return True
         if (
             autonomy_guard["should_skip"]
-            and self._is_force_wake_admin(incoming_batch, pinged_msg)
+            and _admin_force_active
             and legacy_gate != "block"
         ):
             logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-无视自治守卫: {autonomy_guard['reason']}")

@@ -968,6 +968,22 @@ class ProactiveContextPromptMixin:
             "repeat_pressure": (repetition_signal or {}).get("reason", ""),
         }
 
+    @staticmethod
+    def _is_hard_content_state_skip(content_state_signal: Optional[Dict[str, Any]]) -> bool:
+        if not isinstance(content_state_signal, dict):
+            return False
+        decision_reason = str(content_state_signal.get("decision_reason", "") or "").strip()
+        if decision_reason in {"already_well_replied", "over_processed", "currently_processing"}:
+            return True
+        if decision_reason.startswith("already_ignored:"):
+            ignored_reason = decision_reason.split(":", 1)[1]
+            return ignored_reason in {"already_replied", "over_processed", "duplicate"}
+        reason_text = str(content_state_signal.get("reason", "") or "")
+        return any(
+            marker in reason_text
+            for marker in ("刚处理过且回应质量足够", "处理次数过多", "正在处理中")
+        )
+
     def _evaluate_autonomy_guard(
         self,
         decision_messages: List,
@@ -985,7 +1001,7 @@ class ProactiveContextPromptMixin:
         harassment_signal: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """把身份、群态势和内容状态真正接入拒绝回复链。"""
-        result = {"should_skip": False, "reason": "", "source": ""}
+        result = {"should_skip": False, "reason": "", "source": "", "hard_skip": False}
         if not isinstance(identity_context, dict):
             identity_context = {
                 "identity": "default",
@@ -1020,11 +1036,14 @@ class ProactiveContextPromptMixin:
         if voice_conclusion is not None and hasattr(voice_conclusion, "reply_desire_level"):
             desire_level = int(getattr(voice_conclusion, "reply_desire_level", 5) or 5)
 
-        if content_state_signal and content_state_signal.get("should_skip") and desire_level < 8:
-            result["should_skip"] = True
-            result["reason"] = content_state_signal.get("reason", "当前内容已被处理过，先不重复接话")
-            result["source"] = "content_state"
-            return result
+        if content_state_signal and content_state_signal.get("should_skip"):
+            hard_content_skip = self._is_hard_content_state_skip(content_state_signal)
+            if hard_content_skip or desire_level < 8:
+                result["should_skip"] = True
+                result["reason"] = content_state_signal.get("reason", "当前内容已被处理过，先不重复接话")
+                result["source"] = "content_state"
+                result["hard_skip"] = hard_content_skip
+                return result
 
         if preprocessor_signal and preprocessor_signal.get("is_spam") and desire_level < 8:
             spam_type = preprocessor_signal.get("spam_type", "刷屏")

@@ -570,8 +570,7 @@ class SceneBotLifecycleMixin:
             _nm = _d6._get_night_mode(self.stream_id)
             if _nm is None or _nm.phase == "DAYTIME":
                 return None
-            if self._last_msg_was_admin:
-                return {"action": "force_wake", "reason": "管理员强制唤醒"}
+            _admin_force_wake = bool(self._last_msg_was_admin)
             _ncs = None
             _ns = None
             _precise_phase = ""
@@ -699,6 +698,14 @@ class SceneBotLifecycleMixin:
                 return {
                     "action": "deep_sleep",
                     "reason": f"CDE溢出(Composite {_composite:.1f}≥{_collapse:.1f}), 强制深睡",
+                    "context": _night_ctx,
+                    "stimulus": _stimulus,
+                    "threshold": _threshold,
+                }
+            if _admin_force_wake:
+                return {
+                    "action": "force_wake",
+                    "reason": "管理员强制唤醒",
                     "context": _night_ctx,
                     "stimulus": _stimulus,
                     "threshold": _threshold,

@@ -30,3 +30,20 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
 - 本轮只应提交 `scripts/heartflow_state_regression.py`、`src/chat/heart_flow/enhanced_modules/scene_context_analysis_mixin.py`、`src/core/content_state_tracker.py` 和本进度文件；工作区内已有文档删除、`.gitmessage-cn.txt` 删除和 `.trae/` 不属于本轮。
+
+## 2026-05-08T07:58:00 - Task: 管理员强制唤醒与夜间门控优先级收口
+
+### What was done:
+- 将内容状态中的 `already_well_replied`、`over_processed`、`currently_processing` 等结果升级为硬保护，管理员强制唤醒不再穿透这类“已处理充分/正在处理/过度处理”的跳过裁定。
+- 调整夜间节律优先级，`deep_sleep` 和 `hard_block` 不再被管理员强制唤醒绕过；管理员只允许穿透浅层 `sleep_resist`。
+- 延后夜间管理员强制判断到硬上限与深睡坍缩判定之后，避免夜晚/深睡态被早期 admin 分支直接割裂。
+- 在 HeartFlow 回归脚本中新增 `force_guard` 契约，覆盖管理员强制 + 内容硬保护、软低价值内容可被高欲望穿透、夜间硬阻断优先于管理员强制。
+
+### Testing:
+- `uv run python -m ruff check scripts/heartflow_state_regression.py src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py src/chat/heart_flow/enhanced_modules/proactive_context_prompt_mixin.py src/chat/heart_flow/enhanced_modules/scene_bot_lifecycle_mixin.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `force_guard` 返回 `admin_content_hard_guard=true`、`admin_soft_guard_bypass=true`、`night_hard_block_before_admin=true`。
+- `uv run python -m compileall src scripts` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
+- 本轮只应提交 `scripts/heartflow_state_regression.py`、`src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py`、`src/chat/heart_flow/enhanced_modules/proactive_context_prompt_mixin.py`、`src/chat/heart_flow/enhanced_modules/scene_bot_lifecycle_mixin.py` 和本进度文件；工作区内已有文档删除、`.gitmessage-cn.txt` 删除和 `.trae/` 不属于本轮。

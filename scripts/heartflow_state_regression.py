@@ -15,6 +15,7 @@ from src.chat.heart_flow.heartfc_state_exporter import (
     _extract_safety_runtime,
     list_heartfc_chats,
 )
+from src.chat.heart_flow.enhanced_modules.proactive_context_prompt_mixin import ProactiveContextPromptMixin
 from src.chat.heart_flow.enhanced_modules.scene_context_analysis_mixin import SceneContextAnalysisMixin
 from src.chat.heart_flow.enhanced_modules.strategy_relation_style_mixin import StrategyRelationStyleMixin
 from src.chat.heart_flow.speak_prediction_engine import SpeakPredictionEngine
@@ -49,6 +50,7 @@ REQUIRED_EARLY_STAGES = [
     "peek_gate_observe",
     "night_gate_skip",
     "autonomy_guard_skip",
+    "autonomy_guard_hard_skip",
     "planner_cooldown_skip",
     "pipeline_early_exit",
     "dashboard_hard_block",
@@ -675,6 +677,84 @@ def check_content_state_scope_contract() -> Dict[str, Any]:
         tracker._user_index.update(old_user_index)
 
 
+def check_force_guard_contract() -> Dict[str, Any]:
+    probe = type(
+        "ForceGuardProbe",
+        (ProactiveContextPromptMixin,),
+        {
+            "stream_id": "force-guard-regression",
+            "log_prefix": "[regression]",
+            "_has_targeted_bot_message": lambda self, messages: False,
+            "_get_human_message_candidates": lambda self, messages: list(messages),
+        },
+    )()
+    msg = type(
+        "FakeMessage",
+        (),
+        {"processed_plain_text": "我的刀盾", "user_id": "admin-user"},
+    )()
+    high_desire_voice = type("Voice", (), {"reply_desire_level": 10})()
+
+    hard_guard = probe._evaluate_autonomy_guard(
+        decision_messages=[msg],
+        pinged_msg=None,
+        identity_context={"identity": "default", "response_mode": "normal", "has_conflict": False},
+        self_reply_risk={"is_self_reply": False, "similarity": 0.0},
+        group_sense_result={},
+        relation_result={},
+        voice_conclusion=high_desire_voice,
+        message_salience={"score": 5},
+        content_state_signal={
+            "should_skip": True,
+            "decision_reason": "already_well_replied",
+            "reason": "这类内容刚处理过且回应质量足够",
+        },
+    )
+    assert hard_guard["should_skip"] is True
+    assert hard_guard["source"] == "content_state"
+    assert hard_guard["hard_skip"] is True
+
+    soft_guard = probe._evaluate_autonomy_guard(
+        decision_messages=[msg],
+        pinged_msg=None,
+        identity_context={"identity": "default", "response_mode": "normal", "has_conflict": False},
+        self_reply_risk={"is_self_reply": False, "similarity": 0.0},
+        group_sense_result={},
+        relation_result={},
+        voice_conclusion=high_desire_voice,
+        message_salience={"score": 5},
+        content_state_signal={
+            "should_skip": True,
+            "decision_reason": "low_interest",
+            "reason": "当前内容信息量偏低，先不重复接话",
+        },
+    )
+    assert soft_guard["should_skip"] is False
+    assert soft_guard["hard_skip"] is False
+
+    loop_source = (ROOT / "src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    lifecycle_source = (ROOT / "src/chat/heart_flow/enhanced_modules/scene_bot_lifecycle_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    assert "and (not _admin_force_active or _autonomy_hard_skip)" in loop_source
+    assert "管理员强制唤醒受硬保护限制" in loop_source
+    assert "_action in (\"deep_sleep\", \"hard_block\")" in loop_source
+    assert "_action == \"sleep_resist\" and not self._is_force_wake_admin" in loop_source
+
+    hard_block_idx = lifecycle_source.index("if not _ncs_cap.evaluate_sleep_reply_budget()")
+    deep_sleep_idx = lifecycle_source.index("if _composite >= _collapse * 1.1")
+    admin_wake_idx = lifecycle_source.index("if _admin_force_wake:")
+    assert hard_block_idx < admin_wake_idx
+    assert deep_sleep_idx < admin_wake_idx
+    return {
+        "admin_content_hard_guard": True,
+        "admin_soft_guard_bypass": True,
+        "night_hard_block_before_admin": True,
+    }
+
+
 def check_webui_contract() -> Dict[str, Any]:
     client = TestClient(create_app())
     dashboard = client.get("/dashboard")
@@ -712,6 +792,7 @@ def main() -> None:
         "world_snapshot_relation": check_world_snapshot_relation_contract(),
         "dynamic_personal_impression": check_dynamic_personal_impression_contract(),
         "content_state_scope": check_content_state_scope_contract(),
+        "force_guard": check_force_guard_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),
         "webui": check_webui_contract(),
