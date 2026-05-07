@@ -1,4 +1,5 @@
 # ruff: noqa: E402
+import asyncio
 import json
 import re
 import sys
@@ -10,6 +11,7 @@ from typing import Any
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from starlette.routing import WebSocketRoute
+from starlette.websockets import WebSocketDisconnect
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -18,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.config.config import global_config
 from src.webui.app import create_app
 from src.webui.core.security import get_token_manager
+from src.common.message.api import MessageAPIClient
 
 
 IGNORE_HTTP_PATHS = {"/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"}
@@ -167,6 +170,15 @@ def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
     results = []
     registered = [route.path for route in client.app.routes if isinstance(route, WebSocketRoute)]
 
+    try:
+        with client.websocket_connect("/ws/state-monitor") as websocket:
+            websocket.receive_json()
+        raise AssertionError("State monitor websocket unexpectedly accepted unauthenticated access")
+    except WebSocketDisconnect:
+        pass
+    except Exception:
+        pass
+
     with client.websocket_connect(f"/ws/auth?token={token}") as websocket:
         message = _expect_message(websocket, "auth_success")
         session_id = message["data"]["session_id"]
@@ -182,7 +194,7 @@ def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
         pong = _expect_message(websocket, "pong")
         results.append({"path": "/ws/plugin-progress", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
 
-    with client.websocket_connect("/ws/state-monitor") as websocket:
+    with client.websocket_connect(f"/ws/state-monitor?token={token}") as websocket:
         first = websocket.receive_json()
         if first.get("type") not in {"state_overview", "state_snapshot"}:
             raise AssertionError(f"Unexpected state-monitor init message: {first}")
@@ -196,7 +208,24 @@ def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
                     raise AssertionError(f"Unexpected state-snapshot shape: missing {required_key}")
         websocket.send_json({"type": "ping", "data": {}})
         pong = _expect_message(websocket, "pong")
-        results.append({"path": "/ws/state-monitor", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
+        results.append({"path": "/ws/state-monitor", "mode": "token", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
+
+    cookie_headers = {"Cookie": f"huoli_session={token}"}
+    with client.websocket_connect("/ws/state-monitor", headers=cookie_headers) as websocket:
+        first = websocket.receive_json()
+        if first.get("type") not in {"state_overview", "state_snapshot"}:
+            raise AssertionError(f"Unexpected state-monitor init message: {first}")
+        payload = first.get("data", {})
+        if first.get("type") == "state_overview":
+            if "updated_at" not in payload or "channels" not in payload:
+                raise AssertionError(f"Unexpected state-overview shape: {payload}")
+        else:
+            for required_key in ("domains", "presentation", "prediction"):
+                if required_key not in payload:
+                    raise AssertionError(f"Unexpected state-snapshot shape: missing {required_key}")
+        websocket.send_json({"type": "ping", "data": {}})
+        pong = _expect_message(websocket, "pong")
+        results.append({"path": "/ws/state-monitor", "mode": "cookie", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
 
     with client.websocket_connect(f"/api/chat/ws?token={token}") as websocket:
         seen_types = []
@@ -217,17 +246,31 @@ def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
     }
 
 
+async def check_message_api_send_failure() -> dict[str, Any]:
+    api = MessageAPIClient()
+    await api.connect("127.0.0.1", 8080)
+    try:
+        send_result = await api.send_message({"message_type": "smoke", "content": "ping"})
+        if send_result is not False:
+            raise AssertionError("MessageAPIClient.send_message() should fail when no backend server is attached")
+        return {"connected_without_server": True, "send_result": send_result}
+    finally:
+        await api.disconnect()
+
+
 def main() -> None:
     token = get_token_manager().get_token()
     with app_context() as app:
         with TestClient(app) as client:
             http_report = run_http_smoke(client, token)
             websocket_report = run_websocket_smoke(client, token)
+    message_api_report = asyncio.run(check_message_api_send_failure())
     print(
         json.dumps(
             {
                 "http": http_report,
                 "websocket": websocket_report,
+                "message_api": message_api_report,
             },
             ensure_ascii=False,
             indent=2,

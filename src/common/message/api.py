@@ -35,18 +35,21 @@ class MessageAPIClient:
         logger.info("消息 API 已断开")
 
     async def send_message(self, message) -> bool:
-        if not self._connected:
-            logger.warning("消息 API 未连接")
-            return False
         if hasattr(message, "to_dict"):
             message = message.to_dict()
         if not isinstance(message, dict):
             logger.warning(f"消息格式错误，期望 dict，得到 {type(message)}")
             return False
-        if self._server:
-            return await self._server.send_message(message)
-        logger.debug(f"发送消息: {message.get('message_type', 'unknown')}")
-        return True
+        if not self._connected:
+            logger.warning("消息 API 未连接")
+            return False
+        if not self._server:
+            logger.warning("消息 API 已连接但没有后端服务器，消息未发送")
+            return False
+        result = await self._server.send_message(message)
+        if not result:
+            logger.warning("消息 API 后端没有可用连接，消息未发送")
+        return result
 
     def register_handler(self, message_type: str, handler: Callable[[dict], Awaitable[None]]) -> None:
         self._message_handlers[message_type] = handler
