@@ -11,6 +11,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.chat.heart_flow.speak_prediction_engine import SpeakPredictionEngine
+from src.core.world_snapshot import (
+    TargetUserState,
+    WorldSnapshot,
+    _reconcile_overlapping_values,
+    _set_relation_value,
+)
 from src.webui.app import create_app
 from src.webui.services.state_monitor import _build_participant_impacts
 
@@ -281,6 +287,43 @@ def check_participant_contract() -> Dict[str, Any]:
     return {"participant_impacts": len(impacts)}
 
 
+def check_world_snapshot_relation_contract() -> Dict[str, Any]:
+    snap = WorldSnapshot(target_user=TargetUserState())
+    user = snap.target_user
+
+    assert _set_relation_value(user, "social_value", 0.0, "test.social_zero") is True
+    assert _set_relation_value(user, "trust_value", -12.5, "test.trust_negative") is True
+    assert _set_relation_value(user, "annoyance_value", 0.0, "test.annoyance_zero") is True
+    assert _set_relation_value(user, "annoyance_value", 33.0, "test.annoyance_fallback", overwrite=False) is False
+    _reconcile_overlapping_values(snap)
+
+    assert user.social_value == 0.0
+    assert user.favorability == 0.0
+    assert user.trust_value == -12.5
+    assert user.trust_score == -12.5
+    assert user.annoyance_value == 0.0
+    assert user.relation_value_sources["social_value"] == "test.social_zero"
+    assert user.relation_value_sources["favorability"] == "alias:test.social_zero"
+    assert user.relation_value_sources["trust_score"] == "alias:test.trust_negative"
+    assert user.relation_value_sources["annoyance_value"] == "test.annoyance_zero"
+
+    alias_only = WorldSnapshot(target_user=TargetUserState())
+    alias_user = alias_only.target_user
+    assert _set_relation_value(alias_user, "trust_score", -7.0, "test.emotion_trust") is True
+    _reconcile_overlapping_values(alias_only)
+    assert alias_user.trust_score == -7.0
+    assert alias_user.trust_value == 0.0
+    assert alias_user.relation_value_sources["trust_score"] == "test.emotion_trust"
+    assert "trust_value" not in alias_user.relation_value_sources
+
+    canonical = snap.to_canonical_state()["target"]
+    rapport = snap.to_rapport_dict()
+    assert canonical["relation_value_sources"]["social_value"] == "test.social_zero"
+    assert rapport["relation_value_sources"]["annoyance_value"] == "test.annoyance_zero"
+    return {"zero_values_preserved": True, "negative_values_preserved": True}
+
+
+
 def check_webui_contract() -> Dict[str, Any]:
     client = TestClient(create_app())
     dashboard = client.get("/dashboard")
@@ -315,6 +358,7 @@ def main() -> None:
         "prediction_runtime": check_prediction_runtime_contract(),
         "memory_autonomy": check_memory_and_autonomy_contract(),
         "participants": check_participant_contract(),
+        "world_snapshot_relation": check_world_snapshot_relation_contract(),
         "webui": check_webui_contract(),
     }
     print(json.dumps(results, ensure_ascii=False, indent=2))

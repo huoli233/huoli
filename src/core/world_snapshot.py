@@ -16,6 +16,44 @@ def _metric_has_signal(value: Any, threshold: float = 1e-6) -> bool:
         return False
 
 
+def _coerce_relation_float(value: Any) -> Optional[float]:
+    """关系字段统一转浮点；None/空字符串表示缺失，合法 0 和负值必须保留。"""
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _has_relation_source(target: Any, field_name: str) -> bool:
+    sources = getattr(target, "relation_value_sources", None)
+    return isinstance(sources, dict) and field_name in sources
+
+
+def _set_relation_value(
+    target: Any,
+    field_name: str,
+    value: Any,
+    source: str,
+    *,
+    overwrite: bool = True,
+) -> bool:
+    """写入关系真值并记录来源；source 存在时即使值为 0 也视为已采集。"""
+    numeric = _coerce_relation_float(value)
+    if numeric is None:
+        return False
+    if not overwrite and _has_relation_source(target, field_name):
+        return False
+    setattr(target, field_name, numeric)
+    sources = getattr(target, "relation_value_sources", None)
+    if not isinstance(sources, dict):
+        sources = {}
+        target.relation_value_sources = sources
+    sources[field_name] = source
+    return True
+
+
 # ---------------------------------------------------------------------------
 #  自身资源状态
 # ---------------------------------------------------------------------------
@@ -133,6 +171,8 @@ class TargetUserState:
     impression_style: str = ""
     mood: str = "平静"
     attribute_influences: Dict[str, Any] = field(default_factory=dict)
+    # 字段来源契约：字段被采集到即记录来源，避免合法 0 / 负值被当成缺失。
+    relation_value_sources: Dict[str, str] = field(default_factory=dict)
 
     @property
     def user_id(self) -> str:
@@ -250,6 +290,7 @@ class WorldSnapshot:
             "trauma_score": u.trauma_score,
             "mood": u.mood,
             "attribute_influences": u.attribute_influences,
+            "relation_value_sources": dict(u.relation_value_sources),
             "behavior_signal": {
                 "category": self.behavior_category,
                 "severity": self.behavior_severity,
@@ -338,6 +379,7 @@ class WorldSnapshot:
             "impression_style": u.impression_style,
             "profile_summary": u.profile_summary(),
             "attribute_influences": u.attribute_influences,
+            "relation_value_sources": dict(u.relation_value_sources),
         }
         # 完整场景状态
         scene_section = {
@@ -413,6 +455,7 @@ class WorldSnapshot:
             "custom_label": u.custom_label,
             "trend_direction": u.trend_direction,
             "profile_summary": u.profile_summary(),
+            "relation_value_sources": dict(u.relation_value_sources),
             "memory_summary": " | ".join(memory_bits),
             "execution_hint": "先形成一句短的心里话，再决定要不要回；如果要回，后续回复必须顺着这句心里话。",
         }
@@ -695,19 +738,33 @@ async def _collect_social_affect(snap: WorldSnapshot, channel_id: str, user_id: 
         fuser = get_social_affect_fuser()
         affect = await fuser.get_snapshot(user_id, channel_id)
         u = snap.target_user
-        u.social_value = affect.social_score
+        _set_relation_value(
+            u,
+            "social_value",
+            affect.social_score,
+            "social_affect_fuser.snapshot.social_score",
+        )
         u.relationship_level = int(affect.phase)
         u.custom_label = affect.phase_label
         u.trend_direction = affect.trend
-        u.trust_value = affect.trust_value
+        _set_relation_value(
+            u,
+            "trust_value",
+            affect.trust_value,
+            "social_affect_fuser.snapshot.trust_value",
+        )
         if affect.impression_nick:
             u.impression_style = affect.impression_nick
         # 互动次数从公开接口补充
         record = await fuser.read_full_record(user_id, channel_id)
         if record is not None:
             u.interaction_count = int(record.interaction_count)
-            if _metric_has_signal(record.annoyance_value):
-                u.annoyance_value = float(record.annoyance_value)
+            _set_relation_value(
+                u,
+                "annoyance_value",
+                getattr(record, "annoyance_value", None),
+                "social_value_record.annoyance_value",
+            )
     except Exception as exc:
         logger.debug(f"[快照] 社交情感采集失败: {exc}")
 
@@ -724,11 +781,19 @@ async def _collect_emotion_state(snap: WorldSnapshot, channel_id: str, user_id: 
             return
         u = snap.target_user
         u.affection = float(getattr(state, "affection", 0.0) or 0.0)
-        u.trust_score = float(getattr(state, "trust_score", 0.0) or 0.0)
-        if _metric_has_signal(u.trust_score) and (
-            not _metric_has_signal(u.trust_value) or abs(u.trust_score) > abs(u.trust_value)
-        ):
-            u.trust_value = u.trust_score
+        _set_relation_value(
+            u,
+            "trust_score",
+            getattr(state, "trust_score", None),
+            "emotion_tracker.trust_score",
+        )
+        _set_relation_value(
+            u,
+            "annoyance_value",
+            getattr(state, "annoyance_value", getattr(state, "annoyance", None)),
+            "emotion_tracker.annoyance",
+            overwrite=False,
+        )
         u.trauma_score = float(getattr(state, "trauma_score", 0.0) or 0.0)
         u.psychological_pressure = float(getattr(state, "psychological_pressure", 0.0) or 0.0)
         mood_val = getattr(state, "mood", None) or getattr(state, "current_mood", None)
@@ -750,11 +815,14 @@ def _collect_social_affect_sync(snap: WorldSnapshot, channel_id: str, user_id: s
         u = snap.target_user
         if dossier is None:
             return
-        latest_score = 0.0
         recent_values = list(getattr(dossier, "recent_values", []) or [])
-        if recent_values:
-            latest_score = float(getattr(recent_values[-1], "value", 0.0) or 0.0)
-        u.social_value = latest_score
+        latest_score = getattr(recent_values[-1], "value", None) if recent_values else None
+        _set_relation_value(
+            u,
+            "social_value",
+            latest_score,
+            "social_affect_fuser.dossier.recent_values",
+        )
         u.relationship_level = int(getattr(dossier, "current_phase", u.relationship_level) or u.relationship_level)
         u.custom_label = str(
             fuser.get_phase_label(user_id, channel_id)
@@ -766,7 +834,14 @@ def _collect_social_affect_sync(snap: WorldSnapshot, channel_id: str, user_id: s
             or fuser.get_trend(user_id, channel_id)
             or u.trend_direction
         )
-        u.trust_value = float(latest_score * fuser.get_phase_weight(user_id, channel_id))
+        latest_score_num = _coerce_relation_float(latest_score)
+        if latest_score_num is not None:
+            _set_relation_value(
+                u,
+                "trust_value",
+                latest_score_num * fuser.get_phase_weight(user_id, channel_id),
+                "social_affect_fuser.dossier.phase_weight",
+            )
         u.interaction_count = len(recent_values)
         impression = getattr(dossier, "impression", None)
         if impression is not None:
@@ -791,11 +866,19 @@ def _collect_emotion_state_sync(snap: WorldSnapshot, channel_id: str, user_id: s
             return
         u = snap.target_user
         u.affection = float(getattr(state, "affection", 0.0) or 0.0)
-        u.trust_score = float(getattr(state, "trust_score", 0.0) or 0.0)
-        if _metric_has_signal(u.trust_score) and (
-            not _metric_has_signal(u.trust_value) or abs(u.trust_score) > abs(u.trust_value)
-        ):
-            u.trust_value = u.trust_score
+        _set_relation_value(
+            u,
+            "trust_score",
+            getattr(state, "trust_score", None),
+            "emotion_tracker.trust_score",
+        )
+        _set_relation_value(
+            u,
+            "annoyance_value",
+            getattr(state, "annoyance_value", getattr(state, "annoyance", None)),
+            "emotion_tracker.annoyance",
+            overwrite=False,
+        )
         u.trauma_score = float(getattr(state, "trauma_score", 0.0) or 0.0)
         u.psychological_pressure = float(getattr(state, "psychological_pressure", 0.0) or 0.0)
         mood_val = getattr(state, "mood", None) or getattr(state, "current_mood", None)
@@ -822,11 +905,21 @@ async def _collect_psychological_state(snap: WorldSnapshot, channel_id: str, use
         u.positive_dim = float(state.get("positive_dim", 0.0) or 0.0)
         u.negative_dim = float(state.get("negative_dim", 0.0) or 0.0)
         _trust_val = state.get("trust_value", state.get("trust"))
-        if _trust_val is not None and not getattr(u, "trust_value", 0.0):
-            u.trust_value = float(_trust_val)
+        _set_relation_value(
+            u,
+            "trust_value",
+            _trust_val,
+            "psychological_core.trust_value",
+            overwrite=False,
+        )
         _annoy_val = state.get("annoyance_value", state.get("annoyance"))
-        if _annoy_val is not None and not getattr(u, "annoyance_value", 0.0):
-            u.annoyance_value = float(_annoy_val)
+        _set_relation_value(
+            u,
+            "annoyance_value",
+            _annoy_val,
+            "psychological_core.annoyance",
+            overwrite=False,
+        )
     except Exception as exc:
         logger.debug(f"[快照] 心理状态采集失败: {exc}")
 
@@ -848,11 +941,21 @@ def _collect_psychological_state_sync(snap: WorldSnapshot, channel_id: str, user
         u.positive_dim = float(state.get("positive_dim", 0.0) or 0.0)
         u.negative_dim = float(state.get("negative_dim", 0.0) or 0.0)
         _trust_val = state.get("trust_value", state.get("trust"))
-        if _trust_val is not None and not getattr(u, "trust_value", 0.0):
-            u.trust_value = float(_trust_val)
+        _set_relation_value(
+            u,
+            "trust_value",
+            _trust_val,
+            "psychological_core.trust_value",
+            overwrite=False,
+        )
         _annoy_val = state.get("annoyance_value", state.get("annoyance"))
-        if _annoy_val is not None and not getattr(u, "annoyance_value", 0.0):
-            u.annoyance_value = float(_annoy_val)
+        _set_relation_value(
+            u,
+            "annoyance_value",
+            _annoy_val,
+            "psychological_core.annoyance",
+            overwrite=False,
+        )
     except Exception as exc:
         logger.debug(f"[快照] 同步心理状态采集失败: {exc}")
 
@@ -898,11 +1001,23 @@ def _reconcile_overlapping_values(snap: WorldSnapshot) -> None:
     此函数对重叠字段做最终校准，确保一致性。
     """
     u = snap.target_user
-    # canonical -> alias 单向镜像：兼容字段不能再反向污染主语义字段。
-    if _metric_has_signal(u.social_value) and not _metric_has_signal(u.favorability):
+    sources = getattr(u, "relation_value_sources", None)
+    if not isinstance(sources, dict):
+        sources = {}
+        u.relation_value_sources = sources
+
+    # canonical -> alias 单向镜像：source 存在即镜像，合法 0 / 负值不能被当成缺失。
+    if _has_relation_source(u, "social_value"):
         u.favorability = u.social_value
-    if _metric_has_signal(u.trust_value) and not _metric_has_signal(u.trust_score):
+        sources["favorability"] = f"alias:{sources['social_value']}"
+    elif _metric_has_signal(u.social_value) and not _has_relation_source(u, "favorability"):
+        _set_relation_value(u, "favorability", u.social_value, "alias:legacy.social_value")
+
+    if _has_relation_source(u, "trust_value"):
         u.trust_score = u.trust_value
+        sources["trust_score"] = f"alias:{sources['trust_value']}"
+    elif _metric_has_signal(u.trust_value) and not _has_relation_source(u, "trust_score"):
+        _set_relation_value(u, "trust_score", u.trust_value, "alias:legacy.trust_value")
 
 
 # 第一阶段完成优化：添加 PanelIntegrationManager 类，封装 panel 统一读取
