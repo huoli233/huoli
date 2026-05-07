@@ -1,22 +1,7 @@
-"""
-内容状态追踪系统
-
-解决内容记忆与标记系统不完善问题：
-1. 缺乏对已处理内容的有效标记
-2. 无法精准识别已看过的内容
-3. 无法智能判断是否应该响应
-
-核心机制：
-1. 内容去重 - 识别重复或相似内容
-2. 处理历史 - 记录对内容的处理历史
-3. 智能忽略 - 基于历史决定是否忽略
-4. 兴趣评估 - 评估内容是否值得响应
-"""
-
 import time
 import hashlib
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 from enum import Enum
 from src.common.logger import get_logger
 
@@ -124,10 +109,11 @@ class ContentStateTracker:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> ContentProcessingState:
         """追踪内容"""
-        content_hash = self._hash_content(content)
+        content_hash = self._hash_content(content, channel_id)
         if content_hash in self._state_cache:
             state = self._state_cache[content_hash]
             state.last_processed = time.time()
+            self._add_index_entry(content_hash, channel_id, user_id)
             return state
         state = ContentProcessingState(
             content_hash=content_hash,
@@ -142,14 +128,7 @@ class ContentStateTracker:
             state.topic_tags = metadata.get("topics", [])
         self._state_cache[content_hash] = state
         self._hash_index[content_hash] = content_hash
-        if channel_id:
-            if channel_id not in self._channel_index:
-                self._channel_index[channel_id] = []
-            self._channel_index[channel_id].append(content_hash)
-        if user_id:
-            if user_id not in self._user_index:
-                self._user_index[user_id] = []
-            self._user_index[user_id].append(content_hash)
+        self._add_index_entry(content_hash, channel_id, user_id)
         self._cleanup_cache()
         return state
 
@@ -160,7 +139,7 @@ class ContentStateTracker:
         user_id: str = "",
     ) -> ContentDecision:
         """判断是否应该处理该内容"""
-        content_hash = self._hash_content(content)
+        content_hash = self._hash_content(content, channel_id)
         state = self._state_cache.get(content_hash)
         if state is None:
             state = self.track_content(content, channel_id, user_id)
@@ -224,13 +203,16 @@ class ContentStateTracker:
     def mark_processing(
         self,
         content: str,
+        channel_id: str = "",
+        user_id: str = "",
     ) -> bool:
         """标记内容正在处理"""
-        content_hash = self._hash_content(content)
+        content_hash = self._hash_content(content, channel_id)
         state = self._state_cache.get(content_hash)
         if state:
             state.status = ContentStatus.PROCESSING
             state.last_processed = time.time()
+            self._add_index_entry(content_hash, channel_id, user_id)
             return True
         return False
 
@@ -240,9 +222,11 @@ class ContentStateTracker:
         action: str = "replied",
         response_id: str = "",
         quality: float = 0.5,
+        channel_id: str = "",
+        user_id: str = "",
     ) -> bool:
         """标记内容已处理"""
-        content_hash = self._hash_content(content)
+        content_hash = self._hash_content(content, channel_id)
         state = self._state_cache.get(content_hash)
         if state:
             state.status = ContentStatus.PROCESSED
@@ -251,6 +235,7 @@ class ContentStateTracker:
             state.action_taken = action
             state.response_id = response_id
             state.response_quality = quality
+            self._add_index_entry(content_hash, channel_id, user_id)
             state.processing_history.append(
                 {
                     "action": action,
@@ -269,14 +254,17 @@ class ContentStateTracker:
         self,
         content: str,
         reason: IgnoreReason = IgnoreReason.LOW_INTEREST,
+        channel_id: str = "",
+        user_id: str = "",
     ) -> bool:
         """标记内容已忽略"""
-        content_hash = self._hash_content(content)
+        content_hash = self._hash_content(content, channel_id)
         state = self._state_cache.get(content_hash)
         if state:
             state.status = ContentStatus.IGNORED
             state.ignore_reason = reason.value
             state.last_processed = time.time()
+            self._add_index_entry(content_hash, channel_id, user_id)
             state.processing_history.append(
                 {
                     "action": "ignored",
@@ -294,13 +282,16 @@ class ContentStateTracker:
         self,
         content: str,
         reason: str = "",
+        channel_id: str = "",
+        user_id: str = "",
     ) -> bool:
         """标记内容已延迟处理"""
-        content_hash = self._hash_content(content)
+        content_hash = self._hash_content(content, channel_id)
         state = self._state_cache.get(content_hash)
         if state:
             state.status = ContentStatus.DEFERRED
             state.last_processed = time.time()
+            self._add_index_entry(content_hash, channel_id, user_id)
             state.processing_history.append(
                 {
                     "action": "deferred",
@@ -383,10 +374,23 @@ class ContentStateTracker:
             ),
         }
 
-    def _hash_content(self, content: str) -> str:
-        """计算内容哈希"""
+    def _hash_content(self, content: str, channel_id: str = "") -> str:
+        """计算内容哈希；频道作用域避免同一句话在不同会话间互相污染。"""
         normalized = content.strip().lower()
-        return hashlib.md5(normalized.encode()).hexdigest()
+        scope = str(channel_id or "__global__").strip() or "__global__"
+        return hashlib.md5(f"{scope}\0{normalized}".encode()).hexdigest()
+
+    def _add_index_entry(self, content_hash: str, channel_id: str = "", user_id: str = "") -> None:
+        channel_key = str(channel_id or "").strip()
+        if channel_key:
+            entries = self._channel_index.setdefault(channel_key, [])
+            if content_hash not in entries:
+                entries.append(content_hash)
+        user_key = str(user_id or "").strip()
+        if user_key:
+            entries = self._user_index.setdefault(user_key, [])
+            if content_hash not in entries:
+                entries.append(content_hash)
 
     def _cleanup_cache(self) -> None:
         """清理缓存"""
@@ -399,6 +403,14 @@ class ContentStateTracker:
             for content_hash, _ in sorted_states[:remove_count]:
                 self._state_cache.pop(content_hash, None)
                 self._hash_index.pop(content_hash, None)
+                for entries in self._channel_index.values():
+                    while content_hash in entries:
+                        entries.remove(content_hash)
+                for entries in self._user_index.values():
+                    while content_hash in entries:
+                        entries.remove(content_hash)
+            self._channel_index = {k: v for k, v in self._channel_index.items() if v}
+            self._user_index = {k: v for k, v in self._user_index.items() if v}
             logger.debug(
                 f"[内容状态追踪] 清理缓存: 移除 {remove_count} 条记录"
             )

@@ -15,9 +15,15 @@ from src.chat.heart_flow.heartfc_state_exporter import (
     _extract_safety_runtime,
     list_heartfc_chats,
 )
+from src.chat.heart_flow.enhanced_modules.scene_context_analysis_mixin import SceneContextAnalysisMixin
 from src.chat.heart_flow.enhanced_modules.strategy_relation_style_mixin import StrategyRelationStyleMixin
 from src.chat.heart_flow.speak_prediction_engine import SpeakPredictionEngine
 from src.chat.proactive.perception_engine import _RelationGauge
+from src.core.content_state_tracker import (
+    ContentStatus,
+    IgnoreReason,
+    get_content_state_tracker,
+)
 from src.core.impression_evolution_hub import get_impression_hub, remove_impression_hub
 from src.core.unified_planner import PlanningContext, UnifiedPlanner
 from src.core.world_snapshot import (
@@ -609,6 +615,66 @@ def check_monitor_overview_contract() -> Dict[str, Any]:
 
 
 
+def check_content_state_scope_contract() -> Dict[str, Any]:
+    tracker = get_content_state_tracker()
+    old_state_cache = dict(tracker._state_cache)
+    old_hash_index = dict(tracker._hash_index)
+    old_channel_index = {key: list(value) for key, value in tracker._channel_index.items()}
+    old_user_index = {key: list(value) for key, value in tracker._user_index.items()}
+    try:
+        tracker._state_cache.clear()
+        tracker._hash_index.clear()
+        tracker._channel_index.clear()
+        tracker._user_index.clear()
+
+        content = "同一句内容"
+        user_id = "content-scope-user"
+        channel_a = "content-scope-a"
+        channel_b = "content-scope-b"
+        state_a = tracker.track_content(content, channel_id=channel_a, user_id=user_id)
+        state_b = tracker.track_content(content, channel_id=channel_b, user_id=user_id)
+        assert state_a.content_hash != state_b.content_hash
+
+        probe = type(
+            "ContentScopeProbe",
+            (SceneContextAnalysisMixin,),
+            {"stream_id": channel_a, "log_prefix": "[regression]"},
+        )()
+        msg = type(
+            "FakeMessage",
+            (),
+            {"processed_plain_text": content, "user_id": user_id},
+        )()
+        probe._mark_message_content_processed(msg, "regression_reply", quality=0.9)
+        assert state_a.status == ContentStatus.PROCESSED
+        assert state_b.status == ContentStatus.NEW
+        assert tracker.should_process(content, channel_id=channel_a, user_id=user_id).reason == "already_well_replied"
+        assert tracker.should_process(content, channel_id=channel_b, user_id=user_id).should_process is True
+
+        probe._apply_content_state_skip(
+            {
+                "target_content": content,
+                "decision_reason": "low_interest",
+                "channel_id": channel_b,
+                "target_user_id": user_id,
+            }
+        )
+        assert state_a.status == ContentStatus.PROCESSED
+        assert state_b.status == ContentStatus.IGNORED
+        assert state_b.ignore_reason == IgnoreReason.LOW_INTEREST.value
+        assert tracker.should_process(content, channel_id=channel_b, user_id=user_id).reason == "already_ignored:low_interest"
+        return {"channel_scoped_hash": True, "scoped_status_writeback": True}
+    finally:
+        tracker._state_cache.clear()
+        tracker._state_cache.update(old_state_cache)
+        tracker._hash_index.clear()
+        tracker._hash_index.update(old_hash_index)
+        tracker._channel_index.clear()
+        tracker._channel_index.update(old_channel_index)
+        tracker._user_index.clear()
+        tracker._user_index.update(old_user_index)
+
+
 def check_webui_contract() -> Dict[str, Any]:
     client = TestClient(create_app())
     dashboard = client.get("/dashboard")
@@ -645,6 +711,7 @@ def main() -> None:
         "participants": check_participant_contract(),
         "world_snapshot_relation": check_world_snapshot_relation_contract(),
         "dynamic_personal_impression": check_dynamic_personal_impression_contract(),
+        "content_state_scope": check_content_state_scope_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),
         "webui": check_webui_contract(),

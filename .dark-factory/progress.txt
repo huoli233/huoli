@@ -14,3 +14,19 @@
 ### Notes:
 - 仓库当前未提供 `.dark-factory/task.json`，本轮按会话内 todo 执行并记录进度。
 - 远程同步和本地提交还未完成。
+
+## 2026-05-08T07:22:23 - Task: 内容状态频道作用域收口
+
+### What was done:
+- 将内容状态哈希从纯文本哈希改为频道作用域哈希，避免同一句内容在不同会话间互相污染处理状态。
+- 将内容处理、已处理、忽略、延后回写统一带上 `channel_id` 和 `user_id`，补齐主循环内容状态跳过回写闭环。
+- 在 HeartFlow 回归脚本中新增 `content_state_scope` 断言，覆盖跨频道哈希隔离和状态回写隔离。
+
+### Testing:
+- `uv run python -m ruff check scripts/heartflow_state_regression.py src/chat/heart_flow/enhanced_modules/scene_context_analysis_mixin.py src/core/content_state_tracker.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `content_state_scope` 返回 `channel_scoped_hash=true`、`scoped_status_writeback=true`。
+- `uv run python -m compileall src scripts` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
+- 本轮只应提交 `scripts/heartflow_state_regression.py`、`src/chat/heart_flow/enhanced_modules/scene_context_analysis_mixin.py`、`src/core/content_state_tracker.py` 和本进度文件；工作区内已有文档删除、`.gitmessage-cn.txt` 删除和 `.trae/` 不属于本轮。

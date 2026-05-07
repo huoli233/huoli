@@ -147,6 +147,8 @@ class SceneContextAnalysisMixin:
             "suggested_action": "",
             "confidence": 0.0,
             "target_content": "",
+            "target_user_id": "",
+            "channel_id": str(getattr(self, "stream_id", "") or ""),
         }
         try:
             from src.core.content_state_tracker import (
@@ -171,6 +173,7 @@ class SceneContextAnalysisMixin:
                     "suggested_action": decision.suggested_action,
                     "confidence": float(decision.confidence or 0.0),
                     "target_content": content,
+                    "target_user_id": str(getattr(target_message, "user_id", "") or ""),
                 }
             )
             if decision.should_process:
@@ -199,6 +202,8 @@ class SceneContextAnalysisMixin:
         if not content:
             return
         reason = str(content_state_signal.get("decision_reason", "") or "")
+        channel_id = str(content_state_signal.get("channel_id", "") or getattr(self, "stream_id", "") or "")
+        user_id = str(content_state_signal.get("target_user_id", "") or "")
         try:
             from src.core.content_state_tracker import (
                 IgnoreReason,
@@ -206,12 +211,18 @@ class SceneContextAnalysisMixin:
             )
 
             tracker = get_content_state_tracker()
-            if reason == "low_interest":
-                tracker.mark_ignored(content, IgnoreReason.LOW_INTEREST)
-            elif reason == "over_processed":
-                tracker.mark_ignored(content, IgnoreReason.OVER_PROCESSED)
-            elif reason == "already_well_replied":
-                tracker.mark_ignored(content, IgnoreReason.ALREADY_REPLIED)
+            ignore_reason = {
+                "low_interest": IgnoreReason.LOW_INTEREST,
+                "over_processed": IgnoreReason.OVER_PROCESSED,
+                "already_well_replied": IgnoreReason.ALREADY_REPLIED,
+            }.get(reason)
+            if ignore_reason is not None:
+                tracker.mark_ignored(
+                    content,
+                    ignore_reason,
+                    channel_id=channel_id,
+                    user_id=user_id,
+                )
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 回写内容状态失败: {exc}")
 
@@ -247,7 +258,11 @@ class SceneContextAnalysisMixin:
                 get_content_state_tracker,
             )
 
-            get_content_state_tracker().mark_processing(content)
+            get_content_state_tracker().mark_processing(
+                content,
+                channel_id=str(getattr(self, "stream_id", "") or ""),
+                user_id=str(getattr(msg, "user_id", "") or ""),
+            )
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 标记内容处理中失败: {exc}")
 
@@ -269,6 +284,8 @@ class SceneContextAnalysisMixin:
                 content,
                 action=action_name,
                 quality=quality,
+                channel_id=str(getattr(self, "stream_id", "") or ""),
+                user_id=str(getattr(msg, "user_id", "") or ""),
             )
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 标记内容已处理失败: {exc}")
@@ -282,7 +299,12 @@ class SceneContextAnalysisMixin:
                 get_content_state_tracker,
             )
 
-            get_content_state_tracker().mark_deferred(content, reason)
+            get_content_state_tracker().mark_deferred(
+                content,
+                reason,
+                channel_id=str(getattr(self, "stream_id", "") or ""),
+                user_id=str(getattr(msg, "user_id", "") or ""),
+            )
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 标记内容延后失败: {exc}")
 
