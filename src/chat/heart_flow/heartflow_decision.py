@@ -930,12 +930,22 @@ class HeartflowDecisionMaker:
             acquire_action_judge,
         )
 
+        from src.core.world_snapshot import get_relation_number
+
         repeated = bool((repetition_signal or {}).get("detected", False))
         harassing = bool((harassment_signal or {}).get("detected", False))
         eval_inputs = EvaluationInputs(
-            affection=float(relation_view.get("affection", 0.0) or 0.0),
-            trust_level=float(relation_view.get("trust_value", 0.0) or 0.0),
-            irritation=float(relation_view.get("annoyance_value", 0.0) or 0.0),
+            affection=get_relation_number(relation_view, "affection"),
+            trust_level=get_relation_number(
+                relation_view,
+                "trust_value",
+                aliases=("trust_score",),
+            ),
+            irritation=get_relation_number(
+                relation_view,
+                "annoyance_value",
+                aliases=("annoyance",),
+            ),
             scene_kind="group",
             relevance=0.4,
             timing_quality=0.4,

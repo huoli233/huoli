@@ -11,9 +11,11 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.chat.heart_flow.speak_prediction_engine import SpeakPredictionEngine
+from src.chat.proactive.perception_engine import _RelationGauge
 from src.core.world_snapshot import (
     TargetUserState,
     WorldSnapshot,
+    get_relation_number,
     _reconcile_overlapping_values,
     _set_relation_value,
 )
@@ -320,6 +322,27 @@ def check_world_snapshot_relation_contract() -> Dict[str, Any]:
     rapport = snap.to_rapport_dict()
     assert canonical["relation_value_sources"]["social_value"] == "test.social_zero"
     assert rapport["relation_value_sources"]["annoyance_value"] == "test.annoyance_zero"
+    assert get_relation_number(rapport, "social_value", aliases=("favorability",)) == 0.0
+    assert get_relation_number(rapport, "trust_value", aliases=("trust_score",)) == -12.5
+    assert get_relation_number(rapport, "annoyance_value", aliases=("annoyance",)) == 0.0
+
+    explicit_zero_relation = {
+        "social_value": 0.0,
+        "affection": 80.0,
+        "trust_score": -9.0,
+        "annoyance": 0.0,
+        "relation_value_sources": {
+            "social_value": "test.explicit_zero_social",
+            "affection": "test.affection",
+            "trust_score": "test.trust_alias",
+            "annoyance": "test.annoyance_alias",
+        },
+    }
+    receptiveness, summary = _RelationGauge.evaluate(explicit_zero_relation)
+    assert "好感度高" not in summary
+    assert get_relation_number(explicit_zero_relation, "trust_value", aliases=("trust_score",)) == -9.0
+    assert get_relation_number(explicit_zero_relation, "annoyance_value", aliases=("annoyance",)) == 0.0
+    assert receptiveness < 0.6
     return {"zero_values_preserved": True, "negative_values_preserved": True}
 
 

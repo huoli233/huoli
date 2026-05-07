@@ -54,6 +54,37 @@ def _set_relation_value(
     return True
 
 
+def get_relation_number(
+    relation: Any,
+    field_name: str,
+    default: float = 0.0,
+    *,
+    aliases: Tuple[str, ...] = (),
+) -> float:
+    """按关系来源契约读取数值，避免 0/负值和兼容别名被 truthy 逻辑误读。"""
+    default_numeric = _coerce_relation_float(default)
+    fallback = default_numeric if default_numeric is not None else 0.0
+    if not isinstance(relation, dict):
+        return fallback
+
+    sources = relation.get("relation_value_sources")
+    if not isinstance(sources, dict):
+        sources = {}
+
+    candidates = (field_name, *aliases)
+    for candidate in candidates:
+        if candidate not in relation:
+            continue
+        numeric = _coerce_relation_float(relation.get(candidate))
+        if numeric is None:
+            continue
+        if candidate in sources or _metric_has_signal(numeric):
+            return numeric
+
+    numeric = _coerce_relation_float(relation.get(field_name))
+    return numeric if numeric is not None else fallback
+
+
 # ---------------------------------------------------------------------------
 #  自身资源状态
 # ---------------------------------------------------------------------------

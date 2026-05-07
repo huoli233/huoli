@@ -59,6 +59,8 @@ class EnhancedVoicePipelineMixin:
         """
         try:
             relation_view = self._resolve_relation_view(relation_snapshot)
+            from src.core.world_snapshot import get_relation_number
+
             _d6 = EnergyChainDimension.get_instance()
             _d6_state = _d6._ensure_channel(self.stream_id)
             chat_current = _d6_state.chat_pool
@@ -75,9 +77,21 @@ class EnhancedVoicePipelineMixin:
             outcome_parts.append(f"思考当前={thinking_current:.0f}%")
 
             # 关系变化标记
-            rel_social = float(relation_view.get("social_value", 0.0) or 0.0)
-            rel_trust = float(relation_view.get("trust_value", 0.0) or 0.0)
-            rel_annoy = float(relation_view.get("annoyance_value", 0.0) or 0.0)
+            rel_social = get_relation_number(
+                relation_view,
+                "social_value",
+                aliases=("favorability",),
+            )
+            rel_trust = get_relation_number(
+                relation_view,
+                "trust_value",
+                aliases=("trust_score",),
+            )
+            rel_annoy = get_relation_number(
+                relation_view,
+                "annoyance_value",
+                aliases=("annoyance",),
+            )
             if abs(rel_social) >= 0.1:
                 outcome_parts.append(f"社交值={rel_social:.1f}")
             if abs(rel_trust) >= 0.1:
@@ -85,9 +99,16 @@ class EnhancedVoicePipelineMixin:
             if abs(rel_annoy) >= 0.1:
                 outcome_parts.append(f"厌烦度={rel_annoy:.1f}")
 
-            rel_affection = float(relation_view.get("affection", 0.0) or 0.0)
-            rel_pressure = float(relation_view.get("psychological_pressure", 0.0) or 0.0)
-            rel_trauma = float(relation_view.get("trauma_score", 0.0) or 0.0)
+            rel_affection = get_relation_number(
+                relation_view,
+                "affection",
+                aliases=("favorability",),
+            )
+            rel_pressure = get_relation_number(
+                relation_view,
+                "psychological_pressure",
+            )
+            rel_trauma = get_relation_number(relation_view, "trauma_score")
             if abs(rel_affection) >= 0.1:
                 outcome_parts.append(f"好感={rel_affection:.1f}")
             if rel_pressure > 0 and not any(part.startswith("心理压力=") for part in outcome_parts):

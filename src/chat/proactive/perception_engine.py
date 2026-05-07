@@ -288,14 +288,36 @@ class _RelationGauge:
         返回:
             (receptiveness 0~1, summary_text)
         """
-        social_value = float(relation_data.get("social_value", 0.0) or 0.0)
-        affection = float(relation_data.get("affection", 0.0) or 0.0)
-        favor = social_value if social_value != 0.0 else affection
-        annoyance = float(
-            relation_data.get("annoyance_value", relation_data.get("annoyance", 0.0)) or 0.0
+        from src.core.world_snapshot import get_relation_number
+
+        sources = relation_data.get("relation_value_sources")
+        has_social_source = isinstance(sources, dict) and "social_value" in sources
+        social_value = get_relation_number(
+            relation_data,
+            "social_value",
+            aliases=("favorability",),
         )
-        freq = float(relation_data.get("interaction_count", relation_data.get("interaction_frequency", 0.0)) or 0.0)
-        trust_value = float(relation_data.get("trust_value", 0.0) or 0.0)
+        affection = get_relation_number(
+            relation_data,
+            "affection",
+            aliases=("favorability",),
+        )
+        favor = social_value if has_social_source or social_value != 0.0 else affection
+        annoyance = get_relation_number(
+            relation_data,
+            "annoyance_value",
+            aliases=("annoyance",),
+        )
+        freq = get_relation_number(
+            relation_data,
+            "interaction_count",
+            aliases=("interaction_frequency",),
+        )
+        trust_value = get_relation_number(
+            relation_data,
+            "trust_value",
+            aliases=("trust_score",),
+        )
         # 简化评估
         favor_factor = min(1.0, max(0.0, (favor + 100) / 200))
         annoyance_penalty = min(1.0, annoyance / 100.0) * 0.3

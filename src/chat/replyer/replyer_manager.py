@@ -1,4 +1,3 @@
-import time as _tm
 from typing import Any, Dict, List, Optional
 
 from src.common.logger import get_logger
@@ -138,7 +137,10 @@ class ReplyerManager:
     def _emit_emotion_status(self, stream_id: str, packet_data: Dict) -> None:
         """回复后输出情感/社交状态日志"""
         try:
-            from src.core.world_snapshot import build_relation_rapport_snapshot
+            from src.core.world_snapshot import (
+                build_relation_rapport_snapshot,
+                get_relation_number,
+            )
 
             user_id = packet_data.get("sender_id") or packet_data.get(
                 "user_id", ""
@@ -150,9 +152,17 @@ class ReplyerManager:
                 user_id=user_id,
             )
             parts: List[str] = []
-            affection = float(relation.get("affection", 0.0) or 0.0)
-            trust_value = float(relation.get("trust_value", 0.0) or 0.0)
-            annoyance_value = float(relation.get("annoyance_value", 0.0) or 0.0)
+            affection = get_relation_number(relation, "affection")
+            trust_value = get_relation_number(
+                relation,
+                "trust_value",
+                aliases=("trust_score",),
+            )
+            annoyance_value = get_relation_number(
+                relation,
+                "annoyance_value",
+                aliases=("annoyance",),
+            )
             relation_label = str(
                 relation.get("relationship", "")
                 or relation.get("custom_label", "")

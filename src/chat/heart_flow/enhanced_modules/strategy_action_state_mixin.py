@@ -384,8 +384,17 @@ class StrategyActionStateMixin:
                 mark_skip("post_gate_hold", "门控放行但缺少强回复证据")
             else:
                 relation_snapshot = self._resolve_relation_view() or {}
-                annoyance = float(relation_snapshot.get("annoyance_value", 0.0) or 0.0)
-                pressure = float(relation_snapshot.get("psychological_pressure", 0.0) or 0.0)
+                from src.core.world_snapshot import get_relation_number
+
+                annoyance = get_relation_number(
+                    relation_snapshot,
+                    "annoyance_value",
+                    aliases=("annoyance",),
+                )
+                pressure = get_relation_number(
+                    relation_snapshot,
+                    "psychological_pressure",
+                )
                 blocked = bool(relation_snapshot.get("is_user_blocked", False))
                 if blocked or (annoyance >= 80 and pressure >= 60):
                     mark_skip(

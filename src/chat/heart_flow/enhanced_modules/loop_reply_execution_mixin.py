@@ -131,10 +131,23 @@ class LoopReplyExecutionMixin:
                             )
                         relation_result = self._normalize_relation_snapshot(relation_result)
                         self._last_relation_snapshot.update(relation_result)
-                        self._cached_affection_value = float(relation_result.get("affection", 0.0) or 0.0)
-                        self._cached_trust_value = float(relation_result.get("trust_value", 0.0) or 0.0)
-                        self._cached_annoyance_value = float(relation_result.get("annoyance_value", 0.0) or 0.0)
-                        self._cached_pressure_value = float(relation_result.get("psychological_pressure", 0.0) or 0.0)
+                        from src.core.world_snapshot import get_relation_number
+
+                        self._cached_affection_value = get_relation_number(relation_result, "affection")
+                        self._cached_trust_value = get_relation_number(
+                            relation_result,
+                            "trust_value",
+                            aliases=("trust_score",),
+                        )
+                        self._cached_annoyance_value = get_relation_number(
+                            relation_result,
+                            "annoyance_value",
+                            aliases=("annoyance",),
+                        )
+                        self._cached_pressure_value = get_relation_number(
+                            relation_result,
+                            "psychological_pressure",
+                        )
                         logger.info(
                             f"{self.log_prefix} 🧠 认知动力学 "
                             f"好感{_cog_result.get('affection_delta', 0):+.1f}="

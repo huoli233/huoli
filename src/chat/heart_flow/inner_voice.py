@@ -163,6 +163,8 @@ class SelfDialogueEngine:
         """
         try:
             is_mentioned = self._detect_mention(raw_text)
+            from src.core.world_snapshot import get_relation_number
+
             if world_snapshot is not None:
                 rapport_data = world_snapshot.to_rapport_dict()
                 res = world_snapshot.self_resources
@@ -194,11 +196,26 @@ class SelfDialogueEngine:
                 raw_text=raw_text,
                 text_length=len(raw_text),
                 rapport_label=rapport_data.get("relationship", ""),
-                fondness=rapport_data.get("affection", 0.0),
-                credence=rapport_data.get("trust_value", 0.0),
+                fondness=get_relation_number(
+                    rapport_data,
+                    "affection",
+                    aliases=("favorability",),
+                ),
+                credence=get_relation_number(
+                    rapport_data,
+                    "trust_value",
+                    aliases=("trust_score",),
+                ),
                 mental_drain=mental_drain,
                 endurance=endurance,
-                irritation=max(irritation, rapport_data.get("annoyance_value", 0.0)),
+                irritation=max(
+                    irritation,
+                    get_relation_number(
+                        rapport_data,
+                        "annoyance_value",
+                        aliases=("annoyance",),
+                    ),
+                ),
                 wound_score=wound_score,
                 readiness=readiness,
                 chat_reserve=chat_val,
@@ -208,20 +225,40 @@ class SelfDialogueEngine:
                 subject=subject,
                 assurance=assurance_score,
                 involvement=involvement_score,
-                social_value=rapport_data.get("social_value", 0.0),
-                positive_dim=rapport_data.get("positive_dim", 0.0),
-                negative_dim=rapport_data.get("negative_dim", 0.0),
-                trust_value=rapport_data.get("trust_value", 0.0),
-                annoyance_value=rapport_data.get("annoyance_value", 0.0),
-                psychological_pressure=rapport_data.get(
-                    "psychological_pressure", 0.0
+                social_value=get_relation_number(
+                    rapport_data,
+                    "social_value",
+                    aliases=("favorability",),
                 ),
-                interaction_count=rapport_data.get("interaction_count", 0),
-                relationship_level=rapport_data.get("relationship_level", 2),
-                custom_label=rapport_data.get("custom_label", "")
-                or rapport_data.get("relationship", ""),
-                trend_direction=rapport_data.get("trend_direction", "稳定")
-                or "稳定",
+                positive_dim=get_relation_number(rapport_data, "positive_dim"),
+                negative_dim=get_relation_number(rapport_data, "negative_dim"),
+                trust_value=get_relation_number(
+                    rapport_data,
+                    "trust_value",
+                    aliases=("trust_score",),
+                ),
+                annoyance_value=get_relation_number(
+                    rapport_data,
+                    "annoyance_value",
+                    aliases=("annoyance",),
+                ),
+                psychological_pressure=get_relation_number(
+                    rapport_data,
+                    "psychological_pressure",
+                ),
+                interaction_count=int(
+                    get_relation_number(rapport_data, "interaction_count")
+                ),
+                relationship_level=int(
+                    get_relation_number(rapport_data, "relationship_level", 2)
+                ),
+                custom_label=str(
+                    rapport_data.get("custom_label", "")
+                    or rapport_data.get("relationship", "")
+                ),
+                trend_direction=str(
+                    rapport_data.get("trend_direction", "稳定") or "稳定"
+                ),
                 speaker_id=speaker_id,
                 speaker_profile_summary=str(
                     rapport_data.get("profile_summary", "") or ""

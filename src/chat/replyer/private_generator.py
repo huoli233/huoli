@@ -82,9 +82,23 @@ def _resolve_optional_reply_style() -> str:
 def _build_local_affinity_context(emo: Any, rapport: Dict[str, Any]) -> str:
     """本地好感阶段映射，替代已移除的 AffectionStageMapper。"""
     try:
-        affection = float(rapport.get("affection", getattr(emo, "affection", 0.0)) or 0.0)
-        trust_value = float(rapport.get("trust_value", getattr(emo, "trust_score", 0.0)) or 0.0)
-        annoyance = float(rapport.get("annoyance_value", getattr(emo, "annoyance", 0.0)) or 0.0)
+        from src.core.world_snapshot import get_relation_number
+
+        affection = get_relation_number(
+            rapport,
+            "affection",
+            aliases=("favorability",),
+        )
+        trust_value = get_relation_number(
+            rapport,
+            "trust_value",
+            aliases=("trust_score",),
+        )
+        annoyance = get_relation_number(
+            rapport,
+            "annoyance_value",
+            aliases=("annoyance",),
+        )
     except (TypeError, ValueError):
         affection, trust_value, annoyance = 0.0, 0.0, 0.0
     if bool(getattr(emo, "is_blocked", False)) or annoyance >= 70:

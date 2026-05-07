@@ -85,10 +85,24 @@ class ProactiveContextPromptMixin:
                 lines.append(packet_context)
 
         relation_snapshot = self._resolve_relation_view(relation_snapshot)
+        from src.core.world_snapshot import get_relation_number
+
         custom_label = str(relation_snapshot.get("custom_label", "") or "").strip()
-        social_value = float(relation_snapshot.get("social_value", 0.0) or 0.0)
-        trust_value = float(relation_snapshot.get("trust_value", 0.0) or 0.0)
-        annoyance_value = float(relation_snapshot.get("annoyance_value", 0.0) or 0.0)
+        social_value = get_relation_number(
+            relation_snapshot,
+            "social_value",
+            aliases=("favorability",),
+        )
+        trust_value = get_relation_number(
+            relation_snapshot,
+            "trust_value",
+            aliases=("trust_score",),
+        )
+        annoyance_value = get_relation_number(
+            relation_snapshot,
+            "annoyance_value",
+            aliases=("annoyance",),
+        )
         relation_bits: List[str] = []
         if custom_label:
             relation_bits.append(f"关系={custom_label}")

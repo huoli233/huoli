@@ -617,7 +617,7 @@ class ChatCoreBase:
         pressure = 0.0
         trauma = 0.0
         try:
-            from src.core.world_snapshot import build_relation_rapport_snapshot
+            from src.core.world_snapshot import build_relation_rapport_snapshot, get_relation_number
 
             rapport = build_relation_rapport_snapshot(
                 channel_id=self.stream_id,
@@ -628,11 +628,19 @@ class ChatCoreBase:
                 or rapport.get("custom_label", "")
                 or "普通"
             )
-            trust_value = float(rapport.get("trust_value", 0.0) or 0.0)
-            annoyance_value = float(rapport.get("annoyance_value", 0.0) or 0.0)
-            affection = float(rapport.get("affection", 0.0) or 0.0)
-            pressure = float(rapport.get("psychological_pressure", 0.0) or 0.0)
-            trauma = float(rapport.get("trauma_score", 0.0) or 0.0)
+            trust_value = get_relation_number(
+                rapport,
+                "trust_value",
+                aliases=("trust_score",),
+            )
+            annoyance_value = get_relation_number(
+                rapport,
+                "annoyance_value",
+                aliases=("annoyance",),
+            )
+            affection = get_relation_number(rapport, "affection")
+            pressure = get_relation_number(rapport, "psychological_pressure")
+            trauma = get_relation_number(rapport, "trauma_score")
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 统一关系快照读取失败，使用默认值: {exc}")
         style_hints: List[str] = []

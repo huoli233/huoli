@@ -567,13 +567,26 @@ class LoopResourceFeedbackMixin:
             if _nick and len(user_id) > 16:
                 user_id = f"{self.stream_id}_{_nick[:12]}"
             self._last_user_id = user_id
+            from src.core.world_snapshot import get_relation_number
+
             context = {
                 "channel_id": self.stream_id,
                 "interaction_type": "bot_reply",
-                "current_social": relation_result.get("social_value", 0.0),
-                "current_trust": relation_result.get("trust_value", 0.0),
-                "trauma_score": float(relation_result.get("trauma_score", 0.0) or 0.0),
-                "psychological_pressure": float(relation_result.get("psychological_pressure", 0.0) or 0.0),
+                "current_social": get_relation_number(
+                    relation_result,
+                    "social_value",
+                    aliases=("favorability",),
+                ),
+                "current_trust": get_relation_number(
+                    relation_result,
+                    "trust_value",
+                    aliases=("trust_score",),
+                ),
+                "trauma_score": get_relation_number(relation_result, "trauma_score"),
+                "psychological_pressure": get_relation_number(
+                    relation_result,
+                    "psychological_pressure",
+                ),
             }
             if behavior_signal:
                 _behavior_payload = {

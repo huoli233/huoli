@@ -1173,7 +1173,12 @@ class SceneBotLifecycleMixin:
                     thinking_factor * 0.4 + chat_factor * 0.25 + activity_factor * 0.2 + social_factor * 0.15,
                 ),
             )
-            pressure = float(relation_result.get("psychological_pressure", 0.0) or 0.0)
+            from src.core.world_snapshot import get_relation_number
+
+            pressure = get_relation_number(
+                relation_result,
+                "psychological_pressure",
+            )
             if pressure > 70:
                 mood = "紧绷"
             elif social_value > 30:
