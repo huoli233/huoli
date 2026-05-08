@@ -548,11 +548,39 @@ def _extract_circadian_rhythm(
     is_night = bool(summary.get("is_night", False)) or phase not in {"awake"}
 
     try:
-        import src.core.night_cycle_system as night_module
+        from src.core.night_cycle_system import get_night_cycle
 
-        instances = getattr(night_module, "_night_system_instances", {}) or {}
-        night_cycle = instances.get(channel_id) or instances.get(str(channel_id))
+        runtime_has_live_night = bool(
+            summary.get("last_evaluated_at")
+            or summary.get("system_started_at")
+            or summary.get("sync_source")
+        )
+        night_cycle = get_night_cycle(channel_id) if (not summary or runtime_has_live_night) else None
         if night_cycle is not None:
+            energy_ratio = _safe_float(
+                subject.get("energy_ratio", runtime.get("energy_ratio", 1.0)),
+                1.0,
+            )
+            boredom = _safe_float(subject.get("boredom", runtime.get("boredom", 0.0)), 0.0)
+            activity_level = _safe_float(
+                runtime.get("activity_level", runtime.get("scene_heat", 50.0)),
+                50.0,
+            )
+            social_stimulus = _safe_float(
+                runtime.get("social_stimulus", runtime.get("social_desire", 0.0)),
+                0.0,
+            )
+            consecutive_active_minutes = _safe_float(
+                runtime.get("consecutive_active_minutes", 0.0),
+                0.0,
+            )
+            night_cycle.evaluate_current(
+                energy_ratio=energy_ratio,
+                activity_level=activity_level,
+                boredom=boredom,
+                social_stimulus=social_stimulus,
+                consecutive_active_minutes=consecutive_active_minutes,
+            )
             behavior = night_cycle.night_behavior_summary()
             state = night_cycle.state_snapshot
             phase = _normalize_night_phase(behavior.get("phase", phase))

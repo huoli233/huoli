@@ -337,3 +337,27 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
 - 本轮提交只应包含快回超时、夜间机制窗口、状态页展示、配置模板、回归脚本和 dashboard dist 构建资产；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T03:13:00+08:00 - Task: 发送后巡查阻塞与夜间状态持久化修复
+
+### What was done:
+- 将 `_finalize_sent_reply()` 里的发送后 focus 巡查改为后台任务，不再 `await` 后置 LLM 审查，避免消息已发送后主循环继续被网络错误拖到几十秒。
+- 为发送后 focus 巡查增加 `heartfc_post_send_focus_audit_timeout_seconds=2.0` 独立预算，并纳入配置模板、配置分级可编辑键和配置回归。
+- 给 `NightCycleSystem` 增加 JSON 持久化，按会话保存到 `data/night_cycle_state/<channel>.json`，重启后恢复困意、睡眠债、睡眠储备、熬夜压力和分项压力等状态。
+- 状态导出在没有实时缓存或缓存来自真实夜间运行态时，会通过 `get_night_cycle(channel_id).evaluate_current()` 按当前时间推进一次评估，避免状态页只读到默认零值。
+- 运行集成缓存补齐 `mechanism_windows`、睡眠/压力窗口、同步时间和同步来源，避免前端缺少“状态从哪里同步”的解释。
+- 回归脚本补充发送后巡查非阻塞、夜间状态持久化、导出前实时评估和测试持久化文件清理契约。
+
+### Testing:
+- `.venv\Scripts\ruff.exe check src\core\night_cycle_system.py src\chat\heart_flow\enhanced_modules\interaction_core_mixin.py src\chat\heart_flow\heartfc_state_exporter.py src\chat\heart_flow\enhanced_modules\runtime_integration_lifecycle_mixin.py scripts\heartflow_state_regression.py scripts\config_profile_regression.py` 通过。
+- `.venv\Scripts\python.exe scripts\config_profile_regression.py` 通过。
+- `.venv\Scripts\python.exe scripts\heartflow_state_regression.py` 通过，`persistent_night_state=true`。
+- `.venv\Scripts\python.exe -m compileall src scripts` 通过。
+- `.venv\Scripts\python.exe scripts\webui_smoke_test.py` 通过，HTTP 81 项 ok，状态监控 WebSocket public/token/cookie 均 ok。
+- `npm run build` 在 `web/dashboard` 通过。
+- 临时 WebUI + Chrome headless 生成状态页截图 `C:\Users\mcpex\AppData\Local\Temp\huoli-dashboard-night-state.png`，构建产物中确认存在“夜间状态 / 当前时段 / 状态同步 / 社交窗口”，无“产业节律 / 昼夜节律”。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 本轮只应提交 `.dark-factory/progress.txt`、配置/模板、HeartFlow 回归脚本、配置回归脚本、`interaction_core_mixin.py`、`runtime_integration_lifecycle_mixin.py`、`heartfc_state_exporter.py`、`night_cycle_system.py`。
+- 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。

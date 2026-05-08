@@ -1,14 +1,23 @@
+import json
 import time
 import math
 import random
 from enum import Enum
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, fields
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from src.common.logger import get_logger
 
 logger = get_logger("夜间状态")
 
 _night_system_instances: Dict[str, "NightCycleSystem"] = {}
+_PERSIST_DIR = Path("data/night_cycle_state")
+_PERSIST_VERSION = 1
+
+
+def _safe_state_filename(channel_id: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in str(channel_id or "default"))
+    return f"{safe[:96] or 'default'}.json"
 
 # ──────────────────────────────────────────────
 #  ACFN级数学工具库（数值稳定/有界输出）
@@ -499,6 +508,9 @@ class NightCycleSystem:
         self._dawn_recover_start = 4
         self._reflection_build_rate = 0.1
         self._social_energy_decay = 0.05
+        self._persist_path = _PERSIST_DIR / _safe_state_filename(channel_id)
+        self._last_persist_at = 0.0
+        self._load_persisted_state()
 
     @property
     def phase(self) -> NightPhase:
@@ -507,6 +519,110 @@ class NightCycleSystem:
     @property
     def state_snapshot(self) -> NightCycleState:
         return self._state
+
+    def _serialize_state(self) -> Dict[str, Any]:
+        payload = asdict(self._state)
+        payload["current_phase"] = self._state.current_phase.value
+        return payload
+
+    def _load_persisted_state(self) -> None:
+        try:
+            if not self._persist_path.exists():
+                return
+            raw = json.loads(self._persist_path.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                return
+            if int(raw.get("version", 0) or 0) != _PERSIST_VERSION:
+                return
+            state_payload = raw.get("state", {})
+            if not isinstance(state_payload, dict):
+                return
+            valid_names = {item.name for item in fields(NightCycleState)}
+            restored = NightCycleState()
+            for key, value in state_payload.items():
+                if key not in valid_names:
+                    continue
+                if key == "current_phase":
+                    try:
+                        value = NightPhase(str(value or NightPhase.AWAKE.value))
+                    except ValueError:
+                        value = NightPhase.AWAKE
+                elif key in {"pressure_history", "cost_history", "recovery_history"} and isinstance(value, dict):
+                    restored_history: Dict[float, float] = {}
+                    for raw_key, raw_value in value.items():
+                        try:
+                            restored_history[float(raw_key)] = float(raw_value)
+                        except (TypeError, ValueError):
+                            continue
+                    value = restored_history
+                elif key == "active_buffs" and isinstance(value, dict):
+                    value = {
+                        str(buff_key): dict(buff_value)
+                        for buff_key, buff_value in value.items()
+                        if isinstance(buff_value, dict)
+                    }
+                elif key == "sensitive_topic_tags" and isinstance(value, dict):
+                    restored_tags: Dict[str, int] = {}
+                    for raw_key, raw_value in value.items():
+                        try:
+                            restored_tags[str(raw_key)] = int(raw_value)
+                        except (TypeError, ValueError):
+                            continue
+                    value = restored_tags
+                setattr(restored, key, value)
+            if restored.system_started_at <= 0:
+                restored.system_started_at = time.time()
+            self._state = restored
+            self._last_persist_at = time.time()
+            logger.debug(f"[夜间节律] {self._channel_id} 已恢复持久化状态")
+        except Exception as exc:
+            logger.debug(f"[夜间节律] {self._channel_id} 恢复持久化状态失败: {exc}")
+
+    def persist_state(self, *, force: bool = False) -> None:
+        now = time.time()
+        if not force and now - self._last_persist_at < 5.0:
+            return
+        try:
+            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "version": _PERSIST_VERSION,
+                "channel_id": self._channel_id,
+                "saved_at": now,
+                "state": self._serialize_state(),
+            }
+            self._persist_path.write_text(
+                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+                encoding="utf-8",
+            )
+            self._last_persist_at = now
+        except Exception as exc:
+            logger.debug(f"[夜间节律] {self._channel_id} 持久化状态失败: {exc}")
+
+    def evaluate_current(
+        self,
+        *,
+        energy_ratio: float = 1.0,
+        activity_level: float = 50.0,
+        boredom: float = 0.0,
+        social_stimulus: float = 0.0,
+        consecutive_active_minutes: float = 0.0,
+        force: bool = False,
+    ) -> NightPhase:
+        """按当前时间推进一次实时评估，供状态导出和重启恢复后校准。"""
+        if (
+            not force
+            and self._state.last_evaluated_at > 0
+            and time.time() - self._state.last_evaluated_at <= 5.0
+        ):
+            return self._state.current_phase
+        return self.evaluate(
+            energy_ratio=energy_ratio,
+            activity_level=activity_level,
+            boredom=boredom,
+            social_stimulus=social_stimulus,
+            consecutive_active_minutes=consecutive_active_minutes,
+            current_hour=time.localtime().tm_hour,
+        )
 
     def resolve_time_band(self, hour: Optional[int] = None) -> Dict[str, Any]:
         """返回当前展示用时间段，驱动窗口仍以夜间机制配置为准。"""
@@ -831,6 +947,7 @@ class NightCycleSystem:
                 100.0, self._state.sleep_debt + _debt_rate
             )
             self._state.debt_accumulated_at = now
+        self.persist_state()
         return self._state.current_phase
 
     def stimulus_wake(self, strength: float = 1.0) -> bool:
@@ -1444,6 +1561,8 @@ class NightCycleSystem:
 
     def night_behavior_summary(self) -> Dict[str, Any]:
         """返回完整夜间行为约束字典，供主链和面板消费（增强版：含三维引擎数据）"""
+        if self._state.last_evaluated_at <= 0:
+            self.evaluate_current()
         s = self._state
         phase = s.current_phase
         debt = self.sleep_debt()
@@ -1548,6 +1667,7 @@ class NightCycleSystem:
                 1 for _ in range(min(3, s.pressure_interrupt_count))
             )
             s.total_overnight_pressure += recent_count * 0.15 * intensity
+        self.persist_state()
         self._recalc_total_pressure()
 
     def _recalc_total_pressure(self) -> None:
@@ -3671,4 +3791,6 @@ def get_night_cycle(channel_id: str) -> NightCycleSystem:
 
 
 def remove_night_cycle(channel_id: str) -> None:
-    _night_system_instances.pop(channel_id, None)
+    instance = _night_system_instances.pop(channel_id, None)
+    if instance is not None:
+        instance.persist_state(force=True)

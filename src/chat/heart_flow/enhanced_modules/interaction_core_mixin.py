@@ -237,6 +237,29 @@ class EnhancedInteractionCoreMixin:
             action_name=action_name,
             quality=quality,
         )
+        self._spawn(
+            self._post_finalize_focus_audit(
+                reply_text=reply_text,
+                audit_label=audit_label,
+                relation_view=relation_view,
+            ),
+            name=f"post_finalize_focus_audit_{audit_label}",
+        )
+        try:
+            from src.memory_system.memory_retrieval import invalidate_memory_cache
+
+            invalidate_memory_cache(self.stream_id)
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 清除记忆缓存异常: {exc}")
+
+    async def _post_finalize_focus_audit(
+        self,
+        *,
+        reply_text: str,
+        audit_label: str,
+        relation_view: Dict[str, Any],
+    ) -> None:
+        """发送后巡查只能做后台提示，不能阻塞本轮回复结算。"""
         try:
             from src.chat.heart_flow.skills.focus_patrol import acquire_focus_patrol
 
@@ -244,20 +267,20 @@ class EnhancedInteractionCoreMixin:
                 f"{audit_label} annoyance={relation_view.get('annoyance_value', 0)} "
                 f"pressure={relation_view.get('psychological_pressure', 0)}"
             )
-            _need_audit, _audit_reason = await acquire_focus_patrol().audit_high_risk_reply(
-                reply_text,
-                risk_note=_risk_note,
+            _timeout = max(0.5, _rt_float("heartfc_post_send_focus_audit_timeout_seconds", 2.0))
+            _need_audit, _audit_reason = await asyncio.wait_for(
+                acquire_focus_patrol().audit_high_risk_reply(
+                    reply_text,
+                    risk_note=_risk_note,
+                ),
+                timeout=_timeout,
             )
             if _need_audit:
                 logger.info(f"{self.log_prefix} 🔍 发送后审查提示({audit_label}): {_audit_reason}")
+        except asyncio.TimeoutError:
+            logger.debug(f"{self.log_prefix} {audit_label}回复后台巡查超时，已放弃本轮审查")
         except Exception as _audit_exc:
-            logger.debug(f"{self.log_prefix} {audit_label}回复审查异常: {_audit_exc}")
-        try:
-            from src.memory_system.memory_retrieval import invalidate_memory_cache
-
-            invalidate_memory_cache(self.stream_id)
-        except Exception as exc:
-            logger.debug(f"{self.log_prefix} 清除记忆缓存异常: {exc}")
+            logger.debug(f"{self.log_prefix} {audit_label}回复后台巡查异常: {_audit_exc}")
 
     async def _send_and_store_reply(
         self,
@@ -1729,9 +1752,13 @@ class EnhancedInteractionCoreMixin:
                     audit_label=audit_label,
                 )
             try:
-                _, flagged, reason = await _patrol.review_before_send(
-                    original_text,
-                    risk_note=risk_note,
+                _timeout = max(0.5, _rt_float("heartfc_post_send_focus_audit_timeout_seconds", 2.0))
+                _, flagged, reason = await asyncio.wait_for(
+                    _patrol.review_before_send(
+                        original_text,
+                        risk_note=risk_note,
+                    ),
+                    timeout=_timeout,
                 )
             finally:
                 if hasattr(_patrol, "clear_review_context"):
@@ -1741,6 +1768,8 @@ class EnhancedInteractionCoreMixin:
                     f"{self.log_prefix} ⚠️ 发送后LLM审查发现风险({audit_label}): "
                     f"{reason[:80]} | 内容: {original_text[:60]}"
                 )
+        except asyncio.TimeoutError:
+            logger.debug(f"{self.log_prefix} 发送后LLM审查超时({audit_label})，已放弃本轮审查")
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 发送后LLM审查异常({audit_label}): {exc}")
 

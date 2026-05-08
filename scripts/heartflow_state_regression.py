@@ -30,6 +30,7 @@ from src.core.content_state_tracker import (
     get_content_state_tracker,
 )
 from src.core.impression_evolution_hub import get_impression_hub, remove_impression_hub
+from src.core.night_cycle_system import NightCycleSystem, remove_night_cycle
 from src.core.unified_planner import PlanningContext, UnifiedPlanner
 from src.core.world_snapshot import (
     build_relation_rapport_snapshot,
@@ -692,14 +693,22 @@ def check_night_status_label_contract() -> Dict[str, Any]:
     assert 'NightPhase.MIDNIGHT_REFLECT: "凌晨阶段"' in night_source
     assert "def resolve_time_band" in night_source
     assert "def mechanism_windows" in night_source
+    assert "def persist_state" in night_source
+    assert "_load_persisted_state" in night_source
+    assert "data/night_cycle_state" in night_source
     assert "is_night=clock_is_night" in night_source
     assert "self._state.in_night_mode = clock_is_night" in night_source
     assert "self._state.last_stimulus_at = now" in night_source
+    assert "get_night_cycle(channel_id)" in exporter_source
+    assert "runtime_has_live_night" in exporter_source
+    assert "evaluate_current(" in exporter_source
     assert '"late_night", "半夜", "睡眠窗口开始"' in night_source
     assert '"midnight", "凌晨", "凌晨反思窗口"' in night_source
     assert "_ncs.evaluate(" in runtime_source
     assert "record_overnight_activity(\"peek\"" in runtime_source
     assert "record_overnight_activity(\"interrupt\"" in runtime_source
+    assert '"last_evaluated_at"' in runtime_source
+    assert '"mechanism_windows"' in runtime_source
     assert '"pressure_breakdown"' in exporter_source
     assert '"mechanism_windows"' in exporter_source
     assert '"last_evaluated_at"' in exporter_source
@@ -770,10 +779,60 @@ def check_night_status_label_contract() -> Dict[str, Any]:
     assert exported["is_pressure_window"] is True
     assert exported["mechanism_windows"]["sleep_window"]["active"] is True
     assert exported["pressure_breakdown"]["chat_minutes"] == 9
+    direct_exported = _extract_circadian_rhythm(
+        "regression-night-created",
+        {},
+        {"energy_ratio": 0.45, "boredom": 0.0},
+    )
+    direct_state_path = ROOT / "data" / "night_cycle_state" / "regression-night-created.json"
+    try:
+        assert direct_exported["last_evaluated_at"] > 0
+        assert direct_exported["system_started_at"] > 0
+        assert direct_exported["mechanism_windows"]
+    finally:
+        remove_night_cycle("regression-night-created")
+        if direct_state_path.exists():
+            direct_state_path.unlink()
+    persistent = NightCycleSystem("regression-night-persist")
+    old_path = persistent._persist_path
+    try:
+        persistent._persist_path = ROOT / ".dark-factory" / "night_cycle_regression_state.json"
+        if persistent._persist_path.exists():
+            persistent._persist_path.unlink()
+        persistent._last_persist_at = 0.0
+        persistent.evaluate(
+            energy_ratio=0.25,
+            activity_level=70.0,
+            boredom=40.0,
+            social_stimulus=0.2,
+            consecutive_active_minutes=180.0,
+            current_hour=2,
+        )
+        persistent.record_overnight_activity("chat", 0.8)
+        saved_debt = persistent.state_snapshot.sleep_debt
+        saved_chat_pressure = persistent.state_snapshot.pressure_chat_minutes
+        persistent.persist_state(force=True)
+        restored = NightCycleSystem("regression-night-persist")
+        restored_path = restored._persist_path
+        restored._persist_path = persistent._persist_path
+        restored._load_persisted_state()
+        assert restored.state_snapshot.last_evaluated_at > 0
+        assert restored.state_snapshot.sleep_debt >= saved_debt
+        assert restored.state_snapshot.pressure_chat_minutes >= saved_chat_pressure
+        restored._persist_path = restored_path
+    finally:
+        persistent._persist_path = old_path
+        if (ROOT / ".dark-factory" / "night_cycle_regression_state.json").exists():
+            (ROOT / ".dark-factory" / "night_cycle_regression_state.json").unlink()
+        remove_night_cycle("regression-night-persist")
+        persisted_default_path = ROOT / "data" / "night_cycle_state" / "regression-night-persist.json"
+        if persisted_default_path.exists():
+            persisted_default_path.unlink()
     return {
         "night_labels": True,
         "midnight_phase_label": detail["phase_label"],
         "time_band_label": exported["time_band_label"],
+        "persistent_night_state": True,
     }
 
 
@@ -983,6 +1042,9 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     flow_source = (ROOT / "src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py").read_text(
         encoding="utf-8"
     )
+    interaction_source = (ROOT / "src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py").read_text(
+        encoding="utf-8"
+    )
     loop_source = (ROOT / "src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py").read_text(
         encoding="utf-8"
     )
@@ -994,6 +1056,10 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
     assert "heartfc_force_reply_generation_timeout_seconds" in flow_source
     assert "heartfc_direct_fast_reply_generation_timeout_seconds" in flow_source
+    assert "heartfc_post_send_focus_audit_timeout_seconds" in interaction_source
+    assert "_post_finalize_focus_audit" in interaction_source
+    assert "asyncio.wait_for" in interaction_source
+    assert "回复后台巡查超时" in interaction_source
     assert "direct_fast_reply_generation_timeout" in flow_source
     assert "强制回复生成失败，已启用本地短兜底" in flow_source
     assert "_is_direct_reply_fastlane = bool(_is_admin_force_wake or getattr(self, \"_cached_targeted_to_bot\", False))" in loop_source
