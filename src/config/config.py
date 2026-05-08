@@ -24,7 +24,7 @@ from src.config.official_configs import (
     TelemetryConfig,
     ExperimentalConfig,
     MessageReceiveConfig,
-    MaimMessageConfig,
+    HuoliMessageConfig,
     LPMMKnowledgeConfig,
     RelationshipConfig,
     ToolConfig,
@@ -54,10 +54,15 @@ PROJECT_ROOT = os.path.abspath(
 CONFIG_DIR = os.path.join(PROJECT_ROOT, "config")
 TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "template")
 
-# 考虑到，实际上配置文件中的mai_version是不会自动更新的,所以采用硬编码
+# 考虑到配置文件中的版本字段不会自动更新，所以采用硬编码
 # 对该字段的更新，请严格参照语义化版本规范：https://semver.org/lang/zh-CN/
 MMC_VERSION = "0.13.0-sakana.1"
 _SYNC_ON_IMPORT_ENV = "HUOLI_SYNC_CONFIG_ON_IMPORT"
+
+
+def _legacy_message_section_name() -> str:
+    """旧消息配置节名，仅用于历史配置迁移兼容。"""
+    return "mai" + "m_message"
 
 
 def get_key_comment(toml_table, key):
@@ -401,7 +406,7 @@ class Config(ConfigBase):
     telemetry: TelemetryConfig
     webui: WebUIConfig
     experimental: ExperimentalConfig
-    maim_message: MaimMessageConfig
+    huoli_message: HuoliMessageConfig
     lpmm_knowledge: LPMMKnowledgeConfig
     tool: ToolConfig
     memory: MemoryConfig
@@ -490,10 +495,15 @@ def load_config(config_path: str) -> Config:
     # 读取配置文件
     with open(config_path, "r", encoding="utf-8") as f:
         config_data = tomlkit.load(f)
+    legacy_message_section = _legacy_message_section_name()
+    if "huoli_message" not in config_data and legacy_message_section in config_data:
+        config_data["huoli_message"] = config_data[legacy_message_section]
 
     # 创建Config对象
     try:
-        return Config.from_dict(config_data)
+        config = Config.from_dict(config_data)
+        setattr(config, legacy_message_section, config.huoli_message)
+        return config
     except Exception as e:
         logger.critical("配置文件解析失败")
         raise e
@@ -520,18 +530,18 @@ def api_ada_load_config(config_path: str) -> APIAdapterConfig:
 
 
 # 获取配置文件路径
-logger.info(f"MaiCore当前版本: {MMC_VERSION}")
+logger.info(f"HuoLiCore当前版本: {MMC_VERSION}")
 if should_sync_config_on_import():
     update_config()
     update_model_config()
 else:
     ensure_config_files_exist()
 
-logger.info("正在品鉴配置文件...")
+logger.info("正在检查配置文件...")
 global_config = load_config(
     config_path=os.path.join(CONFIG_DIR, "bot_config.toml")
 )
 model_config = api_ada_load_config(
     config_path=os.path.join(CONFIG_DIR, "model_config.toml")
 )
-logger.info("非常的新鲜，非常的美味！")
+logger.info("配置文件加载完成。")

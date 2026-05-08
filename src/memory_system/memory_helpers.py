@@ -2,7 +2,7 @@ import re
 import time
 import math
 from collections import Counter
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from src.common.logger import get_logger
 
 logger = get_logger("recall_toolkit")
@@ -12,7 +12,7 @@ logger = get_logger("recall_toolkit")
 
 
 class RecordLifeStage:
-    """记忆条目寿命阶段（6级体系，与MaiBot MemoryAgeLevel完全不同的命名）"""
+    """记忆条目寿命阶段（6级体系）"""
 
     NASCENT = "nascent"
     INTRADAY = "intraday"
@@ -41,7 +41,7 @@ STAGE_SHARPNESS_FLOOR = {
     RecordLifeStage.ARCHAIC: 0.18,
 }
 
-# 停用词表（XBcore风格，排除高频无意义token）
+# 停用词表，排除高频无意义 token
 _STOP_TOKENS = frozenset(
     {
         "的",
@@ -95,7 +95,7 @@ _SPLIT_ANCHORS = ("大家在聊", "今天在聊", "有人提到", "还有", "以
 def harvest_terms(raw_text: str, ceiling: int = 10) -> List[str]:
     """从文本中提取关键词列表
 
-    融合XBcore的加权评分和MaiBot的简单提取，采用权重计数器实现。
+    使用加权评分和简单提取，采用权重计数器实现。
     中英文混合分词 + 停用词过滤 + 长度优先。
     """
     if not raw_text:
@@ -319,7 +319,7 @@ def _tokenize_mixed(normalized: str) -> List[str]:
 
 
 def _split_long_chinese(chunk: str) -> List[str]:
-    """将长中文片段拆分为较短的子片段（XBcore风格的ngram+分割标记）"""
+    """将长中文片段拆分为较短的子片段（ngram + 分割标记）"""
     segments = re.split(f"({'|'.join(_SPLIT_ANCHORS)})", chunk)
     candidates: List[str] = []
     for seg in segments:
@@ -366,7 +366,7 @@ def compute_weighted_relevance(
     summary: str = "",
     tag_list: Optional[List[str]] = None,
 ) -> float:
-    """多因子加权相关性评分（融合XBcore的8因子模型）
+    """多因子加权相关性评分（8因子模型）
 
     因子权重分配：
     - 加权token重叠: 40%
@@ -459,7 +459,7 @@ def _compute_phrase_bonus(left_keys: set, right_keys: set) -> float:
     return bonus
 
 
-# ==================== 短别名（对标MaiBot接口） ====================
+# ==================== 短别名（兼容旧接口） ====================
 
 extract_keywords = harvest_terms
 calculate_relevance_score = gauge_overlap_ratio

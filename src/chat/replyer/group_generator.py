@@ -70,6 +70,52 @@ init_memory_retrieval_prompt()
 logger = get_logger("回复生成器")
 
 
+def _contains_sleep_denial(text: str) -> bool:
+    payload = str(text or "").strip()
+    if not payload:
+        return False
+    return any(
+        marker in payload
+        for marker in (
+            "不太困",
+            "不困",
+            "还好",
+            "没困",
+            "不怎么困",
+            "想再聊会",
+            "再聊会",
+        )
+    )
+
+
+def _night_state_is_sleepy(extra_info: str) -> bool:
+    payload = str(extra_info or "")
+    if not payload:
+        return False
+    if any(marker in payload for marker in ("清晨刚醒", "半醒", "熬夜压力", "夜间语气约束")):
+        return True
+    pressure_match = re.search(r"熬夜压力[=＝:：]?(\d+(?:\.\d+)?)", payload)
+    if pressure_match:
+        try:
+            if float(pressure_match.group(1)) >= 60:
+                return True
+        except ValueError:
+            pass
+    half_match = re.search(r"半醒[=＝:：]?(\d+(?:\.\d+)?)", payload)
+    if half_match:
+        try:
+            if float(half_match.group(1)) >= 0.35:
+                return True
+        except ValueError:
+            pass
+    return False
+
+
+def _target_asks_sleep(reply_message: Optional[DatabaseMessages]) -> bool:
+    text = str(getattr(reply_message, "processed_plain_text", "") or getattr(reply_message, "display_message", "") or "")
+    return any(marker in text for marker in ("困吗", "不困", "睡不睡", "还醒", "熬夜", "没睡"))
+
+
 def _is_valid_unknown_word_candidate(word: str) -> bool:
     text = str(word or "").strip()
     if not text:
@@ -1071,6 +1117,11 @@ class DefaultReplyer:
                         reply_reason=reply_reason or "",
                         reply_style_context=reply_style_context,
                     )
+                content = self._apply_sleepy_fast_reply_guard(
+                    content=content or "",
+                    extra_info=extra_info,
+                    reply_message=reply_message,
+                )
 
                 llm_response.content = content
                 llm_response.reasoning = reasoning_content
@@ -2892,7 +2943,13 @@ class DefaultReplyer:
                 reply_reason,
                 low_info_input=False,
             )
-            fast_behavioral_directive = "直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
+            sleepy_guard = ""
+            if _night_state_is_sleepy(extra_info) or _target_asks_sleep(reply_message):
+                sleepy_guard = "当前有清晨半醒或熬夜压力，问困不困时必须承认困/刚醒/脑子慢，禁止说不困、还好、想再聊会。"
+            fast_behavioral_directive = (
+                "直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
+                f"{sleepy_guard}"
+            )
             prompt = get_group_responder_prompt(
                 think_level=think_level,
                 expression_habits_block="",
@@ -3553,6 +3610,30 @@ class DefaultReplyer:
             return content
         except Exception:
             return content
+
+    @staticmethod
+    def _apply_sleepy_fast_reply_guard(
+        *,
+        content: str,
+        extra_info: str,
+        reply_message: Optional[DatabaseMessages],
+    ) -> str:
+        """清晨半醒/熬夜压力下拦截“不困”类反向回复。"""
+        text = str(content or "").strip()
+        if not text:
+            return text
+        if not (_night_state_is_sleepy(extra_info) or _target_asks_sleep(reply_message)):
+            return text
+        if not _contains_sleep_denial(text):
+            return text
+        raw_target = str(
+            getattr(reply_message, "processed_plain_text", "")
+            or getattr(reply_message, "display_message", "")
+            or ""
+        )
+        if any(marker in raw_target for marker in ("困吗", "不困", "睡不睡", "还醒", "熬夜", "没睡")):
+            return "困，脑子还没完全醒。"
+        return "有点困，反应慢半拍。"
 
     async def _apply_rewrite_if_needed(
         self,

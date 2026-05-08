@@ -188,9 +188,12 @@ def audit_reasoning_effort_policy() -> dict[str, Any]:
     )
     explicit_params = request._effective_extra_params(explicit_model)
     assert explicit_params["reasoning_effort"] == "low"
+    utils_source = (ROOT / "src/llm_models/utils_model.py").read_text(encoding="utf-8")
+    assert '"minimal": "low"' in utils_source
     return {
         "default_suppress_reasoning_uses_prompt_guard": True,
         "minimal_effort_mapped_to": explicit_params["reasoning_effort"],
+        "minimal_effort_not_sent_raw": True,
     }
 
 

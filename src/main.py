@@ -89,10 +89,10 @@ class MainSystem:
 --------------------------------
 全部系统初始化完成，{global_config.bot.nickname}已成功唤醒
 --------------------------------
-如果想要自定义{global_config.bot.nickname}的功能,请查阅项目文档
-或者遇到了问题，请查看配置文件和日志
+如果想要自定义{global_config.bot.nickname}的功能，请查阅 HuoLiCore 项目文档
+如果遇到了问题，请查看配置文件和日志
 --------------------------------
-如果你想要编写或了解插件相关内容，请查看插件开发文档
+如果你想要编写或了解插件相关内容，请查看 HuoLiCore 插件文档
 --------------------------------
 如果你需要查阅模型的消耗以及统计数据，请访问根目录的huoli_statistics.html文件
 --------------------------------
@@ -164,7 +164,7 @@ class MainSystem:
         # logger.info("已触发 ON_START 事件")
         try:
             init_time = int(1000 * (time.time() - init_start_time))
-            logger.info(f"初始化完成，神经元放电{init_time}次")
+            logger.info(f"初始化完成，耗时{init_time}秒")
         except Exception as e:
             logger.error(f"启动大脑和外部世界失败: {e}")
             raise

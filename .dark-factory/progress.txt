@@ -561,3 +561,29 @@
 - 本轮严格移除的是运行态持久化 JSON 文件；API JSON payload、DB 字段内结构化序列化、插件 `_manifest.json`、前端 `package.json` 等协议/配置格式不属于运行态状态文件，不能硬删。
 - 删除前保留分支：`preserve/full-modules-json状态文件移除`；实际删除分支：`delete/json状态文件移除`。
 - 工作区内已有 `.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`、`src/memory_system/memory_consolidator.py` 修改不属于本轮提交，已避免暂存。
+
+## 2026-05-09T07:43:30+08:00 - Task: 清理虚假 WebUI 本地聊天室、夜间快回复读和旧命名残留
+
+### What was done:
+- 停用 WebUI 默认 `webui_local_chat` 本地聊天室：WebSocket 管理连接不再创建聊天流、不再预热 HeartFlow、不再加载默认本地历史；未选择真实/虚拟身份时发送消息会返回明确错误。
+- ChatManager 启动加载时会清理旧 WebUI 内部聊天流和消息残留，HeartFlow 启动全量预热跳过 WebUI 内部/虚拟会话，只预热真实平台聊天流。
+- 修复快回灵魂数据判定：夜间/清晨身体状态必须单独注入，不能被“当前心理状态=平静/烦躁”误判为已具备夜间状态。
+- 为“你不困吗”等睡眠问题增加快回语气硬约束和生成后兜底，清晨半醒/熬夜压力高时不再输出“不太困，想再聊会儿”。
+- 将用户可见配置段从 `[maim_message]` 迁移到 `[huoli_message]`，加载层保留旧节名内部兼容；启动日志改为 `HuoLiCore当前版本`、`正在检查配置文件`、`配置文件加载完成`。
+- 清理源码与配置中的 MaiCore/MaiBot/MIMiaoCore/XBcore/麦麦等旧命名残留，替换为 HuoLiCore/活力或中性实现说明。
+- 补充回归契约，覆盖 WebUI 本地聊天室禁用、夜间快回不否认困意、HuoLi 命名扫描、reasoning_effort minimal 映射。
+
+### Testing:
+- `uv run ruff check ...` 覆盖本轮触及源码与脚本，通过。
+- `uv run python scripts/model_runtime_audit.py` 通过，确认 `json_file_count=0`、工具定义无重复、`minimal_effort_mapped_to=low`。
+- `uv run python scripts/config_profile_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `webui_internal_chat_disabled=true`、`fast_reply_sleep_denial_guard=true`、`huoli_naming` 扫描 474 个文件通过。
+- `uv run python -m compileall src scripts` 通过，使用临时 `PYTHONPYCACHEPREFIX`，未在项目树生成 `__pycache__`。
+- `git diff --check` 通过。
+- `rg --files data -g "*.json"` 无结果，确认 data 目录仍无 JSON。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 删除前保留分支：`preserve/full-modules-虚假本地聊天室与Mai命名清理`；实际删除分支：`delete/虚假本地聊天室与Mai命名清理`。
+- `chat_id` 仍是稳定流 ID，不是随机新建；本轮解决的是 WebUI 管理连接伪造第二个聊天流导致的割裂。
+- 工作区内已有 `.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/` 不属于本轮提交，已避免暂存。

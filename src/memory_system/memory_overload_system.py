@@ -86,7 +86,7 @@ class BrainLoadSnapshot:
 
 @dataclass
 class CapacityThresholdProfile:
-    """容量水位阈值配置（XBcore风格配置化，而非硬编码）
+    """容量水位阈值配置（配置化，而非硬编码）
 
     每个水位有独立的记忆条数和体积上限。
     """
@@ -142,10 +142,10 @@ class CapacityPressureMonitor:
     """容量压力监控器 —— 评估记忆总量并计算各认知维度衰减系数。
 
     特色：
-    - 分段线性插值计算负载比（对标XBcore的配置化方案）
-    - 相邻水位间平滑衰减系数插值（避免MaiBot的阶梯跳变）
-    - S型曲线推导遗忘压力（替代MaiBot的线性分段）
-    - 评估缓存（45秒TTL，借鉴XBcore的60秒缓存思路）
+    - 分段线性插值计算负载比
+    - 相邻水位间平滑衰减系数插值，避免阶梯跳变
+    - S型曲线推导遗忘压力
+    - 评估缓存（45秒TTL）
     - 自适应倍率：紧急遗忘后降低阈值
     """
 
@@ -306,7 +306,7 @@ class CapacityPressureMonitor:
 
     @staticmethod
     def _derive_amnesia_pressure(ratio: float) -> float:
-        """从负载比推导遗忘压力（S型曲线替代MaiBot的线性分段）"""
+        """从负载比推导遗忘压力（S型曲线）"""
         if ratio < 0.35:
             return 0.0
         x = (ratio - 0.65) * 8.0
@@ -636,6 +636,6 @@ def discard_all_monitors() -> None:
     _executor_registry.clear()
 
 
-# 短别名（对标MaiBot接口风格）
+# 短别名（兼容旧接口风格）
 get_memory_overload_protector = acquire_pressure_monitor
 cleanup_overload_protectors = discard_all_monitors

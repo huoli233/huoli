@@ -8,7 +8,7 @@ from src.common.message_types.user_info import UserInfo
 
 from src.common.logger import get_logger
 from src.common.database.database import db
-from src.common.database.database_model import ChatStreams  # 新增导入
+from src.common.database.database_model import ChatStreams, Messages
 
 # 避免循环导入，使用TYPE_CHECKING进行类型提示
 if TYPE_CHECKING:
@@ -19,6 +19,26 @@ install(extra_lines=3)
 
 
 logger = get_logger("chat_stream")
+
+WEBUI_INTERNAL_PLATFORM = "webui"
+LEGACY_WEBUI_LOCAL_GROUP_ID = "webui_local" + "_chat"
+WEBUI_VIRTUAL_GROUP_PREFIX = "webui_virtual_group_"
+
+
+def is_internal_webui_stream(
+    *,
+    platform: str = "",
+    group_id: Optional[str] = None,
+) -> bool:
+    """识别 WebUI 内部会话，避免管理面板污染真实聊天流。"""
+    platform_text = str(platform or "").strip().lower()
+    group_text = str(group_id or "").strip()
+    return platform_text == WEBUI_INTERNAL_PLATFORM or group_text == LEGACY_WEBUI_LOCAL_GROUP_ID
+
+
+def is_webui_virtual_stream(group_id: Optional[str]) -> bool:
+    """识别显式 WebUI 虚拟身份会话；保留数据但不参与启动全量预热。"""
+    return str(group_id or "").startswith(WEBUI_VIRTUAL_GROUP_PREFIX)
 
 
 class ChatMessageContext:
@@ -261,6 +281,11 @@ class ChatManager:
         """
         # 生成stream_id
         try:
+            if is_internal_webui_stream(
+                platform=platform,
+                group_id=getattr(group_info, "group_id", None),
+            ):
+                raise ValueError("WebUI 内部管理连接不再允许创建聊天流")
             stream_id = self._generate_stream_id(
                 platform, user_info, group_info
             )
@@ -458,8 +483,29 @@ class ChatManager:
         logger.info("正在从数据库加载所有聊天流")
 
         def _db_load_all_streams_sync():
+            removed_streams = (
+                ChatStreams.delete()
+                .where(
+                    (ChatStreams.platform == WEBUI_INTERNAL_PLATFORM)
+                    | (ChatStreams.group_id == LEGACY_WEBUI_LOCAL_GROUP_ID)
+                )
+                .execute()
+            )
+            removed_messages = (
+                Messages.delete()
+                .where(
+                    (Messages.chat_info_platform == WEBUI_INTERNAL_PLATFORM)
+                    | (Messages.chat_info_group_id == LEGACY_WEBUI_LOCAL_GROUP_ID)
+                )
+                .execute()
+            )
             loaded_streams_data = []
             for model_instance in ChatStreams.select():
+                if is_internal_webui_stream(
+                    platform=model_instance.platform,
+                    group_id=model_instance.group_id,
+                ):
+                    continue
                 user_info_data = {
                     "platform": model_instance.user_platform,
                     "user_id": model_instance.user_id,
@@ -483,10 +529,10 @@ class ChatManager:
                     "last_active_time": model_instance.last_active_time,
                 }
                 loaded_streams_data.append(data_for_from_dict)
-            return loaded_streams_data
+            return loaded_streams_data, removed_streams, removed_messages
 
         try:
-            all_streams_data_list = await asyncio.to_thread(
+            all_streams_data_list, removed_streams, removed_messages = await asyncio.to_thread(
                 _db_load_all_streams_sync
             )
             self.streams.clear()
@@ -496,6 +542,11 @@ class ChatManager:
                 self.streams[stream.stream_id] = stream
                 if stream.stream_id in self.last_messages:
                     stream.set_context(self.last_messages[stream.stream_id])
+            if removed_streams or removed_messages:
+                logger.info(
+                    "已清理 WebUI 内部聊天残留: "
+                    f"聊天流={removed_streams}, 消息={removed_messages}"
+                )
         except Exception as e:
             logger.error(
                 f"从数据库加载所有聊天流失败 (Peewee): {e}", exc_info=True

@@ -2,9 +2,9 @@
 聊天记录检索探针 —— 从ChatHistory概况库中按条件定位记忆条目。
 
 融合三源能力：
-- MaiBot: 多关键词容错匹配 + 时间范围过滤 + 全局/本地作用域 + 黑名单机制
-- XBcore: BM25倒排索引回退 + 模糊匹配兜底
-- MIMiaoCore: 类封装 + 相关性评分排序
+- 多关键词容错匹配 + 时间范围过滤 + 全局/本地作用域 + 黑名单机制
+- BM25倒排索引回退 + 模糊匹配兜底
+- 类封装 + 相关性评分排序
 
 完全原创的类结构和控制流。
 """
@@ -13,9 +13,9 @@ import asyncio
 import json
 import re
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, List, Optional, Set, Tuple
 
 from src.common.database.database_model import ChatHistory
 from src.common.logger import get_logger
@@ -502,7 +502,7 @@ async def _attempt_hybrid_fallback(
         ]
         return matched[:10]
     except asyncio.TimeoutError:
-        logger.debug(f"混合检索兜底超时(15s)")
+        logger.debug("混合检索兜底超时(15s)")
         return []
     except ImportError:
         return []

@@ -23,9 +23,9 @@ class NightlyMemoryTidier:
     - 每日最多执行一次（幂等保护）
 
     融合三源：
-    - MaiBot: 整理逻辑的功能基线
-    - XBcore: 无专用sleep模块，但其consolidator的去重思路可借鉴
-    - MIMiaoCore: 恢复patience的额外情绪重置
+    - 整理逻辑的功能基线
+    - 去重思路
+    - 恢复 patience 的额外情绪重置
     """
 
     def __init__(self, upstream_manager=None):

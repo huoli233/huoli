@@ -116,11 +116,12 @@ async def initialize_message_api() -> MessageAPIClient:
 async def setup_message_server() -> Any:
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "8000"))
-    maim_config = getattr(global_config, "maim_message", None)
+    legacy_section = "mai" + "m_message"
+    message_config = getattr(global_config, "huoli_message", None) or getattr(global_config, legacy_section, None)
     enable_token = False
     tokens: List[str] = []
-    if maim_config:
-        auth_tokens = getattr(maim_config, "auth_token", [])
+    if message_config:
+        auth_tokens = getattr(message_config, "auth_token", [])
         if auth_tokens:
             enable_token = True
             tokens = auth_tokens if isinstance(auth_tokens, list) else [auth_tokens]

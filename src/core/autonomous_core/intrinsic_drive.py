@@ -1,6 +1,6 @@
 import asyncio
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.common.logger import get_logger
@@ -243,7 +243,7 @@ def assemble_urge_prompt(
 
 
 # ---------------------------------------------------------------------------
-#  群聊氛围探测（对标 MaiBot GROUP_ATMOSPHERE_SENSING）
+#  群聊氛围探测（群体氛围信号）
 # ---------------------------------------------------------------------------
 
 

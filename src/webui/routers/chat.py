@@ -1,7 +1,7 @@
-"""本地聊天室路由 - WebUI 与活力直接对话
+"""WebUI 聊天桥路由
 
 支持两种模式：
-1. WebUI 模式：使用 WebUI 平台独立身份聊天
+1. 管理面板连接：只建立 WebSocket 会话，不创建独立聊天流
 2. 虚拟身份模式：使用真实平台用户的身份，在虚拟群聊中与活力对话
 """
 
@@ -35,7 +35,7 @@ from src.webui.routers.websocket.auth import verify_ws_token
 
 logger = get_logger("WebUI聊天")
 
-router = APIRouter(prefix="/api/chat", tags=["LocalChat"])
+router = APIRouter(prefix="/api/chat", tags=["ChatBridge"])
 
 
 def require_auth(
@@ -46,8 +46,8 @@ def require_auth(
     return verify_auth_token_from_cookie_or_header(huoli_session, authorization)
 
 
-# WebUI 聊天的虚拟群组 ID
-WEBUI_CHAT_GROUP_ID = "webui_local_chat"
+# 已停用的旧 WebUI 默认聊天流，仅用于清理历史数据和兼容旧接口。
+LEGACY_WEBUI_LOCAL_GROUP_ID = "webui_local" + "_chat"
 WEBUI_CHAT_PLATFORM = "webui"
 
 # 虚拟身份模式的群 ID 前缀
@@ -125,9 +125,12 @@ class ChatHistoryManager:
 
         Args:
             limit: 获取的消息数量
-            group_id: 群 ID，默认为 WEBUI_CHAT_GROUP_ID
+            group_id: 群 ID。未指定时不再返回旧 WebUI 默认聊天室历史。
         """
-        target_group_id = group_id if group_id else WEBUI_CHAT_GROUP_ID
+        if not group_id:
+            logger.debug("未指定 group_id，跳过旧 WebUI 默认聊天历史加载")
+            return []
+        target_group_id = group_id
         try:
             # 查询指定群的消息，按时间排序
             messages = (
@@ -152,9 +155,9 @@ class ChatHistoryManager:
         """清空聊天历史记录
 
         Args:
-            group_id: 群 ID，默认清空 WebUI 默认聊天室
+            group_id: 群 ID。未指定时清理旧 WebUI 默认聊天流残留。
         """
-        target_group_id = group_id if group_id else WEBUI_CHAT_GROUP_ID
+        target_group_id = group_id if group_id else LEGACY_WEBUI_LOCAL_GROUP_ID
         try:
             deleted = Messages.delete().where(Messages.chat_info_group_id == target_group_id).execute()
             logger.info(f"已清空 {deleted} 条聊天记录 (group_id={target_group_id})")
@@ -237,10 +240,7 @@ def create_message_data(
     else:
         # 标准 WebUI 模式
         platform = WEBUI_CHAT_PLATFORM
-        group_id = WEBUI_CHAT_GROUP_ID
-        group_name = "WebUI本地聊天室"
-        actual_user_id = user_id
-        actual_user_name = user_name
+        raise ValueError("WebUI 独立本地聊天已停用，请选择真实平台身份后再发送消息。")
 
     return {
         "message_info": {
@@ -292,8 +292,7 @@ async def get_chat_history(
     所有 WebUI 用户共享同一个聊天室，因此返回所有历史记录
     如果指定了 group_id，则获取该虚拟群的历史记录
     """
-    target_group_id = group_id if group_id else WEBUI_CHAT_GROUP_ID
-    history = chat_history.get_history(limit, target_group_id)
+    history = chat_history.get_history(limit, group_id)
     return {
         "success": True,
         "messages": history,
@@ -391,7 +390,7 @@ async def clear_chat_history(
     """清空聊天历史记录
 
     Args:
-        group_id: 可选，指定要清空的群 ID，默认清空 WebUI 默认聊天室
+        group_id: 可选，指定要清空的群 ID，默认清理旧 WebUI 默认聊天残留
     """
     deleted = chat_history.clear_history(group_id)
     return {
@@ -500,43 +499,41 @@ async def websocket_chat(
     try:
         if current_virtual_config and current_virtual_config.enabled:
             preload_platform = current_virtual_config.platform or WEBUI_CHAT_PLATFORM
-            preload_group_id = current_virtual_config.group_id or WEBUI_CHAT_GROUP_ID
+            preload_group_id = current_virtual_config.group_id
             preload_group_name = current_virtual_config.group_name or "WebUI虚拟群聊"
             preload_user_id = current_virtual_config.user_id or user_id
             preload_user_name = current_virtual_config.user_nickname or user_name or "WebUI用户"
+            if preload_group_id:
+                preload_user = UserInfo(
+                    user_id=preload_user_id,
+                    user_nickname=preload_user_name,
+                    user_cardname=preload_user_name,
+                    platform=preload_platform,
+                )
+                preload_group = GroupInfo(
+                    group_id=preload_group_id,
+                    group_name=preload_group_name,
+                    platform=preload_platform,
+                )
+                preload_stream = await get_stream_manager().get_or_create_stream(
+                    platform=preload_platform,
+                    user_info=preload_user,
+                    group_info=preload_group,
+                )
+                try:
+                    from src.chat.proactive.session_tracker import get_memoir_cabinet
+
+                    await get_memoir_cabinet().fetch_memoir(
+                        user_id=preload_user_id,
+                        channel_id=preload_stream.stream_id,
+                    )
+                except Exception as memoir_exc:
+                    logger.debug(f"WebUI 虚拟会话回忆录预热失败: {memoir_exc}")
+                heartflow.prewarm_chat(preload_stream.stream_id, reason="websocket_virtual_connect")
         else:
-            preload_platform = WEBUI_CHAT_PLATFORM
-            preload_group_id = WEBUI_CHAT_GROUP_ID
-            preload_group_name = "WebUI本地聊天室"
-            preload_user_id = user_id
-            preload_user_name = user_name or "WebUI用户"
-
-        preload_user = UserInfo(
-            user_id=preload_user_id,
-            user_nickname=preload_user_name,
-            user_cardname=preload_user_name,
-            platform=preload_platform,
-        )
-        preload_group = GroupInfo(
-            group_id=preload_group_id,
-            group_name=preload_group_name,
-            platform=preload_platform,
-        )
-        preload_stream = await get_stream_manager().get_or_create_stream(
-            platform=preload_platform,
-            user_info=preload_user,
-            group_info=preload_group,
-        )
-        try:
-            from src.chat.proactive.session_tracker import get_memoir_cabinet
-
-            await get_memoir_cabinet().fetch_memoir(
-                user_id=preload_user_id,
-                channel_id=preload_stream.stream_id,
+            logger.debug(
+                "WebUI 管理面板连接未启用虚拟身份，跳过聊天流创建与心流预热"
             )
-        except Exception as memoir_exc:
-            logger.debug(f"WebUI 回忆录预热失败: {memoir_exc}")
-        heartflow.prewarm_chat(preload_stream.stream_id, reason="websocket_connect")
     except Exception as exc:
         logger.warning(f"WebUI 会话预加载失败: {exc}")
 
@@ -568,7 +565,7 @@ async def websocket_chat(
         if current_virtual_config and current_virtual_config.enabled:
             history = chat_history.get_history(50, current_virtual_config.group_id)
         else:
-            history = chat_history.get_history(50)
+            history = []
         if history:
             await chat_manager.send_message(
                 session_id,
@@ -584,7 +581,7 @@ async def websocket_chat(
                 current_virtual_config.group_name
             }」，开始与 {global_config.bot.nickname} 对话吧！"
         else:
-            welcome_msg = f"已连接到本地聊天室，可以开始与 {global_config.bot.nickname} 对话了！"
+            welcome_msg = "WebUI 管理连接已建立；未选择真实会话时不会创建聊天流。"
 
         await chat_manager.send_message(
             session_id,
@@ -603,6 +600,16 @@ async def websocket_chat(
             if data.get("type") == "message":
                 content = data.get("content", "").strip()
                 if not content:
+                    continue
+                if not (current_virtual_config and current_virtual_config.enabled):
+                    await chat_manager.send_message(
+                        session_id,
+                        {
+                            "type": "error",
+                            "content": "WebUI 独立本地聊天已停用，请先选择真实平台身份或真实会话。",
+                            "timestamp": time.time(),
+                        },
+                    )
                     continue
                 # 消息长度限制
                 if len(content) > MAX_WS_MESSAGE_LENGTH:
@@ -810,14 +817,12 @@ async def websocket_chat(
                         },
                     )
 
-                    # 重新加载默认聊天室历史
-                    default_history = chat_history.get_history(50, WEBUI_CHAT_GROUP_ID)
                     await chat_manager.send_message(
                         session_id,
                         {
                             "type": "history",
-                            "messages": default_history,
-                            "group_id": WEBUI_CHAT_GROUP_ID,
+                            "messages": [],
+                            "group_id": None,
                         },
                     )
 
@@ -825,7 +830,7 @@ async def websocket_chat(
                         session_id,
                         {
                             "type": "system",
-                            "content": "已切换回 WebUI 独立用户模式",
+                            "content": "已退出虚拟身份模式；当前不会创建 WebUI 本地聊天流。",
                             "timestamp": time.time(),
                         },
                     )
@@ -840,11 +845,13 @@ async def websocket_chat(
 
 @router.get("/info")
 async def get_chat_info(_auth: bool = Depends(require_auth)):
-    """获取聊天室信息"""
+    """获取 WebUI 聊天桥信息"""
     return {
         "bot_name": global_config.bot.nickname,
         "platform": WEBUI_CHAT_PLATFORM,
-        "group_id": WEBUI_CHAT_GROUP_ID,
+        "group_id": None,
+        "default_chat_enabled": False,
+        "legacy_group_id": LEGACY_WEBUI_LOCAL_GROUP_ID,
         "active_sessions": len(chat_manager.active_connections),
     }
 

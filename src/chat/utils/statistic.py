@@ -1,7 +1,6 @@
 import asyncio
 import concurrent.futures
 import json
-import os
 import sqlite3
 import time
 
@@ -361,7 +360,7 @@ def record_realtime_response_event(
 def record_runtime_state_event(
     channel_id: str, mode: str, thinking_score: float
 ) -> None:
-    """记录运行时状态事件，用于 XBcore 风格运行态统计。"""
+    """记录运行时状态事件，用于运行态统计。"""
     collector = get_lightweight_stats_collector()
     collector.record_runtime_state_event(
         channel_id=channel_id, mode=mode, thinking_score=thinking_score
@@ -1139,7 +1138,7 @@ class StatisticOutputTask(AsyncTask):
             stat[period_key].update(online_time_stat[period_key])
             stat[period_key].update(message_count_stat[period_key])
 
-        # 注入运行态摘要（XBcore 风格），用于运营观察不影响原有统计字段
+        # 注入运行态摘要，用于运营观察不影响原有统计字段
         try:
             runtime_24h = (
                 get_lightweight_stats_collector().collect_runtime_mode_summary(

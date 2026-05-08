@@ -627,19 +627,39 @@ class ScenePlannerBridgeMixin:
             return False
         return any(keyword in payload for keyword in self._soul_prompt_keywords())
 
+    @staticmethod
+    def _contains_night_soul_data(text: str) -> bool:
+        payload = str(text or "")
+        if not payload:
+            return False
+        return any(
+            keyword in payload
+            for keyword in (
+                "夜间身体状态",
+                "夜间语气约束",
+                "夜间心境提示",
+                "清晨刚醒",
+                "熬夜压力",
+                "半醒",
+            )
+        )
+
     def _ensure_soul_data_in_extra_info(self, extra_info: str) -> str:
         payload = str(extra_info or "").strip()
-        if self._contains_soul_data(payload):
-            return payload
         fallback_parts: List[str] = []
-        self._inject_fallback_soul_state(fallback_parts)
+        if not self._contains_night_soul_data(payload):
+            self._inject_night_soul_state(fallback_parts)
+        if self._contains_soul_data(payload) and not fallback_parts:
+            return payload
+        if not self._contains_soul_data(payload):
+            self._inject_fallback_soul_state(fallback_parts)
         fallback_lines = [str(line).strip() for line in fallback_parts if str(line).strip()]
         if not fallback_lines:
             fallback_lines = [
                 "[当前心理状态] 烦躁度0，回复平静。",
                 "[当前情感状态] 感到平静",
             ]
-        fallback_block = "\n".join(fallback_lines[:4]).strip()
+        fallback_block = "\n".join(fallback_lines[:6]).strip()
         if not fallback_block:
             return payload
         return f"{payload}\n{fallback_block}" if payload else fallback_block

@@ -3,7 +3,11 @@ import traceback
 import time as _tm
 from typing import Any, Optional, Dict, List
 
-from src.chat.message_receive.chat_stream import get_chat_manager
+from src.chat.message_receive.chat_stream import (
+    get_chat_manager,
+    is_internal_webui_stream,
+    is_webui_virtual_stream,
+)
 from src.common.logger import get_logger
 from src.common.task_utils import safe_create_task
 from src.chat.heart_flow.heartFC_chat_enhanced import EnhancedHeartFChatting
@@ -223,6 +227,10 @@ class Heartflow:
 
     def prewarm_chat(self, chat_id: Any, reason: str = "") -> Optional[asyncio.Task]:
         """后台预热聊天实例，重复调用会复用进行中的启动任务。"""
+        stream = get_chat_manager().get_stream(str(chat_id))
+        if stream and self._should_skip_prewarm(stream, reason=reason):
+            logger.debug(f"[心流] 跳过内部/虚拟会话预热 {chat_id}: {reason or 'unspecified'}")
+            return None
         existing = self.heartflow_chat_list.get(chat_id)
         if existing is not None:
             self._active_since[chat_id] = _tm.time()
@@ -281,6 +289,11 @@ class Heartflow:
             chat_stream: ChatStream | None = get_chat_manager().get_stream(chat_id)
             if not chat_stream:
                 raise ValueError(f"未找到 chat_id={chat_id} 的聊天流")
+            if is_internal_webui_stream(
+                platform=chat_stream.platform,
+                group_id=getattr(chat_stream.group_info, "group_id", None),
+            ):
+                raise ValueError(f"拒绝为 WebUI 内部管理连接创建心流实例: {chat_id}")
             if chat_stream.group_info:
                 new_chat = EnhancedHeartFChatting(chat_id=chat_id)
             else:
@@ -470,6 +483,8 @@ class Heartflow:
             for offset in range(0, len(streams), batch_size):
                 pending = []
                 for stream in streams[offset : offset + batch_size]:
+                    if self._should_skip_prewarm(stream, reason="startup_all"):
+                        continue
                     task = self.prewarm_chat(stream.stream_id, reason="startup_all")
                     if task is not None:
                         pending.append(task)
@@ -482,6 +497,16 @@ class Heartflow:
             raise
         except Exception as exc:
             logger.warning(f"[心流] 启动预热异常: {exc}")
+
+    @staticmethod
+    def _should_skip_prewarm(stream: ChatStream, *, reason: str = "") -> bool:
+        """启动预热只覆盖真实平台聊天流，避免 WebUI 管理会话污染频道。"""
+        group_id = getattr(getattr(stream, "group_info", None), "group_id", None)
+        if is_internal_webui_stream(platform=getattr(stream, "platform", ""), group_id=group_id):
+            return True
+        if reason == "startup_all" and is_webui_virtual_stream(group_id):
+            return True
+        return False
 
     def _warm_core_services(self) -> None:
         """提前实例化首轮回复常用模块。"""

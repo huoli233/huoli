@@ -1,4 +1,3 @@
-import re
 
 from dataclasses import dataclass, field
 from typing import Literal, Optional
@@ -751,7 +750,7 @@ class ExperimentalConfig(ConfigBase):
 
 
 @dataclass
-class MaimMessageConfig(ConfigBase):
+class HuoliMessageConfig(ConfigBase):
     """消息服务配置类（自研消息服务器）"""
 
     auth_token: list[str] = field(default_factory=lambda: [])

@@ -20,7 +20,7 @@ BOT_CONFIG_ALLOWED_SECTIONS = {
     "memory", "tool", "emoji", "voice", "message_receive",
     "lpmm_knowledge", "keyword_reaction", "response_post_process",
     "chinese_typo", "response_splitter", "log", "debug",
-    "maim_message", "telemetry", "webui", "experimental", "relationship",
+    "huoli_message", "telemetry", "webui", "experimental", "relationship",
 }
 
 # model_config.toml 允许修改的顶层节白名单

@@ -1,9 +1,9 @@
 """
 记忆持久化子系统 —— 提供键值存储、版本追踪、批量迁移、过期清扫和容量诊断
 融合三源设计:
-  - XBcore: 脏标记优化 + 适配器可扩展架构
-  - MaiBot: 版本管理
-  - MIMiaoCore: 分层存储 + 单例工厂模式
+  - 脏标记优化 + 适配器可扩展架构
+  - 版本管理
+  - 分层存储 + 单例工厂模式
 """
 
 import json
@@ -15,7 +15,7 @@ from src.common.logger import get_logger
 logger = get_logger("persistence")
 
 class _LRUWriteCache:
-    """最近写入缓存，减少频繁DB写操作(XBcore脏标记思路)"""
+    """最近写入缓存，减少频繁 DB 写操作"""
 
     def __init__(self, capacity: int = 128):
         self._store: OrderedDict[str, Any] = OrderedDict()

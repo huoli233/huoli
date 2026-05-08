@@ -4,7 +4,7 @@ import hashlib
 import asyncio
 import threading
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from src.common.logger import get_logger
 
@@ -15,7 +15,7 @@ logger = get_logger("切片整合")
 
 
 class ConsolidationVerdict(Enum):
-    """整合裁决（与MaiBot的KEEP/MERGE/PROMOTE/DECAY/DISCARD完全不同的命名体系）"""
+    """整合裁决枚举"""
 
     RETAIN = "retain"
     ELEVATE = "elevate"
@@ -31,7 +31,7 @@ class ConsolidationVerdict(Enum):
 class TransientSlice:
     """过渡性记忆切片 —— 整合前的原始记忆单元
 
-    与MaiBot MemoryFragment完全不同的字段命名和方法设计。
+    使用独立字段命名和方法设计。
     """
 
     slice_id: str
@@ -75,7 +75,7 @@ class ConsolidationTally:
 class MergerTuning:
     """整合器调谐参数集
 
-    与MaiBot MergerConfig使用完全不同的参数名称和默认值。
+    使用独立参数名称和默认值。
     """
 
     cycle_interval_sec: float = 2400.0
@@ -229,8 +229,8 @@ class SliceConsolidator:
     """记忆切片整合引擎 —— 评估瞬时记忆并决策提升/衰减/清除。
 
     核心设计：
-    - 清晰度评估采用指数衰减模型（替代MaiBot的线性清晰度）
-    - 瞬时池 → 归档库的双层架构（借鉴XBcore的STM/LTM分离）
+    - 清晰度评估采用指数衰减模型
+    - 瞬时池 → 归档库的双层架构
     - 可注册的提升/丢弃钩子函数
     - 后台守护进程定时执行整合周期
     """
@@ -466,7 +466,7 @@ async def trigger_consolidation() -> ConsolidationTally:
     return await SliceConsolidator.shared().run_consolidation_cycle()
 
 
-# 短别名（对标MaiBot接口）
+# 短别名（兼容旧接口）
 get_memory_merger = acquire_consolidator
 add_memory = deposit_slice
 search_memories = find_slices

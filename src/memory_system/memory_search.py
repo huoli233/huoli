@@ -14,8 +14,8 @@ logger = get_logger("recall_engine")
 class TermPostingList:
     """BM25风格倒排索引 —— 术语到文档的映射与检索。
 
-    融合XBcore的BM25核心算法（k1/b参数化）与MaiBot的文档元数据存储，
-    采用中英混合分词策略（XBcore风格的正则分词）。
+    使用 BM25 核心算法（k1/b参数化）与文档元数据存储，
+    采用中英混合分词策略（正则分词）。
     """
 
     def __init__(self, bm25_k1: float = 1.4, bm25_b: float = 0.72):
@@ -218,7 +218,7 @@ class RelevanceScorer:
     - freshness (时间新鲜度) 22%   ← 指数衰减
     - significance (重要性) 33%    ← 条目自带的重要性分数
 
-    与MaiBot SearchResultRanker的权重分配(50/20/30)完全不同。
+    使用独立的权重分配策略。
     """
 
     def __init__(self):
@@ -422,7 +422,7 @@ def acquire_search_telemetry() -> SearchTelemetry:
     return _telemetry_ref
 
 
-# 短别名（对标MaiBot接口）
+# 短别名（兼容旧接口）
 get_semantic_search_engine = acquire_posting_list
 get_fuzzy_matcher = acquire_approximate_matcher
 get_query_expander = acquire_expansion_engine

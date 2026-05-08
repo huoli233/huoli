@@ -273,7 +273,7 @@ show_memory_prompt = false # 是否显示记忆检索相关提示词
 show_planner_prompt = false # 是否显示planner的prompt和原始返回结果
 show_lpmm_paragraph = false # 是否显示lpmm找到的相关文段日志
 
-[maim_message]
+[huoli_message]
 auth_token = [] # 认证令牌，用于旧版API验证，为空则不启用验证
 
 # 新版API Server配置（额外监听端口）

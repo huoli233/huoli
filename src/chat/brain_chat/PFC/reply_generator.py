@@ -319,7 +319,7 @@ class ReplyGenerator:
     def _split_into_natural_segments(self, text: str) -> List[str]:
         """将长文本在自然断点处拆分为多段。
 
-        优先识别 [BREAK] 标记（参考MIMiaoCore的分段风格），
+        优先识别 [BREAK] 标记，
         其次按双换行拆分，最后原样返回。
         """
         if not text:

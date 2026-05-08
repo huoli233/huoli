@@ -407,7 +407,7 @@ class ActionPlanner:
             return act, motive, outcome, fail, ""
         return str(entry), "未知", "未知", "", ""
 
-    # ==================== 决策辅助引擎（融合XBcore信号融合 + 模式挖掘思路） ====================
+    # ==================== 决策辅助引擎（信号融合 + 模式挖掘） ====================
 
     def _gauge_signal_confidence(
         self, obs: ObservationInfo, conv: ConversationInfo
@@ -415,7 +415,7 @@ class ActionPlanner:
         """度量当前上下文的「决策置信度」(0~1)。
 
         综合四路信号取均值，再施加「信号一致性」奖励。
-        参考XBcore ConfidenceCalculator多信号融合理念，但信号集和加权方式完全不同。
+        使用多信号融合理念，但信号集和加权方式保持独立。
         """
         signal_values = []
         # 信号A：待处理消息的充足程度 —— 有新消息意味着需要响应
@@ -468,7 +468,7 @@ class ActionPlanner:
     def _estimate_interaction_risk(self, obs: ObservationInfo) -> float:
         """轻量风险预估(0~1)。
 
-        参考XBcore RiskPredictionSystem的多维风险思路，但只取「消息密度」和「对话停滞度」
+        使用多维风险思路，但只取「消息密度」和「对话停滞度」
         两个最实用的维度。密度异常高可能表示用户刷屏或情绪波动，需要保守应对。
         """
         risk_val = 0.0
@@ -529,7 +529,7 @@ class ActionPlanner:
     def _scan_for_action_loops(self, conv: ConversationInfo) -> str:
         """扫描近期行动序列，检测是否陷入重复决策环路。
 
-        灵感来自XBcore PatternMiningSystem的高频模式检测，但实现完全不同：
+        使用高频模式检测：
         只做简单频率计数而非复杂模式匹配。
         """
         try:

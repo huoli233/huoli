@@ -1959,7 +1959,7 @@ class ThinkingRecordCache:
 
     查找同一聊天流中、时间窗口内、已找到答案的记录，
     通过词粒度重叠率判断问题相似性。命中时直接复用历史答案。
-    融合XBcore的混合检索思想（词级+语义级），但只保留轻量词级匹配。
+    使用混合检索思想（词级+语义级），但只保留轻量词级匹配。
     """
 
     def __init__(
@@ -2031,7 +2031,7 @@ class DirectToolProbe:
 
     从问题中提取中英文关键词，直接注入工具的第一个参数执行查询。
     命中时跳过昂贵的多轮ReAct推理。
-    融合MIMiaoCore的HistoryQueryTool直查概念。
+    使用 HistoryQueryTool 直查概念。
     """
 
     # 判定"没找到"的标志词

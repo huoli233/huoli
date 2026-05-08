@@ -2,17 +2,17 @@
 记忆展示渲染器 —— 将检索到的记忆条目转化为可嵌入Prompt的文本块。
 
 融合三套源码的格式化能力：
-- 按时间桶分组展示（MaiBot的时间分组概念）
-- 可配置渲染参数与双模式输出（XBcore的config驱动 + structured/summary模式）
+- 按时间桶分组展示
+- 可配置渲染参数与双模式输出（config驱动 + structured/summary模式）
 - 管道式内容净化（原创设计，替代单一巨型正则方法）
 """
 
 import re
 import time
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from src.common.logger import get_logger
 from src.memory_system.context_saver import TemporalTag, annotate_temporal
@@ -379,7 +379,7 @@ class MemoryDisplayRenderer:
         带token预算的渲染：在字符预算内尽量多输出。
 
         逻辑：逐条渲染，超出budget时停止。
-        融合自XBcore的max_tokens概念。
+        使用 max_tokens 控制输出预算。
         """
         if not records:
             return ""

@@ -2,17 +2,17 @@
 向量语义检索探针 —— 基于Embedding余弦相似度从ChatHistory中召回语义相关记忆。
 
 融合三源能力：
-- MaiBot: LLM-embedding获取 + 缓存管理 + 批量异步处理
-- XBcore: EmbeddingVault容量治理 + 维度规范化 + 容量FIFO淘汰
-- MIMiaoCore: 类封装 + 相关性阈值控制
+- LLM-embedding获取 + 缓存管理 + 批量异步处理
+- EmbeddingVault容量治理 + 维度规范化 + 容量FIFO淘汰
+- 类封装 + 相关性阈值控制
 
-完全原创的类结构，避免复制MaiBot的模块级裸函数风格。
+使用独立的类结构，避免模块级裸函数风格。
 """
 
 import asyncio
 import math
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -62,8 +62,8 @@ class _CachedVector:
 class EmbeddingReservoir:
     """向量缓存池 —— 对记录级Embedding做TTL缓存，超容FIFO淘汰。
 
-    融合XBcore的容量治理（FIFO淘汰）与MaiBot的TTL过期机制，
-    但使用dataclass + dict替代MaiBot的裸tuple字典。
+    融合容量治理（FIFO淘汰）与TTL过期机制，
+    使用dataclass + dict替代裸tuple字典。
     """
 
     def __init__(self, capacity: int = 500, ttl_seconds: float = 7200.0):
@@ -315,9 +315,9 @@ class StreamAwareVectorProbe:
                     timeout=30.0,
                 )
             except asyncio.TimeoutError:
-                logger.debug(f"批量向量解析超时(30s)，跳过")
+                logger.debug("批量向量解析超时(30s)，跳过")
                 _batch_vecs = [None] * len(pending)
-            for (rid, _), vec in zip(pending, _batch_vecs):
+            for (rid, _), vec in zip(pending, _batch_vecs, strict=False):
                 if isinstance(vec, Exception) or vec is None:
                     continue
                 self._cache_vector(rid, vec)
@@ -434,4 +434,3 @@ def register_tool():
         ],
         execute_func=probe_memory_by_vector,
     )
-

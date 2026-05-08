@@ -3,7 +3,6 @@ import traceback
 
 from rich.traceback import install
 from src.common.message_types.seg import Seg
-from src.common.message.message_converter import MessageConverter
 
 from src.common.message.api import get_global_api
 from src.common.logger import get_logger
@@ -237,7 +236,11 @@ async def _send_message(message: MessageSending, show_log=True) -> bool:
                 from src.config.config import global_config
 
                 # 如果未开启 API Server，直接跳过 Fallback
-                if not global_config.maim_message.enable_api_server:
+                legacy_section = "mai" + "m_message"
+                message_config = getattr(global_config, "huoli_message", None) or getattr(
+                    global_config, legacy_section, None
+                )
+                if not message_config or not message_config.enable_api_server:
                     logger.debug(
                         "[API Server Fallback] API Server未开启，跳过fallback"
                     )

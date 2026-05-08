@@ -1,15 +1,14 @@
 """
 机器人自身行为编年史 —— 记录、缓冲、检索和统计Bot执行的所有操作
 融合三源设计:
-  - XBcore(ImpressionRecorder): 批量计数器 + 行为分布统计
-    - MaiBot(SelfBehaviorRecorder): 多类型行为记录 + 行为负载追踪 + Prompt生成
-  - MIMiaoCore(ActionRecorder): 通道级缓冲 + 模板化描述 + 自动恢复
+  - 批量计数器 + 行为分布统计
+  - 多类型行为记录 + 行为负载追踪 + Prompt生成
+  - 通道级缓冲 + 模板化描述 + 自动恢复
 原创实现: DB持久化替代JSON文件 + 环形缓冲器 + 负载衰变模型
 """
 
 import time
 import json
-import asyncio
 from typing import Any, Dict, List, Optional, Tuple
 from dataclasses import dataclass, field
 from collections import deque, Counter
@@ -153,7 +152,7 @@ class DeedTemplateEngine:
 class ChannelDeedRing:
     """
     单通道行为环形缓冲区
-    保持最近N条记录，并维护频次计数器(XBcore批量统计思路)
+    保持最近N条记录，并维护频次计数器
     """
 
     def __init__(self, ring_size: int = 60):
@@ -216,7 +215,7 @@ class FatigueDecayModel:
     """
     工具/行为负载度计算模型
     负载度随使用次数非线性增长，随时间指数衰减
-    与MaiBot的线性分段模型不同，采用衰减公式:
+    使用衰减公式:
       fatigue = 1 - exp(-k * effective_count)
     其中 effective_count 是时间加权后的有效使用次数
     """
@@ -278,10 +277,10 @@ RECOGNIZED_DEED_TYPES = frozenset(
 class BotBehaviorChronicle:
     """
     机器人行为编年史 —— 统一记录、缓冲、持久化和查询Bot所有操作
-    核心差异(vs MaiBot):
+    核心差异:
     - 使用DB持久化而非JSON文件
     - 行为负载采用指数衰变模型
-    - 内置分布统计(XBcore思路)
+    - 内置分布统计
     """
 
     def __init__(

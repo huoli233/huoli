@@ -1,10 +1,10 @@
 """
 感知觉察引擎 — 收集多维感官数据、评估信号强度、生成知觉叙述
 
-融合三套感知逻辑：
-  · XBcore PerceptionEngine（三感官收集 → 提示词 → LLM → 解析结构化结论）
-  · XBcore SignalDetector + InterestScorer + GroupSense + SelfSense + UserRelationSense
-  · MaiBot/MIMiaoCore PerceptionGenerator（描述原子 × 多维知觉拼装 + 记忆褪色）
+融合多路感知逻辑：
+  · 三感官收集 → 提示词 → LLM → 解析结构化结论
+  · SignalDetector + InterestScorer + GroupSense + SelfSense + UserRelationSense
+  · 描述原子 × 多维知觉拼装 + 记忆褪色
 
 对外暴露 AwarenessEngine / gather_awareness / get_awareness_engine 接口。
 所有阈值和描述原子权重从 CoreSettingsHub 读取。

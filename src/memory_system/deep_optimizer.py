@@ -1,17 +1,17 @@
 """
 记忆深度优化套件 —— 去重、垃圾检测、内容压缩和数据库维护
-融合三源设计:
-  - XBcore(BufferCompressor): 消息统计 + 活跃度排序 + 纯代码处理
-  - MaiBot(MemoryDeepOptimizer): 5阶段管线 + 多层签名 + 句子重要度压缩
-  - MIMiaoCore(HistoryCondenser): 话题聚类 + 关键词倒排 + 双层遗忘
-原创实现: 管线编排器 + 指纹生成器 + 分段打分压缩 + 报告聚合
+设计要点:
+  - 消息统计 + 活跃度排序 + 纯代码处理
+  - 5阶段管线 + 多层签名 + 句子重要度压缩
+  - 话题聚类 + 关键词倒排 + 双层遗忘
+实现结构: 管线编排器 + 指纹生成器 + 分段打分压缩 + 报告聚合
 """
 
 import re
 import time
 import json
 import hashlib
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 from collections import defaultdict, Counter
 from src.common.logger import get_logger
 
@@ -478,7 +478,7 @@ class StorageOptimizationSuite:
             all_records = list(query)
             report["scanned_total"] = len(all_records)
             # 阶段2: 垃圾清理
-            purged = self._phase_purge_junk(all_records, report, aggressive)
+            self._phase_purge_junk(all_records, report, aggressive)
             # 阶段3: 去重
             dedup_count = self._dedup.eliminate(MemModel, channel_id)
             report["duplicates_removed"] = dedup_count

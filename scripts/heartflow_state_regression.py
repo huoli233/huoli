@@ -1013,6 +1013,7 @@ def check_night_cycle_persistence_contract() -> Dict[str, Any]:
 
 def check_night_soul_prompt_contract() -> Dict[str, Any]:
     from src.core.night_cycle_system import NightPhase, get_night_cycle
+    from src.chat.replyer.group_generator import DefaultReplyer
 
     channel_id = "regression-night-soul"
     ncs = get_night_cycle(channel_id)
@@ -1039,16 +1040,94 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
     assert "清晨刚醒" in joined
     assert "不要精神饱满地说“不困”" in joined
     assert "刚醒，反应慢" in joined
+    ensured = probe._ensure_soul_data_in_extra_info("[当前心理状态] 烦躁度0，回复平静。")
+    assert "[夜间身体状态]" in ensured
+    assert "夜间语气约束" in ensured
+    reply_message = type("ReplyMessageProbe", (), {"processed_plain_text": "你不困吗", "display_message": ""})()
+    guarded = DefaultReplyer._apply_sleepy_fast_reply_guard(
+        content="不太困，想再聊会儿",
+        extra_info=ensured,
+        reply_message=reply_message,
+    )
+    assert "不太困" not in guarded
+    assert "想再聊" not in guarded
+    assert "困" in guarded
     remove_night_cycle(channel_id)
     source = (ROOT / "src/chat/heart_flow/enhanced_modules/scene_planner_bridge_mixin.py").read_text(
         encoding="utf-8"
     )
     assert "self._inject_night_soul_state(extra_parts)" in source
-    assert "fallback_lines[:4]" in source
+    assert "fallback_lines[:6]" in source
     return {
         "night_soul_prompt_injected": True,
         "dawn_sleepy_tone_guard": True,
+        "fast_reply_sleep_denial_guard": True,
     }
+
+
+def check_webui_internal_chat_disabled_contract() -> Dict[str, Any]:
+    from src.chat.message_receive.chat_stream import (
+        LEGACY_WEBUI_LOCAL_GROUP_ID,
+        is_internal_webui_stream,
+        is_webui_virtual_stream,
+    )
+
+    chat_route_source = (ROOT / "src/webui/routers/chat.py").read_text(encoding="utf-8")
+    stream_source = (ROOT / "src/chat/message_receive/chat_stream.py").read_text(encoding="utf-8")
+    heartflow_source = (ROOT / "src/chat/heart_flow/heartflow.py").read_text(encoding="utf-8")
+
+    legacy_const = "WEBUI" + "_CHAT_GROUP_ID"
+    legacy_label = "WebUI" + "本地聊天室"
+    assert legacy_const not in chat_route_source
+    assert legacy_label not in chat_route_source
+    assert "WebUI 独立本地聊天已停用" in chat_route_source
+    assert "跳过聊天流创建与心流预热" in chat_route_source
+    assert "ChatStreams.delete()" in stream_source
+    assert "Messages.delete()" in stream_source
+    assert "拒绝为 WebUI 内部管理连接创建心流实例" in heartflow_source
+    assert 'self._should_skip_prewarm(stream, reason="startup_all")' in heartflow_source
+    assert is_internal_webui_stream(platform="webui", group_id=None) is True
+    assert is_internal_webui_stream(platform="qq", group_id=LEGACY_WEBUI_LOCAL_GROUP_ID) is True
+    assert is_internal_webui_stream(platform="qq", group_id="real-group") is False
+    assert is_webui_virtual_stream("webui_virtual_group_abc") is True
+    return {
+        "webui_default_local_chat_disabled": True,
+        "legacy_webui_stream_pruned": True,
+        "startup_prewarm_skips_webui_virtual": True,
+    }
+
+
+def check_huoli_naming_contract() -> Dict[str, Any]:
+    forbidden = (
+        "Mai" + "Core",
+        "Mai" + "Bot",
+        "MIMiao" + "Core",
+        "XB" + "core",
+        "麦" + "麦",
+        "mai" + "m_message",
+        "品鉴" + "配置",
+        "非常的" + "新鲜",
+        "神经元" + "放电",
+    )
+    scanned = []
+    for folder in ("src", "config", "template", "scripts"):
+        base = ROOT / folder
+        if not base.exists():
+            continue
+        for path in base.rglob("*"):
+            if path.suffix not in {".py", ".toml", ".md"}:
+                continue
+            if "web/dashboard/dist" in path.as_posix():
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            for token in forbidden:
+                assert token not in text, f"{path.relative_to(ROOT)} 仍包含旧命名 {token}"
+            scanned.append(str(path.relative_to(ROOT)))
+    config_source = (ROOT / "src/config/config.py").read_text(encoding="utf-8")
+    assert "HuoLiCore当前版本" in config_source
+    assert "huoli_message" in config_source
+    assert "_legacy_message_section_name" in config_source
+    return {"scanned_files": len(scanned), "huoli_message_section": True}
 
 
 def check_admin_identity_not_relationship_contract() -> Dict[str, Any]:
@@ -1376,6 +1455,8 @@ def main() -> None:
         "force_guard": check_force_guard_contract(),
         "night_cycle_persistence": check_night_cycle_persistence_contract(),
         "night_soul_prompt": check_night_soul_prompt_contract(),
+        "webui_internal_chat_disabled": check_webui_internal_chat_disabled_contract(),
+        "huoli_naming": check_huoli_naming_contract(),
         "admin_identity": check_admin_identity_not_relationship_contract(),
         "db_backed_json_storage": check_db_backed_json_storage_contract(),
         "force_reply_generation_fallback": check_force_reply_generation_fallback_contract(),
