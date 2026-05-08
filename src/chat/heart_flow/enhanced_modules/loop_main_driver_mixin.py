@@ -22,6 +22,11 @@ from src.core.unified_planner import PlanningDecision, ActionType
 from src.config.config import global_config
 from src.common.logger import get_logger
 from src.chat.heart_flow.frequency_control import frequency_control_manager
+from src.chat.heart_flow.turn_scheduler import (
+    TurnScheduleConfig,
+    deduplicate_messages,
+    schedule_turn_messages,
+)
 from src.plugin_system.apis import database_api, message_api, send_api
 from src.chat.utils.utils import is_bot_self
 from src.common.data_models.heartflow_models import FlowPhase, UnifiedFlowSnapshot
@@ -146,19 +151,40 @@ class LoopMainDriverMixin:
         # ── 阶段 0-b：关注层级衰减（无消息期） ──
         self._integrate_watch_state(now, has_messages=False)
 
+        # ── 阶段 0-pre：管理员强制消息预检 ──
+        # 这一步在休息/能量门控前执行，避免管理员消息还没进入读取阶段就被软门控挡掉。
+        admin_force_precheck = False
+        try:
+            admin_ids = list(self._admin_force_wake_ids())
+            if admin_ids:
+                admin_probe = message_api.get_messages_by_time_in_chat_for_users(
+                    self.stream_id,
+                    self.last_read_time,
+                    now,
+                    admin_ids,
+                    limit=1,
+                    limit_mode="latest",
+                )
+                admin_force_precheck = bool(admin_probe)
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 管理员强制消息预检失败: {exc}")
+        self._is_admin_forced = admin_force_precheck
+
         # ── 阶段 0：状态机门控 ──
         current_phase = self._query_flow_phase()
         gate_result = self._evaluate_phase_gate(current_phase, now)
-        if gate_result == "skip":
+        if gate_result == "skip" and not admin_force_precheck:
             self._consecutive_skip_ticks += 1
             await asyncio.sleep(_DORMANT_POLL_SEC)
             return True
-        if gate_result == "glance":
+        if gate_result == "glance" and not admin_force_precheck:
             # 休息期窥屏：只消耗少量体力，不进入完整流水线
             self._apply_glance_drain()
             self._consecutive_skip_ticks = 0
             await asyncio.sleep(_DORMANT_POLL_SEC)
             return True
+        if gate_result in {"skip", "glance"} and admin_force_precheck:
+            logger.info(f"{self.log_prefix} 👑 管理员强制消息穿透阶段门控: {gate_result}")
 
         # ── 阶段 1：能量评估门控 ──
         eagerness_val, eagerness_reason = self._poll_eagerness()
@@ -173,40 +199,75 @@ class LoopMainDriverMixin:
             silence_sec = get_quiet_monitor().measure_silence_sec(self.stream_id)
         except Exception as _e:
             logger.debug(f"异常: {_e}")
-        if eagerness_val < _ENERGY_DRAIN_FLOOR:
+        if eagerness_val < _ENERGY_DRAIN_FLOOR and not admin_force_precheck:
             # 能量严重不足，迁移至休息
             self._shift_to_dormant(cause=f"能量耗尽: {eagerness_reason}")
             await asyncio.sleep(_DORMANT_POLL_SEC)
             return True
+        if eagerness_val < _ENERGY_DRAIN_FLOOR and admin_force_precheck:
+            logger.info(f"{self.log_prefix} 👑 管理员强制消息穿透低能量门控: {eagerness_reason}")
 
         # ── 第一层状态栏：独立体征面板（仅在有新消息时输出，避免刷屏） ──
         phase_display = current_phase if isinstance(current_phase, str) else str(current_phase)
 
         # ── 阶段 2：消息读取（复用父类逻辑的核心部分） ──
+        total_window_messages = message_api.count_messages_by_time_in_chat(
+            chat_id=self.stream_id,
+            start_time=self.last_read_time,
+            end_time=now,
+            filter_mai=True,
+            filter_command=False,
+        )
         incoming_batch = message_api.get_messages_by_time_in_chat(
             chat_id=self.stream_id,
             start_time=self.last_read_time,
             end_time=now,
-            limit=20,
+            limit=120 if total_window_messages > 20 else 20,
             limit_mode="latest",
             filter_mai=True,
             filter_command=False,
             filter_intercept_message_level=0,
         )
-        self._last_msg_was_admin = bool(incoming_batch and self._is_force_wake_admin(incoming_batch))
+        if total_window_messages > 20:
+            admin_ids = list(self._admin_force_wake_ids())
+            if admin_ids:
+                incoming_batch.extend(
+                    message_api.get_messages_by_time_in_chat_for_users(
+                        self.stream_id,
+                        self.last_read_time,
+                        now,
+                        admin_ids,
+                        limit=20,
+                        limit_mode="latest",
+                    )
+                )
+        raw_admin_force_active = any(self._is_message_from_force_wake_admin(_msg) for _msg in incoming_batch)
         # ── 消息去重：过滤掉本轮已经处理过的消息（防止同一消息被多次处理） ──
-        _new_batch = []
+        incoming_batch = deduplicate_messages(incoming_batch, self._processed_message_ids)
+        incoming_batch, turn_schedule_stats = schedule_turn_messages(
+            incoming_batch,
+            total_window_messages=total_window_messages,
+            is_admin_message=self._is_message_from_force_wake_admin,
+            is_priority_message=self._is_priority_turn_message,
+            config=TurnScheduleConfig(),
+        )
+        self._last_turn_schedule_stats = turn_schedule_stats.to_dict()
+        self._last_msg_was_admin = bool(raw_admin_force_active or turn_schedule_stats.admin_forced)
         for _msg in incoming_batch:
             _mid = getattr(_msg, "message_id", None) or getattr(_msg, "id", None) or str(_msg)
-            if _mid and _mid not in self._processed_message_ids:
-                _new_batch.append(_msg)
-                self._processed_message_ids.add(_mid)
-                self._dedup_order.append(_mid)
+            if _mid:
+                self._processed_message_ids.add(str(_mid))
+                self._dedup_order.append(str(_mid))
                 if len(self._dedup_order) > 2000:
                     for _old_mid in list(self._dedup_order)[:1000]:
-                        self._processed_message_ids.discard(_old_mid)
-                    self._dedup_order = self._dedup_order[-1000:]
-        incoming_batch = _new_batch
+                        self._processed_message_ids.discard(str(_old_mid))
+                    self._dedup_order = deque(list(self._dedup_order)[-1000:])
+        if turn_schedule_stats.overflowed:
+            logger.info(
+                f"{self.log_prefix} 🧭 消息调度降载: {turn_schedule_stats.reason}，"
+                f"保留={turn_schedule_stats.selected_count} 丢弃={turn_schedule_stats.dropped_count} "
+                f"管理员={turn_schedule_stats.admin_count}"
+            )
         # ── 去重后重新计算动态阈值 ──
         if self._batch_contains_real_user_reply(incoming_batch):
             _reply_msg = None

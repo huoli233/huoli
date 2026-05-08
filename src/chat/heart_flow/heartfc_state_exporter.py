@@ -235,6 +235,7 @@ def _extract_runtime_snapshot(chat: Any) -> Dict[str, Any]:
         "participant_summary": "_cached_participant_summary",
         "last_user_id": "_last_user_id",
         "last_proactive_target_user_id": "_last_proactive_target_user_id",
+        "last_turn_schedule": "_last_turn_schedule_stats",
     }
     return {name: _plain(getattr(chat, attr, None)) for name, attr in fields.items()}
 
@@ -625,12 +626,11 @@ def _extract_memory_stack(channel_id: str) -> Dict[str, Any]:
     except Exception as exc:
         logger.debug(f"回忆录导出失败: {exc}")
     try:
-        from src.modules.modcore.social_cognition.knowledge_graph import get_knowledge_graph_manager
+        from src.memory_system.memory_health import get_memory_health_status
 
-        kg = get_knowledge_graph_manager(channel_id)
-        payload["knowledge_entry_count"] = _safe_int(getattr(kg, "entry_count", 0))
+        payload["database_health"] = get_memory_health_status().to_dict()
     except Exception as exc:
-        logger.debug(f"知识图谱导出失败: {exc}")
+        logger.debug(f"记忆库健康状态导出失败: {exc}")
     return payload
 
 
@@ -1206,6 +1206,7 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
             "last_target_user_id": relation.get("user_id", ""),
             "topic_focus": list(group_climate.get("topic_focus", []) or []),
             "last_reactive_plan": runtime.get("last_reactive_plan") or {},
+            "turn_schedule": runtime.get("last_turn_schedule") or {},
         },
     }
 

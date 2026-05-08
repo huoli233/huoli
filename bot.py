@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 import asyncio
 import hashlib
 import os
@@ -317,6 +318,9 @@ def raw_main() -> MainSystem:
         from src.common.database.database_model import ensure_database_initialized
 
         ensure_database_initialized(sync_constraints=False)
+        from src.memory_system.memory_health import assess_database_health
+
+        assess_database_health(raise_on_error=False)
     except Exception as exc:
         logger.error(f"数据库显式初始化失败: {exc}")
         raise

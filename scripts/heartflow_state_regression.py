@@ -756,11 +756,31 @@ def check_force_guard_contract() -> Dict[str, Any]:
 
 
 def check_webui_contract() -> Dict[str, Any]:
+    dashboard_source = (ROOT / "web/dashboard/src/components/EmotionDashboard/index.tsx").read_text(encoding="utf-8")
+    dashboard_style = (ROOT / "web/dashboard/src/components/EmotionDashboard/styles.css").read_text(encoding="utf-8")
+    assert "fallbackPollTimerRef" in dashboard_source
+    assert 'connectionState === "live"' in dashboard_source
+    assert "pollMonitorFallback" in dashboard_source
+    assert "Promise.allSettled" not in dashboard_source
+    assert "void loadMonitorOverview();" in dashboard_source
+    assert "void loadConfigScope();" in dashboard_source
+    assert "实时通道暂不可用，轮询同步失败" not in dashboard_source
+    assert "polling: \"轮询同步\"" in dashboard_source
+    assert ".live-pill.is-polling" in dashboard_style
+
+    heartflow_router_source = (ROOT / "src/webui/routers/heartflow.py").read_text(encoding="utf-8")
+    assert "asyncio.to_thread(build_config_scope_snapshot)" in heartflow_router_source
+    assert "timeout=2.0" in heartflow_router_source
+    assert "_config_scope_fallback" in heartflow_router_source
+
     client = TestClient(create_app())
     dashboard = client.get("/dashboard")
     monitor = client.get("/api/heartflow/monitor")
+    config_scope = client.get("/api/heartflow/config-scope")
     assert dashboard.status_code == 200
     assert monitor.status_code == 200
+    assert config_scope.status_code == 200
+    assert "config_scope" in config_scope.json()
     channels = monitor.json().get("monitor", {}).get("channels", [])
     checked_channel = False
     if channels:
@@ -780,7 +800,12 @@ def check_webui_contract() -> Dict[str, Any]:
             ):
                 assert key in item, key
         checked_channel = True
-    return {"dashboard": dashboard.status_code, "monitor": monitor.status_code, "channel_checked": checked_channel}
+    return {
+        "dashboard": dashboard.status_code,
+        "monitor": monitor.status_code,
+        "channel_checked": checked_channel,
+        "http_fallback_polling": True,
+    }
 
 
 def main() -> None:

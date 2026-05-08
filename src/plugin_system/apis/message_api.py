@@ -457,6 +457,36 @@ def count_new_messages(
     return num_new_messages_since(chat_id, start_time, end_time)
 
 
+def count_messages_by_time_in_chat(
+    chat_id: str,
+    start_time: float,
+    end_time: float,
+    filter_mai: bool = False,
+    filter_command: bool = False,
+    filter_intercept_message_level: Optional[int] = None,
+) -> int:
+    """计算指定聊天在时间窗内的消息数量，语义与读取接口保持一致。"""
+    if not isinstance(start_time, (int, float)) or not isinstance(end_time, (int, float)):
+        raise ValueError("start_time 和 end_time 必须是数字类型")
+    if not chat_id:
+        raise ValueError("chat_id 不能为空")
+    if not isinstance(chat_id, str):
+        raise ValueError("chat_id 必须是字符串类型")
+    if start_time >= end_time:
+        return 0
+    return len(
+        get_messages_by_time_in_chat(
+            chat_id=chat_id,
+            start_time=start_time,
+            end_time=end_time,
+            limit=0,
+            filter_mai=filter_mai,
+            filter_command=filter_command,
+            filter_intercept_message_level=filter_intercept_message_level,
+        )
+    )
+
+
 def count_new_messages_for_users(
     chat_id: str, start_time: float, end_time: float, person_ids: List[str]
 ) -> int:

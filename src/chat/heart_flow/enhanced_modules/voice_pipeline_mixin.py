@@ -244,12 +244,42 @@ class EnhancedVoicePipelineMixin:
             return ""
         return str(getattr(latest_msg, "user_id", "") or "").strip()
 
-    def _is_force_wake_admin(self, incoming_batch: List, pinged_msg=None) -> bool:
-        """判断当前发送者是否为强制唤醒管理员"""
-        _sender_uid = self._get_sender_user_id(incoming_batch, pinged_msg)
-        if not _sender_uid:
+    def _admin_force_wake_ids(self) -> set[str]:
+        try:
+            return {
+                str(item).strip()
+                for item in (global_config.chat.admin_force_wake_qq_ids or [])
+                if str(item).strip()
+            }
+        except Exception:
+            return set()
+
+    def _is_message_from_force_wake_admin(self, msg) -> bool:
+        """单条消息是否来自强制唤醒管理员。"""
+        if msg is None or not self._is_human_message_obj(msg):
             return False
-        return _sender_uid in global_config.chat.admin_force_wake_qq_ids
+        uid = str(getattr(msg, "user_id", "") or "").strip()
+        return bool(uid and uid in self._admin_force_wake_ids())
+
+    def _is_force_wake_admin(self, incoming_batch: List, pinged_msg=None) -> bool:
+        """判断当前批次是否包含强制唤醒管理员消息。"""
+        if pinged_msg is not None and self._is_message_from_force_wake_admin(pinged_msg):
+            return True
+        return any(self._is_message_from_force_wake_admin(msg) for msg in (incoming_batch or []))
+
+    def _is_priority_turn_message(self, msg) -> bool:
+        """刷屏降载时必须保留的关键消息。"""
+        if msg is None:
+            return False
+        if self._is_message_from_force_wake_admin(msg):
+            return True
+        if self._is_message_pinged(msg):
+            return True
+        if bool(getattr(msg, "is_command", False)):
+            return True
+        if getattr(getattr(self, "chat_stream", None), "group_info", None) is None:
+            return self._is_human_message_obj(msg)
+        return False
 
     def _is_message_pinged(self, msg) -> bool:
         """判断单条消息是否@了机器人"""

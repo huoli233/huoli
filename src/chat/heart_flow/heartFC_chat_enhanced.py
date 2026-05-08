@@ -264,6 +264,7 @@ class EnhancedHeartFChatting(
         self._last_dashboard_status_line: str = ""
         # 消息去重：已处理过的消息ID集合（防止同一消息被多次处理）
         self._processed_message_ids: Set[str] = set()
+        self._last_turn_schedule_stats: Dict[str, Any] = {}
         # 统一引擎编排器（懒加载）
         self._engine_orch = None
 

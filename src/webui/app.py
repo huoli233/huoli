@@ -21,6 +21,9 @@ def _ensure_database_ready():
         from src.common.database.database_model import ensure_database_initialized
 
         ensure_database_initialized(sync_constraints=False)
+        from src.memory_system.memory_health import assess_database_health
+
+        assess_database_health(raise_on_error=False)
     except Exception as exc:
         logger.error(f"❌ WebUI 数据库初始化失败: {exc}", exc_info=True)
         raise

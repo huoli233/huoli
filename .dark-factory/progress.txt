@@ -154,3 +154,25 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
 - 本轮只应提交 `src/webui/routers/websocket/state_monitor.py`、`scripts/webui_smoke_test.py`、`web/dashboard/src/components/EmotionDashboard/index.tsx`、`web/dashboard/dist/` 和本进度文件；工作区内其他既有差异不属于本轮。
+
+## 2026-05-08T20:35:00 - Task: 管理员特权、消息调度与记忆健康收口
+
+### What was done:
+- 新增 Heartflow 单轮消息调度器，刷屏溢出时保留管理员、@/提及、命令等关键消息，并只保留最新普通上下文，避免不可控 backlog。
+- 管理员强制消息增加阶段门控与低能量门控预检，允许管理员穿透软门控进入处理链路，但不改变已有内容硬保护和夜间硬阻断优先级。
+- 增加单条管理员识别、优先消息识别和批次管理员识别，避免只看最新发送者导致管理员消息被普通刷屏覆盖。
+- 新增记忆库非破坏性健康检查，启动路径和 WebUI 启动路径都会记录 quick_check 结果，并通过状态导出暴露数据库健康状态。
+- 给状态页配置分级接口增加 2 秒超时和降级快照，避免配置分级构建阻塞实时状态同步。
+- 新增 `scripts/turn_scheduler_regression.py`，覆盖管理员消息溢出保留、去重、私聊优先级和记忆库健康检查。
+
+### Testing:
+- `uv run python scripts/turn_scheduler_regression.py` 通过，`admin_preserved=true`、`priority_preserved.ping=true`、`priority_preserved.command=true`、`quick_check=ok`。
+- `uv run python scripts/heartflow_state_regression.py` 通过，覆盖状态导出、WebUI 降级轮询、配置分级降级快照和既有 force guard 契约。
+- `uv run python -m ruff check src/chat/heart_flow/turn_scheduler.py scripts/turn_scheduler_regression.py src/plugin_system/apis/message_api.py src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py src/chat/heart_flow/enhanced_modules/voice_pipeline_mixin.py src/chat/heart_flow/heartFC_chat_enhanced.py src/chat/heart_flow/heartfc_state_exporter.py src/memory_system/memory_health.py bot.py src/webui/app.py src/webui/routers/heartflow.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python -m compileall src scripts bot.py` 通过。
+- `npm run build` 在 `web/dashboard` 通过。
+- `ReadLints` 检查本轮编辑文件未发现新增错误。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
+- 本轮只应提交 `bot.py`、`scripts/heartflow_state_regression.py`、`scripts/turn_scheduler_regression.py`、`src/chat/heart_flow/turn_scheduler.py`、`src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py`、`src/chat/heart_flow/enhanced_modules/voice_pipeline_mixin.py`、`src/chat/heart_flow/heartFC_chat_enhanced.py`、`src/chat/heart_flow/heartfc_state_exporter.py`、`src/memory_system/memory_health.py`、`src/plugin_system/apis/message_api.py`、`src/webui/app.py`、`src/webui/routers/heartflow.py` 和本进度文件；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
