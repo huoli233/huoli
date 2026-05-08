@@ -381,3 +381,21 @@
 - `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
 - `config/model_config.toml` 和 `config/model_config_optimized.toml` 是 `.gitignore` 中的本地密钥配置文件，本轮只提交模板和进度记录，不把真实 API key 加入 Git。
 - 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T03:45:42+08:00 - Task: 修复管理员强制唤醒被夜间门控阻断
+
+### What was done:
+- 修复夜间节律门控只依赖 `_last_msg_was_admin` 的问题，主循环现在把当前消息批次和被引用/点名消息传入 `_apply_night_cycle_modulation()`。
+- 睡眠态夜间门控在检查睡眠回复配额、深睡普通回复禁令和 CDE 强制深睡前，优先识别管理员强制唤醒并返回 `force_wake`，避免管理员消息被 `night_gate` 提前 `skip`。
+- 修正普通深睡/熬穿状态的阻断原因文案，不再把 `deep_sleep` 误报为“夜间回复已达上限(3/5)”。
+- 更新 HeartFlow 回归契约，要求管理员强制唤醒必须先于睡眠硬阻断，并锁定主循环传参和深睡阻断文案。
+
+### Testing:
+- `.venv\Scripts\ruff.exe check src\chat\heart_flow\enhanced_modules\scene_bot_lifecycle_mixin.py src\chat\heart_flow\enhanced_modules\loop_main_driver_mixin.py scripts\heartflow_state_regression.py` 通过。
+- `.venv\Scripts\python.exe scripts\heartflow_state_regression.py` 通过，`force_guard.admin_night_gate_preempts_sleep_block=true`。
+- `.venv\Scripts\python.exe -m compileall src scripts` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 本轮只应提交 `.dark-factory/progress.txt`、`loop_main_driver_mixin.py`、`scene_bot_lifecycle_mixin.py`、`scripts/heartflow_state_regression.py`。
+- 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。

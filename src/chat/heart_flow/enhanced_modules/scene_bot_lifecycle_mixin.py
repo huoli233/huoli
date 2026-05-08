@@ -559,7 +559,12 @@ class SceneBotLifecycleMixin:
             return normalized
         return "sleep_resist"
 
-    def _apply_night_cycle_modulation(self, now: float) -> Optional[dict]:
+    def _apply_night_cycle_modulation(
+        self,
+        now: float,
+        incoming_batch: Optional[List] = None,
+        pinged_msg: Optional[Any] = None,
+    ) -> Optional[dict]:
         """夜间节律调制：区分熬夜清醒态 vs 睡眠态
         反馈回路: apply_wake_feedback() 在每次决策后调整动态阈值
         """
@@ -571,7 +576,11 @@ class SceneBotLifecycleMixin:
             _nm = _d6._get_night_mode(self.stream_id)
             if _nm is None or _nm.phase == "DAYTIME":
                 return None
-            _admin_force_wake = bool(self._last_msg_was_admin)
+            _admin_force_wake = bool(
+                getattr(self, "_last_msg_was_admin", False)
+                or getattr(self, "_is_admin_forced", False)
+                or self._is_force_wake_admin(incoming_batch or [], pinged_msg)
+            )
             _ncs = None
             _ns = None
             _precise_phase = ""
@@ -658,6 +667,16 @@ class SceneBotLifecycleMixin:
                     logger.debug(f"{self.log_prefix} CDE疲劳检测异常: {_cde_exc}")
                 return None
             _ch = _d6._ensure_channel(self.stream_id)
+            if _admin_force_wake:
+                _night_ctx = _d6.record_disturbance(self.stream_id)
+                _adaptive = _night_ctx.get("adaptive", {})
+                return {
+                    "action": "force_wake",
+                    "reason": "管理员强制唤醒",
+                    "context": _night_ctx,
+                    "stimulus": _adaptive.get("stimulus_strength", 0.0),
+                    "threshold": _adaptive.get("threshold", 50.0),
+                }
             try:
                 from src.core.night_cycle_system import get_night_cycle
 
@@ -672,9 +691,23 @@ class SceneBotLifecycleMixin:
                     }
                 if not _ncs_cap.can_reply_tonight():
                     _cap_info = _ncs_cap.state_snapshot
+                    _phase_obj = getattr(_cap_info, "current_phase", None)
+                    _phase = str(getattr(_phase_obj, "value", _phase_obj) or "").strip().lower()
+                    if _phase == "deep_sleep":
+                        _reason = (
+                            "深睡阶段禁止普通夜间回复"
+                            f"({_cap_info.night_reply_count}/{_cap_info.night_reply_cap})"
+                        )
+                    elif _phase == "burned_out":
+                        _reason = (
+                            "熬穿阶段禁止普通夜间回复"
+                            f"({_cap_info.night_reply_count}/{_cap_info.night_reply_cap})"
+                        )
+                    else:
+                        _reason = f"夜间回复已达上限({_cap_info.night_reply_count}/{_cap_info.night_reply_cap})"
                     return {
                         "action": "hard_block",
-                        "reason": f"夜间回复已达上限({_cap_info.night_reply_count}/{_cap_info.night_reply_cap})",
+                        "reason": _reason,
                     }
             except Exception:
                 if hasattr(_ch, "night_reply_cap") and hasattr(_ch, "night_reply_count"):
@@ -699,14 +732,6 @@ class SceneBotLifecycleMixin:
                 return {
                     "action": "deep_sleep",
                     "reason": f"CDE溢出(Composite {_composite:.1f}≥{_collapse:.1f}), 强制深睡",
-                    "context": _night_ctx,
-                    "stimulus": _stimulus,
-                    "threshold": _threshold,
-                }
-            if _admin_force_wake:
-                return {
-                    "action": "force_wake",
-                    "reason": "管理员强制唤醒",
                     "context": _night_ctx,
                     "stimulus": _stimulus,
                     "threshold": _threshold,

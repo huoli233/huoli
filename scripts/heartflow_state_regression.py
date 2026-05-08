@@ -964,15 +964,17 @@ def check_force_guard_contract() -> Dict[str, Any]:
     assert "_action == \"sleep_resist\" and not self._is_force_wake_admin" in loop_source
     assert "voice_conclusion = None if _is_admin_msg else self._cached_voice" in loop_source
 
+    assert "_apply_night_cycle_modulation(_now_hr, incoming_batch, pinged_msg)" in loop_source
+    assert "深睡阶段禁止普通夜间回复" in lifecycle_source
     hard_block_idx = lifecycle_source.index("if not _ncs_cap.evaluate_sleep_reply_budget()")
     deep_sleep_idx = lifecycle_source.index("if _composite >= _collapse * 1.1")
     admin_wake_idx = lifecycle_source.index("if _admin_force_wake:")
-    assert hard_block_idx < admin_wake_idx
-    assert deep_sleep_idx < admin_wake_idx
+    assert admin_wake_idx < hard_block_idx
+    assert admin_wake_idx < deep_sleep_idx
     return {
         "admin_content_hard_guard": True,
         "admin_soft_guard_bypass": True,
-        "night_hard_block_before_admin": True,
+        "admin_night_gate_preempts_sleep_block": True,
     }
 
 

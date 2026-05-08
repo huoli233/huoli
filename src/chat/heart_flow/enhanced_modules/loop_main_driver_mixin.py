@@ -768,7 +768,7 @@ class LoopMainDriverMixin:
 
         # ── 阶段 2.5-bis：群体模式硬路由 + 群场景硬约束 + 夜间节律 ──
         _now_hr = time.time()
-        _night_result = self._apply_night_cycle_modulation(_now_hr)
+        _night_result = self._apply_night_cycle_modulation(_now_hr, incoming_batch, pinged_msg)
         if _night_result is not None:
             _night_result = dict(_night_result)
             _raw_action = _night_result.get("action", "")
