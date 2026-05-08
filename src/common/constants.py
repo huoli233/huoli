@@ -70,17 +70,13 @@ DATA_DIR: Final[str] = "data"
 LOGS_DIR: Final[str] = "logs"
 TEMP_DIR: Final[str] = "data/temp"
 USERS_DIR: Final[str] = "data/users"
-LOCAL_STORE_FILE: Final[str] = "data/local_store.json"
 
 # 存储路径
 SOCIAL_STORAGE_DIR: Final[str] = "data/huoli/social"
-PERSONA_POOL_FILE: Final[str] = "data/huoli/persona_pool.json"
-WOUND_STATE_FILE: Final[str] = "data/huoli/wound_state.json"
 AUTONOMOUS_STATE_DIR: Final[str] = "data/huoli/autonomous_state"
 GROUP_PERSONA_DIR: Final[str] = "data/group_persona"
 MEMOIR_VAULT_DIR: Final[str] = "data/memoir_vault"
 EMBEDDING_DIR: Final[str] = "data/embedding"
-WEBUI_CONFIG_FILE: Final[str] = "data/webui.json"
 
 # ==================== 时区工具 =================---
 
@@ -158,15 +154,11 @@ __all__ = [
     "LOGS_DIR",
     "TEMP_DIR",
     "USERS_DIR",
-    "LOCAL_STORE_FILE",
     "SOCIAL_STORAGE_DIR",
-    "PERSONA_POOL_FILE",
-    "WOUND_STATE_FILE",
     "AUTONOMOUS_STATE_DIR",
     "GROUP_PERSONA_DIR",
     "MEMOIR_VAULT_DIR",
     "EMBEDDING_DIR",
-    "WEBUI_CONFIG_FILE",
     # 时区
     "LOCAL_TIMEZONE",
     "get_timezone_aware_now",

@@ -4,23 +4,16 @@ import math
 import random
 from enum import Enum
 from dataclasses import asdict, dataclass, field, fields
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from src.common.logger import get_logger
 
 logger = get_logger("夜间状态")
 
 _night_system_instances: Dict[str, "NightCycleSystem"] = {}
-_PERSIST_DIR = Path("data/night_cycle_state")
 _PERSIST_VERSION = 1
 _PERSIST_SLOT_PREFIX = "night_cycle_state"
 _PERSIST_SLOT_TTL_DAYS = 3650
 _PERSIST_DB_READY = False
-
-
-def _safe_state_filename(channel_id: str) -> str:
-    safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in str(channel_id or "default"))
-    return f"{safe[:96] or 'default'}.json"
 
 
 def _safe_slot_suffix(channel_id: str) -> str:
@@ -532,7 +525,6 @@ class NightCycleSystem:
         self._dawn_recover_start = 4
         self._reflection_build_rate = 0.1
         self._social_energy_decay = 0.05
-        self._persist_path = _PERSIST_DIR / _safe_state_filename(channel_id)
         self._persist_slot_key = _night_state_slot_key(channel_id)
         self._last_persist_at = 0.0
         self._load_persisted_state()
@@ -608,28 +600,11 @@ class NightCycleSystem:
             return True
         return False
 
-    def _load_state_from_legacy_json(self) -> bool:
-        if not self._persist_path.exists():
-            return False
-        raw = json.loads(self._persist_path.read_text(encoding="utf-8"))
-        if self._restore_state_from_payload(raw):
-            logger.info(f"[夜间节律] {self._channel_id} 已从旧JSON恢复状态，后续写入数据库")
-            self.persist_state(force=True)
-            return True
-        return False
-
     def _load_persisted_state(self) -> None:
-        db_loaded = False
         try:
-            db_loaded = self._load_state_from_db()
+            self._load_state_from_db()
         except Exception as exc:
             logger.debug(f"[夜间节律] {self._channel_id} 数据库状态恢复失败: {exc}")
-        if db_loaded:
-            return
-        try:
-            self._load_state_from_legacy_json()
-        except Exception as exc:
-            logger.debug(f"[夜间节律] {self._channel_id} 旧JSON状态恢复失败: {exc}")
 
     def persist_state(self, *, force: bool = False) -> None:
         now = time.time()
@@ -661,15 +636,6 @@ class NightCycleSystem:
             self._last_persist_at = now
         except Exception as exc:
             logger.debug(f"[夜间节律] {self._channel_id} 数据库持久化失败: {exc}")
-            try:
-                if self._persist_path.exists():
-                    logger.debug(
-                        f"[夜间节律] {self._channel_id} 保留旧JSON兼容，不在数据库异常时新建状态文件"
-                    )
-            except Exception as _legacy_exc:
-                logger.debug(
-                    f"[夜间节律] {self._channel_id} 检查旧JSON状态失败: {_legacy_exc}"
-            )
 
     def evaluate_current(
         self,

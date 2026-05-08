@@ -2,23 +2,17 @@
 记忆持久化子系统 —— 提供键值存储、版本追踪、批量迁移、过期清扫和容量诊断
 融合三源设计:
   - XBcore: 脏标记优化 + 适配器可扩展架构
-  - MaiBot: 版本管理 + JSON文件迁移回退
+  - MaiBot: 版本管理
   - MIMiaoCore: 分层存储 + 单例工厂模式
 """
 
 import json
-import os
 import time
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 from collections import OrderedDict
 from src.common.logger import get_logger
 
 logger = get_logger("persistence")
-
-# 备份文件根目录(用于JSON迁移和导出)
-_FALLBACK_DIR = Path(__file__).resolve().parents[2] / "data" / "memory_vault"
-
 
 class _LRUWriteCache:
     """最近写入缓存，减少频繁DB写操作(XBcore脏标记思路)"""
@@ -81,14 +75,12 @@ class _LRUWriteCache:
 class KeyVaultManager:
     """
     通用键值持久化管理器
-    负责将任意JSON可序列化数据以键名为索引存入数据库
-    集成LRU写缓存减少IO + JSON文件自动迁移
+    负责将任意结构化数据以键名为索引存入数据库
+    集成LRU写缓存减少IO
     """
 
     def __init__(self, fallback_dir: str = "", cache_capacity: int = 128):
-        self._fallback_path = (
-            Path(fallback_dir) if fallback_dir else _FALLBACK_DIR
-        )
+        del fallback_dir
         self._write_cache = _LRUWriteCache(capacity=cache_capacity)
         self._last_flush_ts = time.time()
         self._flush_interval = 60.0  # 脏缓存自动刷盘间隔(秒)
@@ -98,24 +90,6 @@ class KeyVaultManager:
         from src.common.database.database_model import PersistenceSlot
 
         return PersistenceSlot
-
-    def _attempt_json_migration(self, key: str):
-        # 检查是否有遗留JSON文件需要迁移到数据库
-        if not self._fallback_path.exists():
-            return
-        safe_name = key.replace("/", "_").replace("\\", "_").replace(":", "_")
-        json_file = self._fallback_path / f"{safe_name}.json"
-        if not json_file.exists():
-            return
-        try:
-            raw_text = json_file.read_text(encoding="utf-8")
-            payload = json.loads(raw_text)
-            self.store(key, payload)
-            backup_file = json_file.with_suffix(".json.migrated")
-            json_file.rename(backup_file)
-            logger.info(f"键 '{key}' 已从本地JSON迁移到数据库")
-        except Exception as exc:
-            logger.debug(f"JSON迁移跳过(键={key}): {exc}")
 
     def store(self, key: str, payload: Any):
         """存储键值对到数据库(先写缓存，定期落盘)"""
@@ -157,7 +131,7 @@ class KeyVaultManager:
         self._last_flush_ts = time.time()
 
     def retrieve(self, key: str, fallback: Any = None) -> Any:
-        """按键名读取数据(优先缓存→数据库→JSON迁移)"""
+        """按键名读取数据(优先缓存→数据库)"""
         # 缓存命中
         if self._write_cache.has(key):
             return self._write_cache.peek(key)
@@ -171,16 +145,6 @@ class KeyVaultManager:
                 return parsed
         except Exception as exc:
             logger.debug(f"持久化槽读取异常(key={key}): {exc}")
-        # 尝试JSON迁移
-        self._attempt_json_migration(key)
-        try:
-            row = Slot.get_or_none(Slot.slot_key == key)
-            if row:
-                parsed = json.loads(row.slot_value)
-                self._write_cache.put(key, parsed, mark_dirty=False)
-                return parsed
-        except Exception as _e:
-            logger.warning(f"持久化读取异常 key={key}: {_e}")
         return fallback
 
     def remove(self, key: str):
@@ -405,14 +369,14 @@ class RevisionTracker:
 
 class BulkTransporter:
     """
-    批量导入导出器 —— 将键值存储整体导出为JSON文件或从文件恢复
+    批量导入导出器 —— 将键值存储整体导出/导入到数据库槽位
     """
 
     def __init__(self, vault: KeyVaultManager):
         self._vault = vault
 
     def export_to_file(self, destination: str):
-        """将全部键值数据导出为单个JSON文件"""
+        """将全部键值数据导出到数据库槽位"""
         all_keys = self._vault.enumerate_keys()
         export_dict = {}
         for k in all_keys:
@@ -420,27 +384,20 @@ class BulkTransporter:
             if val is not None:
                 export_dict[k] = val
         try:
-            dest_path = Path(destination)
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            dest_path.write_text(
-                json.dumps(export_dict, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            logger.info(f"导出完成: {len(export_dict)}条记忆 → {destination}")
+            slot_key = f"memory_export:{str(destination).replace(':', '_')}"
+            self._vault.store(slot_key, export_dict)
+            self._vault.force_flush()
+            logger.info(f"导出完成: {len(export_dict)}条记忆 → 槽位 {slot_key}")
         except Exception as exc:
             logger.error(f"导出失败: {exc}")
 
     def import_from_file(self, source: str):
-        """从JSON文件恢复全部键值数据"""
-        source_path = Path(source)
-        if not source_path.exists():
-            logger.error(f"导入源文件不存在: {source}")
-            return
+        """从数据库导出槽位恢复全部键值数据"""
         try:
-            raw = source_path.read_text(encoding="utf-8")
-            import_dict = json.loads(raw)
+            slot_key = f"memory_export:{str(source).replace(':', '_')}"
+            import_dict = self._vault.retrieve(slot_key)
             if not isinstance(import_dict, dict):
-                logger.error("导入文件格式异常: 顶层结构应为字典")
+                logger.error("导入槽位格式异常: 顶层结构应为字典")
                 return
             imported_count = 0
             for k, v in import_dict.items():
@@ -448,7 +405,7 @@ class BulkTransporter:
                 imported_count += 1
             # 确保全部写入
             self._vault.force_flush()
-            logger.info(f"导入完成: {imported_count}条记忆 ← {source}")
+            logger.info(f"导入完成: {imported_count}条记忆 ← 槽位 {slot_key}")
         except Exception as exc:
             logger.error(f"导入失败: {exc}")
 

@@ -64,6 +64,7 @@ def check_runtime_model_config() -> dict[str, Any]:
 def audit_data_json_sources() -> dict[str, Any]:
     data_dir = ROOT / "data"
     json_files = sorted(data_dir.rglob("*.json")) if data_dir.exists() else []
+    assert not json_files, "data 目录不允许再保留或生成运行态 JSON 文件"
     grouped: dict[str, int] = {}
     for path in json_files:
         try:
@@ -96,7 +97,7 @@ def audit_data_json_sources() -> dict[str, Any]:
         "hippo_summary_backend": "Huoli.db:persistence_slot",
         "hippo_topic_cache_backend": "Huoli.db:persistence_slot",
         "social_value_backend": "Huoli.db:persistence_slot",
-        "legacy_json_files_are_read_only_compat": True,
+        "legacy_json_compat_removed": True,
     }
 
 

@@ -1,7 +1,6 @@
 import asyncio
 import json
 import math
-import os
 import time
 import uuid
 from collections import deque
@@ -21,10 +20,12 @@ from src.chat.heart_flow.vote_types import (
     SurfaceMaskVote,
     MaskBehaviorMode,
 )
+from src.common.database.slot_storage import load_slot, save_slot
 from src.common.logger import get_logger
 from src.config.core_config_engine import get_core_config
 
 logger = get_logger("wound_network")
+_WOUND_STATE_SLOT_KEY = "trauma_fabric:wound_state"
 
 
 class DisorderGrade(Enum):
@@ -211,7 +212,7 @@ class WoundNetwork:
         self._shard_eval_ts: Dict[str, float] = {}
         self._conf_cache: Dict[str, Any] = {}
         self._conf_ts: float = 0.0
-        self._storage_path: str = "data/huoli/wound_state.json"
+        self._storage_path: str = f"Huoli.db:{_WOUND_STATE_SLOT_KEY}"
         self._refresh_conf()
         self._read_disk()
 
@@ -674,9 +675,6 @@ class WoundNetwork:
 
     def _flush_disk(self) -> None:
         try:
-            os.makedirs(
-                os.path.dirname(self._storage_path) or ".", exist_ok=True
-            )
             payload = {
                 "inner_chaos": self._ledger.inner_chaos,
                 "mask_wear": self._ledger.mask_wear,
@@ -692,17 +690,15 @@ class WoundNetwork:
                 "shard_count": len(self._ledger.shards),
                 "flushed_at": time.time(),
             }
-            with open(self._storage_path, "w", encoding="utf-8") as fh:
-                json.dump(payload, fh, ensure_ascii=False, indent=2)
+            save_slot(_WOUND_STATE_SLOT_KEY, payload, ttl_days=3650)
         except (OSError, TypeError) as exc:
-            logger.debug(f"[伤网] 磁盘写入失败: {exc}")
+            logger.debug(f"[伤网] 状态写入失败: {exc}")
 
     def _read_disk(self) -> None:
-        if not os.path.exists(self._storage_path):
+        data = load_slot(_WOUND_STATE_SLOT_KEY)
+        if not isinstance(data, dict):
             return
         try:
-            with open(self._storage_path, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
             self._ledger.inner_chaos = float(data.get("inner_chaos", 0.0))
             self._ledger.mask_wear = float(data.get("mask_wear", 0.0))
             self._ledger.surface_armor = float(data.get("surface_armor", 8.0))
@@ -728,8 +724,8 @@ class WoundNetwork:
                 self._ledger.worldview.compromised_beliefs = list(
                     wv_data.get("compromised_beliefs", [])
                 )
-        except (json.JSONDecodeError, OSError, TypeError) as exc:
-            logger.debug(f"[伤网] 磁盘读取失败: {exc}")
+        except (OSError, TypeError, ValueError) as exc:
+            logger.debug(f"[伤网] 状态读取失败: {exc}")
 
     # ---- LLM ----
 

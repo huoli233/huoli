@@ -1,10 +1,9 @@
 import asyncio
-import json
 import time
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
+from src.common.database.slot_storage import load_slot, save_slot
 from src.common.logger import get_logger
 
 logger = get_logger("autonomous_agent")
@@ -45,14 +44,12 @@ class AgentPersistence:
         )
 
 
-_DEFAULT_PERSIST_DIR = Path("data/huoli/autonomous_state")
+_PERSIST_SLOT_KEY = "autonomous_agent:state"
 
 
-def _resolve_persist_path() -> Path:
-    """返回持久化文件路径。"""
-    base = _DEFAULT_PERSIST_DIR
-    base.mkdir(parents=True, exist_ok=True)
-    return base / "agent_state.json"
+def _resolve_persist_path() -> str:
+    """兼容旧字段：返回数据库槽位标识。"""
+    return f"Huoli.db:{_PERSIST_SLOT_KEY}"
 
 
 # ---------------------------------------------------------------------------
@@ -270,11 +267,7 @@ class AutonomousCore:
         self._state.last_persist_ts = time.time()
         self._state.monitored_channels = list(self._channel_registry)
         try:
-            self._save_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(self._save_path, "w", encoding="utf-8") as fh:
-                json.dump(
-                    self._state.to_dict(), fh, ensure_ascii=False, indent=2
-                )
+            save_slot(_PERSIST_SLOT_KEY, self._state.to_dict(), ttl_days=3650)
             logger.debug(
                 f"[自主代理] 状态已保存 (总tick={
                     self._state.cumulative_ticks})"
@@ -283,12 +276,11 @@ class AutonomousCore:
             logger.warning(f"[自主代理] 持久化失败: {exc}")
 
     def _load_state(self) -> None:
-        if not self._save_path.exists():
+        data = load_slot(_PERSIST_SLOT_KEY)
+        if not isinstance(data, dict):
             logger.debug("[自主代理] 无历史状态，使用默认值")
             return
         try:
-            with open(self._save_path, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
             self._state = AgentPersistence.from_dict(data)
             for cid in self._state.monitored_channels:
                 self._channel_registry.add(cid)

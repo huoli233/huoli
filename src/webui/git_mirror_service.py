@@ -4,7 +4,6 @@ import re as _re
 from typing import Optional, List, Dict, Any
 from enum import Enum
 import httpx
-import json
 import asyncio
 import subprocess
 import shutil
@@ -14,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 from urllib.parse import urlparse
 from src.common.logger import get_logger
+from src.webui.core.security import load_webui_config, save_webui_config
 from src.webui.runtime_config import webui_module_view
 
 logger = get_logger("WebUI镜像")
@@ -149,8 +149,7 @@ class MirrorType(str, Enum):
 class GitMirrorConfig:
     """Git 镜像源配置管理"""
 
-    # 配置文件路径
-    CONFIG_FILE = Path("data/webui.json")
+    CONFIG_BACKEND = "Huoli.db:webui:config"
 
     # 默认镜像源配置
     DEFAULT_MIRRORS = [
@@ -185,29 +184,22 @@ class GitMirrorConfig:
 
     def __init__(self):
         """初始化配置管理器"""
-        self.config_file = self.CONFIG_FILE
+        self.config_file = self.CONFIG_BACKEND
         self.mirrors: List[Dict[str, Any]] = []
         self._load_config()
 
     def _load_config(self) -> None:
-        """加载配置文件"""
+        """加载数据库配置"""
         try:
-            if self.config_file.exists():
-                with open(self.config_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-
-                # 检查是否有镜像源配置
-                if "git_mirrors" not in data or not data["git_mirrors"]:
-                    logger.info("配置文件中未找到镜像源配置，使用默认配置")
-                    self._init_default_mirrors()
-                else:
-                    self.mirrors = data["git_mirrors"]
-                    logger.info(f"已加载 {len(self.mirrors)} 个镜像源配置")
-            else:
-                logger.info("配置文件不存在，创建默认配置")
+            data = load_webui_config()
+            if "git_mirrors" not in data or not data["git_mirrors"]:
+                logger.info("数据库中未找到镜像源配置，使用默认配置")
                 self._init_default_mirrors()
+            else:
+                self.mirrors = data["git_mirrors"]
+                logger.info(f"已加载 {len(self.mirrors)} 个镜像源配置")
         except Exception as e:
-            logger.error(f"加载配置文件失败: {e}")
+            logger.error(f"加载镜像源配置失败: {e}")
             self._init_default_mirrors()
 
     def _init_default_mirrors(self) -> None:
@@ -224,27 +216,15 @@ class GitMirrorConfig:
         logger.info(f"已初始化 {len(self.mirrors)} 个默认镜像源")
 
     def _save_config(self) -> None:
-        """保存配置到文件"""
+        """保存配置到 Huoli.db"""
         try:
-            # 确保目录存在
-            self.config_file.parent.mkdir(parents=True, exist_ok=True)
-
-            # 读取现有配置
-            existing_data = {}
-            if self.config_file.exists():
-                with open(self.config_file, "r", encoding="utf-8") as f:
-                    existing_data = json.load(f)
-
-            # 更新镜像源配置
+            existing_data = load_webui_config()
             existing_data["git_mirrors"] = self.mirrors
-
-            # 写入文件
-            with open(self.config_file, "w", encoding="utf-8") as f:
-                json.dump(existing_data, f, indent=2, ensure_ascii=False)
-
-            logger.debug(f"配置已保存到 {self.config_file}")
+            if not save_webui_config(existing_data):
+                raise RuntimeError("WebUI 镜像源配置写入数据库失败")
+            logger.debug(f"镜像源配置已保存到 {self.config_file}")
         except Exception as e:
-            logger.error(f"保存配置文件失败: {e}")
+            logger.error(f"保存镜像源配置失败: {e}")
 
     def get_all_mirrors(self) -> List[Dict[str, Any]]:
         """获取所有镜像源"""

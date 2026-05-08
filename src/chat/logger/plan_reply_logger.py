@@ -1,15 +1,17 @@
-import json
 import time
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
+from src.common.database.slot_storage import (
+    delete_slot,
+    list_slot_keys,
+    save_slot,
+)
 from src.config.config import global_config
 
 
 class PlanReplyLogger:
-    _BASE_DIR = Path("logs")
-    _PLAN_DIR = _BASE_DIR / "plan"
-    _REPLY_DIR = _BASE_DIR / "reply"
+    _PLAN_DIR = "plan_reply_log:plan"
+    _REPLY_DIR = "plan_reply_log:reply"
     _TRIM_COUNT = 100
 
     @classmethod
@@ -74,34 +76,23 @@ class PlanReplyLogger:
 
     @classmethod
     def _write_json(
-        cls, base_dir: Path, chat_id: str, payload: Dict[str, Any]
+        cls, base_dir: str, chat_id: str, payload: Dict[str, Any]
     ) -> None:
-        chat_dir = base_dir / chat_id
-        chat_dir.mkdir(parents=True, exist_ok=True)
-        file_path = (
-            chat_dir / f"{int(time.time() * 1000)}_{uuid4().hex[:8]}.json"
-        )
+        safe_chat_id = str(chat_id).replace("/", "_").replace("\\", "_")
+        slot_key = f"{base_dir}:{safe_chat_id}:{int(time.time() * 1000)}_{uuid4().hex[:8]}"
         try:
-            with file_path.open("w", encoding="utf-8") as f:
-                json.dump(
-                    cls._safe_data(payload), f, ensure_ascii=False, indent=2
-                )
+            save_slot(slot_key, cls._safe_data(payload), ttl_days=30)
         finally:
-            cls._trim_overflow(chat_dir)
+            cls._trim_overflow(f"{base_dir}:{safe_chat_id}:")
 
     @classmethod
-    def _trim_overflow(cls, chat_dir: Path) -> None:
-        files = sorted(
-            chat_dir.glob("*.json"), key=lambda p: p.stat().st_mtime
-        )
+    def _trim_overflow(cls, prefix: str) -> None:
+        keys = sorted(list_slot_keys(prefix))
         max_per_chat = cls._get_max_per_chat()
-        if len(files) <= max_per_chat:
+        if len(keys) <= max_per_chat:
             return
-        for old_file in files[: cls._TRIM_COUNT]:
-            try:
-                old_file.unlink()
-            except FileNotFoundError:
-                continue
+        for old_key in keys[: cls._TRIM_COUNT]:
+            delete_slot(old_key)
 
     @classmethod
     def _serialize_action(cls, action: Any) -> Dict[str, Any]:
@@ -140,8 +131,6 @@ class PlanReplyLogger:
             return {str(k): cls._safe_data(v) for k, v in value.items()}
         if isinstance(value, (list, tuple, set)):
             return [cls._safe_data(v) for v in value]
-        if isinstance(value, Path):
-            return str(value)
         try:
             return str(value)
         except Exception:

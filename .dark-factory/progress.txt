@@ -536,3 +536,28 @@
 - 本轮没有删除历史 JSON 文件，只停止这些核心状态后续新增 JSON，并保留旧 JSON 只读迁移；清理历史文件需要单独按删除分支规则执行。
 - `chat_id` 不是随机 ID，而是 `ChatManager` 使用 `md5(platform + group_id)` 或 `md5(platform + user_id + private)` 生成的稳定流 ID，割裂来自不同子系统各自拿该 ID 写独立 JSON 状态。
 - 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T07:13:30+08:00 - Task: 彻底移除运行态 JSON 状态文件并统一 Huoli.db 持久化
+
+### What was done:
+- 新增 `src/common/database/slot_storage.py`，提供统一 `persistence_slot` 结构化槽位读写、删除和前缀枚举能力。
+- 将本地存储、WebUI 配置/镜像源、用户身份、管理员/自主代理、群画像、人格池、创伤网络、回忆录柜、规划/回复日志、知识图谱、向量元数据、夜间节律、海马摘要、话题缓存、社交值、通用记忆导入导出等运行态 JSON 文件写入迁移到 `data/Huoli.db`。
+- 按用户要求移除旧 JSON 兼容和旧 JSON 只读迁移入口，后续不再从旧运行态 JSON 恢复。
+- 删除残留运行态 JSON 文件 `data/local_store.json` 与 `data/webui.json`，并确认 `data` 目录下已无 `*.json`。
+- 将 WebUI 规划器/回复器日志查询 API 从 `logs/plan|reply/*.json` 改为读取 `persistence_slot`，避免写入端迁移后前端日志断档。
+- 更新模型运行审计与 HeartFlow 回归契约，明确断言 `data` 目录不允许再保留或生成运行态 JSON 文件。
+
+### Testing:
+- `uv run ruff check ...` 覆盖本轮触及源码、WebUI API 与回归脚本，通过。
+- DB smoke 通过：`LocalStoreManager`、`TokenManager`、`GitMirrorConfig`、`SummaryStorage`、`ChatHistorySummarizer`、`SocialStorage` 均写入 `Huoli.db:persistence_slot`，且未生成 `data/*.json`。
+- WebUI 日志 DB smoke 通过：`PlanReplyLogger` 写入 plan/reply 槽位后，planner/replier API overview/list/detail 均可读回，并未生成 `data/*.json`。
+- `uv run python scripts/model_runtime_audit.py` 通过，确认 `json_file_count=0`、`legacy_json_compat_removed=true`、运行态后端为 `Huoli.db:persistence_slot`。
+- `uv run python scripts/config_profile_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，确认夜间状态 DB 持久化、管理员语义、强制回复兜底、WebUI 监控契约仍有效。
+- `$env:PYTHONPYCACHEPREFIX = "$PWD\.dark-factory\pycache"; uv run python -m compileall src scripts` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 本轮严格移除的是运行态持久化 JSON 文件；API JSON payload、DB 字段内结构化序列化、插件 `_manifest.json`、前端 `package.json` 等协议/配置格式不属于运行态状态文件，不能硬删。
+- 删除前保留分支：`preserve/full-modules-json状态文件移除`；实际删除分支：`delete/json状态文件移除`。
+- 工作区内已有 `.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`、`src/memory_system/memory_consolidator.py` 修改不属于本轮提交，已避免暂存。

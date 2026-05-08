@@ -8,7 +8,6 @@ import json
 import time
 import re
 import difflib
-from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 from dataclasses import dataclass, field
 from json_repair import repair_json
@@ -25,11 +24,6 @@ from src.chat.message_receive.chat_stream import get_chat_manager
 from src.chat.utils.prompt_builder import Prompt, global_prompt_manager
 
 logger = get_logger("chat_history_summarizer")
-
-HIPPO_CACHE_DIR = (
-    Path(__file__).resolve().parents[2] / "data" / "hippo_memorizer"
-)
-
 
 def init_prompt():
     """初始化提示词模板"""
@@ -172,10 +166,9 @@ class ChatHistorySummarizer:
         self.current_batch: Optional[MessageBatch] = None
 
         # 话题缓存：topic_str -> TopicCacheItem
-        # 在内存中维护，并通过本地文件实时持久化
+        # 在内存中维护，并通过数据库实时持久化
         self.topic_cache: Dict[str, TopicCacheItem] = {}
         self._safe_chat_id = self._sanitize_chat_id(self.chat_id)
-        self._topic_cache_file = HIPPO_CACHE_DIR / f"{self._safe_chat_id}.json"
         self._topic_cache_slot_key = f"hippo_topic_cache:{self.chat_id}"
         # 注意：批次加载需要异步查询消息，所以在 start() 中调用
 
@@ -310,13 +303,7 @@ class ChatHistorySummarizer:
             logger.error(f"{self.log_prefix} 持久化话题缓存失败: {e}")
 
     def _load_topic_cache_payload(self) -> Optional[Dict[str, Any]]:
-        data = self._load_topic_cache_from_db()
-        if data:
-            return data
-        data = self._load_topic_cache_from_legacy_json()
-        if data:
-            self._save_topic_cache_payload(data)
-        return data
+        return self._load_topic_cache_from_db()
 
     def _load_topic_cache_from_db(self) -> Optional[Dict[str, Any]]:
         try:
@@ -333,18 +320,6 @@ class ChatHistorySummarizer:
             return payload if isinstance(payload, dict) else None
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 从数据库加载话题缓存失败: {exc}")
-            return None
-
-    def _load_topic_cache_from_legacy_json(self) -> Optional[Dict[str, Any]]:
-        try:
-            if not self._topic_cache_file.exists():
-                return None
-            with self._topic_cache_file.open("r", encoding="utf-8") as f:
-                payload = json.load(f)
-            logger.info(f"{self.log_prefix} 已从旧JSON恢复话题缓存，后续写入数据库")
-            return payload if isinstance(payload, dict) else None
-        except Exception as exc:
-            logger.debug(f"{self.log_prefix} 加载旧JSON话题缓存失败: {exc}")
             return None
 
     def _save_topic_cache_payload(self, data: Dict[str, Any]) -> None:

@@ -1,11 +1,10 @@
-import copy
 import os
-import json
 import tomlkit
 from fastapi import APIRouter, HTTPException, Body, Depends, Cookie, Header
 from typing import Any, Annotated, Optional
 from src.common.logger import get_logger
 from src.webui.core.auth import verify_auth_token_from_cookie_or_header
+from src.webui.core.security import load_webui_config, save_webui_config
 from src.config.config import CONFIG_DIR, PROJECT_ROOT
 
 ConfigBody = Annotated[dict[str, Any], Body()]
@@ -528,11 +527,7 @@ def _to_relative_path(path: str) -> str:
 async def get_adapter_config_path(_auth: bool = Depends(require_auth)):
     """获取保存的适配器配置文件路径"""
     try:
-        webui_data_path = os.path.join("data", "webui.json")
-        if not os.path.exists(webui_data_path):
-            return {"success": True, "path": None}
-        with open(webui_data_path, "r", encoding="utf-8") as f:
-            webui_data = json.load(f)
+        webui_data = load_webui_config()
         adapter_config_path = webui_data.get("adapter_config_path")
         if not adapter_config_path:
             return {"success": True, "path": None}
@@ -576,18 +571,12 @@ async def save_adapter_config_path(
         path = data.get("path")
         if not path:
             raise HTTPException(status_code=400, detail="路径不能为空")
-        webui_data_path = os.path.join("data", "webui.json")
-        if os.path.exists(webui_data_path):
-            with open(webui_data_path, "r", encoding="utf-8") as f:
-                webui_data = json.load(f)
-        else:
-            webui_data = {}
+        webui_data = load_webui_config()
         abs_path = _normalize_adapter_path(path)
         save_path = _to_relative_path(abs_path)
         webui_data["adapter_config_path"] = save_path
-        os.makedirs("data", exist_ok=True)
-        with open(webui_data_path, "w", encoding="utf-8") as f:
-            json.dump(webui_data, f, ensure_ascii=False, indent=2)
+        if not save_webui_config(webui_data):
+            raise RuntimeError("WebUI 配置写入数据库失败")
         logger.info(f"适配器配置路径已保存: {save_path}")
         return {"success": True, "message": "路径已保存"}
     except HTTPException:

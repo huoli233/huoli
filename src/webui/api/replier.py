@@ -3,24 +3,23 @@
 提供回复器日志数据的查询接口
 
 性能优化：
-1. 聊天摘要只统计文件数量和最新时间戳，不读取文件内容
-2. 日志列表使用文件名解析时间戳，只在需要时读取完整内容
+1. 聊天摘要只统计数据库槽位键和最新时间戳，不读取完整内容
+2. 日志列表使用槽位键解析时间戳，只在需要时读取当前页内容
 3. 详情按需加载
 """
 
-import json
 import re
-from pathlib import Path
 from typing import List, Dict, Optional
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
-from src.common.logger import get_logger, PROJECT_ROOT
+from src.common.database.slot_storage import list_slot_keys, load_slot
+from src.common.logger import get_logger
 
 logger = get_logger("WebUI回复API")
 router = APIRouter(prefix="/api/replier", tags=["replier"])
 
-# 回复器日志目录
-REPLY_LOG_DIR = PROJECT_ROOT / "logs" / "reply"
+# 回复器日志槽位前缀，写入端见 PlanReplyLogger._REPLY_DIR
+REPLY_LOG_PREFIX = "plan_reply_log:reply"
 
 # 安全校验：路径分段只允许字母数字、下划线、连字符、点（禁止 .. 和路径分隔符）
 _SAFE_PATH_SEGMENT = re.compile(r"^[a-zA-Z0-9_\-][a-zA-Z0-9_\-.]{0,254}$")
@@ -93,7 +92,7 @@ class PaginatedReplyLogs(BaseModel):
 
 
 def parse_timestamp_from_filename(filename: str) -> float:
-    """从文件名解析时间戳: 1766497488220_af92bdb1.json -> 1766497488.220"""
+    """从槽位尾名解析时间戳: 1766497488220_af92bdb1 -> 1766497488.220"""
     try:
         timestamp_str = filename.split("_")[0]
         # 时间戳是毫秒级，需要转换为秒
@@ -102,50 +101,77 @@ def parse_timestamp_from_filename(filename: str) -> float:
         return 0
 
 
+def _slot_prefix(chat_id: Optional[str] = None) -> str:
+    if chat_id is None:
+        return f"{REPLY_LOG_PREFIX}:"
+    return f"{REPLY_LOG_PREFIX}:{chat_id}:"
+
+
+def _parse_log_slot_key(slot_key: str) -> Optional[dict]:
+    prefix = _slot_prefix()
+    if not slot_key.startswith(prefix):
+        return None
+    remainder = slot_key[len(prefix):]
+    if ":" not in remainder:
+        return None
+    chat_id, filename = remainder.rsplit(":", 1)
+    if not chat_id or not filename:
+        return None
+    return {
+        "slot_key": slot_key,
+        "chat_id": chat_id,
+        "filename": filename,
+        "timestamp": parse_timestamp_from_filename(filename),
+    }
+
+
+def _list_log_refs(chat_id: Optional[str] = None) -> list[dict]:
+    keys = list_slot_keys(_slot_prefix(chat_id))
+    refs = []
+    for key in keys:
+        parsed = _parse_log_slot_key(key)
+        if parsed:
+            refs.append(parsed)
+    refs.sort(key=lambda item: item["timestamp"], reverse=True)
+    return refs
+
+
+def _normalize_search(search: Optional[str]) -> Optional[str]:
+    return search if isinstance(search, str) and search else None
+
+
+def _safe_str(value: object) -> str:
+    return value if isinstance(value, str) else ""
+
+
 @router.get("/overview", response_model=ReplierOverview)
 async def get_replier_overview():
     """
     获取回复器总览 - 轻量级接口
-    只统计文件数量，不读取文件内容
+    只统计数据库槽位数量，不读取完整日志内容
     """
-    if not REPLY_LOG_DIR.exists():
-        return ReplierOverview(total_chats=0, total_replies=0, chats=[])
+    grouped: dict[str, list[dict]] = {}
+    for ref in _list_log_refs():
+        grouped.setdefault(ref["chat_id"], []).append(ref)
 
-    chats = []
-    total_replies = 0
-
-    for chat_dir in REPLY_LOG_DIR.iterdir():
-        if not chat_dir.is_dir():
-            continue
-
-        # 只统计json文件数量
-        json_files = list(chat_dir.glob("*.json"))
-        reply_count = len(json_files)
-        total_replies += reply_count
-
-        if reply_count == 0:
-            continue
-
-        # 从文件名获取最新时间戳
-        latest_file = max(
-            json_files, key=lambda f: parse_timestamp_from_filename(f.name)
+    chats = [
+        ReplierChatSummary(
+            chat_id=chat_id,
+            reply_count=len(refs),
+            latest_timestamp=refs[0]["timestamp"],
+            latest_filename=refs[0]["filename"],
         )
-        latest_timestamp = parse_timestamp_from_filename(latest_file.name)
-
-        chats.append(
-            ReplierChatSummary(
-                chat_id=chat_dir.name,
-                reply_count=reply_count,
-                latest_timestamp=latest_timestamp,
-                latest_filename=latest_file.name,
-            )
-        )
+        for chat_id, refs in grouped.items()
+        if refs
+    ]
 
     # 按最新时间戳排序
     chats.sort(key=lambda x: x.latest_timestamp, reverse=True)
 
     return ReplierOverview(
-        total_chats=len(chats), total_replies=total_replies, chats=chats
+        total_chats=len(chats),
+        total_replies=sum(chat.reply_count for chat in chats),
+        chats=chats,
     )
 
 
@@ -160,71 +186,61 @@ async def get_chat_reply_logs(
 ):
     """
     获取指定聊天的回复日志列表（分页）
-    需要读取文件内容获取摘要信息
+    需要读取数据库槽位内容获取摘要信息
     支持搜索提示词内容
     """
     _validate_path_segment(chat_id, "chat_id")
-    chat_dir = REPLY_LOG_DIR / chat_id
-    if not chat_dir.exists():
-        return PaginatedReplyLogs(
-            data=[], total=0, page=page, page_size=page_size, chat_id=chat_id
-        )
-
-    # 先获取所有文件并按时间戳排序
-    json_files = list(chat_dir.glob("*.json"))
-    json_files.sort(
-        key=lambda f: parse_timestamp_from_filename(f.name), reverse=True
-    )
+    search = _normalize_search(search)
+    refs = _list_log_refs(chat_id)
 
     # 如果有搜索条件，需要过滤文件
     if search:
         search_lower = search.lower()
-        filtered_files = []
-        for log_file in json_files:
+        filtered_refs = []
+        for ref in refs:
             try:
-                with open(log_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                    prompt = data.get("prompt", "")
-                    if search_lower in prompt.lower():
-                        filtered_files.append(log_file)
+                data = load_slot(ref["slot_key"], {})
+                prompt = data.get("prompt", "") if isinstance(data, dict) else ""
+                if search_lower in prompt.lower():
+                    filtered_refs.append(ref)
             except Exception:
                 continue
-        json_files = filtered_files
+        refs = filtered_refs
 
-    total = len(json_files)
+    total = len(refs)
 
     # 分页 - 只读取当前页的文件
     offset = (page - 1) * page_size
-    page_files = json_files[offset: offset + page_size]
+    page_refs = refs[offset: offset + page_size]
 
     logs = []
-    for log_file in page_files:
+    for ref in page_refs:
         try:
-            with open(log_file, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                output = data.get("output", "")
-                logs.append(
-                    ReplyLogSummary(
-                        chat_id=data.get("chat_id", chat_id),
-                        timestamp=data.get(
-                            "timestamp",
-                            parse_timestamp_from_filename(log_file.name),
-                        ),
-                        filename=log_file.name,
-                        model=data.get("model", ""),
-                        success=data.get("success", True),
-                        llm_ms=data.get("timing", {}).get("llm_ms", 0),
-                        overall_ms=data.get("timing", {}).get("overall_ms", 0),
-                        output_preview=output[:100] if output else "",
-                    )
+            data = load_slot(ref["slot_key"], {})
+            if not isinstance(data, dict):
+                raise ValueError("日志槽位内容不是字典")
+            output = data.get("output", "")
+            timing = data.get("timing", {})
+            timing = timing if isinstance(timing, dict) else {}
+            logs.append(
+                ReplyLogSummary(
+                    chat_id=data.get("chat_id", chat_id),
+                    timestamp=data.get("timestamp", ref["timestamp"]),
+                    filename=ref["filename"],
+                    model=data.get("model", ""),
+                    success=data.get("success", True),
+                    llm_ms=timing.get("llm_ms", 0),
+                    overall_ms=timing.get("overall_ms", 0),
+                    output_preview=output[:100] if output else "",
                 )
+            )
         except Exception:
-            # 文件读取失败时使用文件名信息
+            # 槽位读取失败时使用键名信息
             logs.append(
                 ReplyLogSummary(
                     chat_id=chat_id,
-                    timestamp=parse_timestamp_from_filename(log_file.name),
-                    filename=log_file.name,
+                    timestamp=ref["timestamp"],
+                    filename=ref["filename"],
                     model="",
                     success=False,
                     llm_ms=0,
@@ -240,34 +256,32 @@ async def get_chat_reply_logs(
 
 @router.get("/log/{chat_id}/{filename}", response_model=ReplyLogDetail)
 async def get_reply_log_detail(chat_id: str, filename: str):
-    """获取回复日志详情 - 按需加载完整内容"""
+    """获取回复日志详情 - 按需加载数据库槽位内容"""
     _validate_path_segment(chat_id, "chat_id")
     _validate_path_segment(filename, "filename")
-    log_file = REPLY_LOG_DIR / chat_id / filename
-    # 确保解析后的路径仍在日志目录内
-    if not log_file.resolve().is_relative_to(REPLY_LOG_DIR.resolve()):
-        raise HTTPException(status_code=400, detail="路径不合法")
-    if not log_file.exists():
-        raise HTTPException(status_code=404, detail="日志文件不存在")
+    slot_key = f"{REPLY_LOG_PREFIX}:{chat_id}:{filename}"
+    data = load_slot(slot_key)
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=404, detail="日志不存在")
     try:
-        with open(log_file, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return ReplyLogDetail(
-                type=data.get("type", "reply"),
-                chat_id=data.get("chat_id", chat_id),
-                timestamp=data.get("timestamp", 0),
-                prompt=data.get("prompt", ""),
-                output=data.get("output", ""),
-                processed_output=data.get("processed_output", []),
-                model=data.get("model", ""),
-                reasoning=data.get("reasoning", ""),
-                think_level=data.get("think_level", 0),
-                timing=data.get("timing", {}),
-                error=data.get("error"),
-                success=data.get("success", True),
-            )
+        processed_output = data.get("processed_output", [])
+        timing = data.get("timing", {})
+        return ReplyLogDetail(
+            type=_safe_str(data.get("type")) or "reply",
+            chat_id=_safe_str(data.get("chat_id")) or chat_id,
+            timestamp=data.get("timestamp", parse_timestamp_from_filename(filename)),
+            prompt=_safe_str(data.get("prompt")),
+            output=_safe_str(data.get("output")),
+            processed_output=processed_output if isinstance(processed_output, list) else [],
+            model=_safe_str(data.get("model")),
+            reasoning=_safe_str(data.get("reasoning")),
+            think_level=data.get("think_level", 0) or 0,
+            timing=timing if isinstance(timing, dict) else {},
+            error=data.get("error") if isinstance(data.get("error"), str) else None,
+            success=data.get("success", True),
+        )
     except Exception as e:
-        logger.exception(f"读取回复日志失败: {log_file.name}")
+        logger.exception(f"读取回复日志失败: {filename}")
         raise HTTPException(status_code=500, detail="读取日志失败") from e
 
 

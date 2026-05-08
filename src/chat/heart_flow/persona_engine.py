@@ -1,15 +1,16 @@
 import asyncio
 import json
-import os
 import time
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
+from src.common.database.slot_storage import load_slot, save_slot
 from src.common.logger import get_logger
 from src.config.core_config_engine import get_core_config
 
 logger = get_logger("character_foundry")
+_PERSONA_POOL_SLOT_KEY = "persona_engine:pool"
 
 
 def _coerce_float(value: Any, default: float = 0.0) -> float:
@@ -182,7 +183,7 @@ class CharacterFoundry:
         self._last_nonbaseline_ts: float = 0.0
         self._conf_cache: Dict[str, Any] = {}
         self._conf_ts: float = 0.0
-        self._snapshot_dir: str = "data/huoli/persona_pool.json"
+        self._snapshot_dir: str = f"Huoli.db:{_PERSONA_POOL_SLOT_KEY}"
         self._refresh_conf()
         self._restore_snapshot()
 
@@ -570,9 +571,6 @@ class CharacterFoundry:
 
     def _save_snapshot(self) -> None:
         try:
-            os.makedirs(
-                os.path.dirname(self._snapshot_dir) or ".", exist_ok=True
-            )
             payload = {
                 "active_id": self._active_slot_id,
                 "roster": [r.to_dict() for r in self._roster.values()],
@@ -593,20 +591,15 @@ class CharacterFoundry:
                 ],
                 "saved_at": time.time(),
             }
-            with open(self._snapshot_dir, "w", encoding="utf-8") as fh:
-                json.dump(payload, fh, ensure_ascii=False, indent=2)
+            save_slot(_PERSONA_POOL_SLOT_KEY, payload, ttl_days=3650)
         except (OSError, TypeError) as exc:
             logger.debug(f"[铸造] 快照保存失败: {exc}")
 
     def _restore_snapshot(self) -> None:
-        if not os.path.exists(self._snapshot_dir):
+        data = load_slot(_PERSONA_POOL_SLOT_KEY)
+        if not isinstance(data, dict):
             return
         try:
-            with open(self._snapshot_dir, "r", encoding="utf-8") as fh:
-                data = json.load(fh)
-            if not isinstance(data, dict):
-                logger.debug("[铸造] 快照格式异常，跳过恢复")
-                return
             for item in data.get("roster", []):
                 if not isinstance(item, dict):
                     continue
@@ -644,7 +637,7 @@ class CharacterFoundry:
                 )
                 if note.still_viable:
                     self._notes.append(note)
-        except (json.JSONDecodeError, OSError, KeyError, ValueError) as exc:
+        except (OSError, KeyError, ValueError) as exc:
             logger.debug(f"[铸造] 快照恢复失败: {exc}")
 
     # ---- LLM 调用 ----

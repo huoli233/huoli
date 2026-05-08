@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -8,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+from src.common.database.slot_storage import load_slot, save_slot
 from src.common.logger import get_logger
 
 logger = get_logger("向量存储")
@@ -54,13 +54,12 @@ class EmbeddingStore:
         self.dirty = False
         self._lock = threading.RLock()
         os.makedirs(data_dir, exist_ok=True)
-        self.store_file = os.path.join(data_dir, f"{store_name}_store.pkl")
+        self.store_slot_key = f"knowledge_embedding_store:{store_name}"
+        self.store_file = f"Huoli.db:{self.store_slot_key}"
         self.index_file_path = os.path.join(
             data_dir, f"{store_name}_index.faiss"
         )
-        self.idx2hash_file_path = os.path.join(
-            data_dir, f"{store_name}_idx2hash.json"
-        )
+        self.idx2hash_slot_key = f"knowledge_embedding_idx2hash:{store_name}"
         self._legacy_idx2hash_pkl = os.path.join(
             data_dir, f"{store_name}_idx2hash.pkl"
         )
@@ -261,7 +260,7 @@ class EmbeddingStore:
         return len(self.store)
 
     def save_to_file(self) -> bool:
-        """保存到文件"""
+        """保存到数据库槽位"""
         with self._lock:
             try:
                 store_data = {}
@@ -278,15 +277,14 @@ class EmbeddingStore:
                         "create_time": item.create_time,
                         "update_time": item.update_time,
                     }
-                with open(self.store_file, "w", encoding="utf-8") as f:
-                    json.dump(store_data, f, ensure_ascii=False, indent=2)
+                save_slot(self.store_slot_key, store_data, ttl_days=3650)
                 if self.faiss_index is not None and FAISS_AVAILABLE:
                     faiss.write_index(self.faiss_index, self.index_file_path)
-                with open(self.idx2hash_file_path, "w", encoding="utf-8") as f:
-                    json.dump(
-                        {str(k): v for k, v in self.idx2hash.items()},
-                        f, ensure_ascii=False,
-                    )
+                save_slot(
+                    self.idx2hash_slot_key,
+                    {str(k): v for k, v in self.idx2hash.items()},
+                    ttl_days=3650,
+                )
                 self.dirty = False
                 logger.info(
                     f"[{self.store_name}] 保存完成，共 {len(self.store)} 项"
@@ -297,12 +295,11 @@ class EmbeddingStore:
                 return False
 
     def load_from_file(self) -> bool:
-        """从文件加载"""
+        """从数据库槽位加载"""
         with self._lock:
             try:
-                if os.path.exists(self.store_file):
-                    with open(self.store_file, "r", encoding="utf-8") as f:
-                        store_data = json.load(f)
+                store_data = load_slot(self.store_slot_key, {})
+                if isinstance(store_data, dict) and store_data:
                     self.store = {}
                     for key, data in store_data.items():
                         vector = None
@@ -322,9 +319,8 @@ class EmbeddingStore:
                     )
                 if FAISS_AVAILABLE and os.path.exists(self.index_file_path):
                     self.faiss_index = faiss.read_index(self.index_file_path)
-                    if os.path.exists(self.idx2hash_file_path):
-                        with open(self.idx2hash_file_path, "r", encoding="utf-8") as f:
-                            raw = json.load(f)
+                    raw = load_slot(self.idx2hash_slot_key, {})
+                    if isinstance(raw, dict) and raw:
                         self.idx2hash = {int(k): v for k, v in raw.items()}
                         self.hash2idx = {
                             v: k for k, v in self.idx2hash.items()
@@ -337,14 +333,15 @@ class EmbeddingStore:
                         self.hash2idx = {
                             v: k for k, v in self.idx2hash.items()
                         }
-                        # 立即迁移到 JSON 格式
-                        with open(self.idx2hash_file_path, "w", encoding="utf-8") as f:
-                            json.dump(
-                                {str(k): v for k, v in self.idx2hash.items()},
-                                f, ensure_ascii=False,
-                            )
+                        save_slot(
+                            self.idx2hash_slot_key,
+                            {str(k): v for k, v in self.idx2hash.items()},
+                            ttl_days=3650,
+                        )
                         os.remove(self._legacy_idx2hash_pkl)
-                        logger.info(f"[{self.store_name}] 已将旧版 idx2hash.pkl 迁移为 JSON 格式")
+                        logger.info(
+                            f"[{self.store_name}] 已将旧版 idx2hash.pkl 迁移到数据库槽位"
+                        )
                 else:
                     self._build_faiss_index()
                 self.dirty = False
@@ -688,10 +685,12 @@ class EmbeddingManager:
         success &= self.paragraphs_embedding_store.save_to_file()
         success &= self.entities_embedding_store.save_to_file()
         success &= self.relation_embedding_store.save_to_file()
-        hashes_file = os.path.join(self.data_dir, "stored_pg_hashes.json")
         try:
-            with open(hashes_file, "w", encoding="utf-8") as f:
-                json.dump(list(self.stored_pg_hashes), f)
+            save_slot(
+                "knowledge_embedding:stored_pg_hashes",
+                list(self.stored_pg_hashes),
+                ttl_days=3650,
+            )
         except Exception as e:
             logger.error(f"保存段落哈希集合失败: {e}")
             success = False
@@ -706,13 +705,9 @@ class EmbeddingManager:
         self.stored_pg_hashes = set(
             self.paragraphs_embedding_store.get_all_keys()
         )
-        hashes_file = os.path.join(self.data_dir, "stored_pg_hashes.json")
-        if os.path.exists(hashes_file):
-            try:
-                with open(hashes_file, "r", encoding="utf-8") as f:
-                    self.stored_pg_hashes = set(json.load(f))
-            except Exception as e:
-                logger.warning(f"加载段落哈希集合失败: {e}")
+        raw_hashes = load_slot("knowledge_embedding:stored_pg_hashes", [])
+        if isinstance(raw_hashes, list):
+            self.stored_pg_hashes = set(raw_hashes)
         logger.info(
             f"[EmbeddingManager] 加载完成: {len(self.stored_pg_hashes)} 个段落哈希"
         )

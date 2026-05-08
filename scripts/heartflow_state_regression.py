@@ -697,7 +697,8 @@ def check_night_status_label_contract() -> Dict[str, Any]:
     assert "def mechanism_windows" in night_source
     assert "def persist_state" in night_source
     assert "_load_persisted_state" in night_source
-    assert "data/night_cycle_state" in night_source
+    assert "_night_state_slot_key" in night_source
+    assert "data/night_cycle_state" not in night_source
     assert "is_night=clock_is_night" in night_source
     assert "self._state.in_night_mode = clock_is_night" in night_source
     assert "self._state.last_stimulus_at = now" in night_source
@@ -786,21 +787,19 @@ def check_night_status_label_contract() -> Dict[str, Any]:
         {},
         {"energy_ratio": 0.45, "boredom": 0.0},
     )
-    direct_state_path = ROOT / "data" / "night_cycle_state" / "regression-night-created.json"
     try:
         assert direct_exported["last_evaluated_at"] > 0
         assert direct_exported["system_started_at"] > 0
         assert direct_exported["mechanism_windows"]
     finally:
         remove_night_cycle("regression-night-created")
-        if direct_state_path.exists():
-            direct_state_path.unlink()
+    from src.common.database.database_model import PersistenceSlot
+    from src.core.night_cycle_system import _night_state_slot_key
+
+    persist_slot_key = _night_state_slot_key("regression-night-persist")
+    PersistenceSlot.delete().where(PersistenceSlot.slot_key == persist_slot_key).execute()
     persistent = NightCycleSystem("regression-night-persist")
-    old_path = persistent._persist_path
     try:
-        persistent._persist_path = ROOT / ".dark-factory" / "night_cycle_regression_state.json"
-        if persistent._persist_path.exists():
-            persistent._persist_path.unlink()
         persistent._last_persist_at = 0.0
         persistent.evaluate(
             energy_ratio=0.25,
@@ -815,21 +814,13 @@ def check_night_status_label_contract() -> Dict[str, Any]:
         saved_chat_pressure = persistent.state_snapshot.pressure_chat_minutes
         persistent.persist_state(force=True)
         restored = NightCycleSystem("regression-night-persist")
-        restored_path = restored._persist_path
-        restored._persist_path = persistent._persist_path
         restored._load_persisted_state()
         assert restored.state_snapshot.last_evaluated_at > 0
         assert restored.state_snapshot.sleep_debt >= saved_debt
         assert restored.state_snapshot.pressure_chat_minutes >= saved_chat_pressure
-        restored._persist_path = restored_path
     finally:
-        persistent._persist_path = old_path
-        if (ROOT / ".dark-factory" / "night_cycle_regression_state.json").exists():
-            (ROOT / ".dark-factory" / "night_cycle_regression_state.json").unlink()
         remove_night_cycle("regression-night-persist")
-        persisted_default_path = ROOT / "data" / "night_cycle_state" / "regression-night-persist.json"
-        if persisted_default_path.exists():
-            persisted_default_path.unlink()
+        PersistenceSlot.delete().where(PersistenceSlot.slot_key == persist_slot_key).execute()
     return {
         "night_labels": True,
         "midnight_phase_label": detail["phase_label"],
@@ -990,13 +981,10 @@ def check_force_guard_contract() -> Dict[str, Any]:
 
 def check_night_cycle_persistence_contract() -> Dict[str, Any]:
     from src.common.database.database_model import PersistenceSlot
-    from src.core.night_cycle_system import _ensure_persistence_slot_table, _night_state_slot_key, _safe_state_filename
+    from src.core.night_cycle_system import _ensure_persistence_slot_table, _night_state_slot_key
 
     channel_id = "regression-night-db-only"
     slot_key = _night_state_slot_key(channel_id)
-    legacy_path = ROOT / "data" / "night_cycle_state" / _safe_state_filename(channel_id)
-    if legacy_path.exists():
-        legacy_path.unlink()
     _ensure_persistence_slot_table()
     PersistenceSlot.delete().where(PersistenceSlot.slot_key == slot_key).execute()
     remove_night_cycle(channel_id)
@@ -1006,7 +994,7 @@ def check_night_cycle_persistence_contract() -> Dict[str, Any]:
     row = PersistenceSlot.get_or_none(PersistenceSlot.slot_key == slot_key)
     assert row is not None
     assert row.slot_value
-    assert not legacy_path.exists()
+    assert not list((ROOT / "data").rglob("*.json"))
     remove_night_cycle(channel_id)
     PersistenceSlot.delete().where(PersistenceSlot.slot_key == slot_key).execute()
 
@@ -1014,6 +1002,8 @@ def check_night_cycle_persistence_contract() -> Dict[str, Any]:
     assert "_night_state_slot_key" in source
     assert "_ensure_persistence_slot_table" in source
     assert "Slot.insert(" in source
+    assert "_safe_state_filename" not in source
+    assert "_load_state_from_legacy_json" not in source
     assert ".write_text(" not in source
     return {
         "night_cycle_state_db_slot": True,
@@ -1094,7 +1084,6 @@ def check_admin_identity_not_relationship_contract() -> Dict[str, Any]:
 
 def check_db_backed_json_storage_contract() -> Dict[str, Any]:
     import asyncio
-    import tempfile
 
     from src.common.database.database_model import PersistenceSlot
     from src.hippo_memorizer.summary_storage import SummaryStorage, TopicSummary
@@ -1105,8 +1094,12 @@ def check_db_backed_json_storage_contract() -> Dict[str, Any]:
     summarizer_source = (ROOT / "src/memory_system/chat_history_summarizer.py").read_text(encoding="utf-8")
     social_source = (ROOT / "src/modules/social_value/social_storage.py").read_text(encoding="utf-8")
     assert "_save_to_db" in hippo_source
+    assert "_load_from_legacy_json" not in hippo_source
+    assert "_file_path" not in hippo_source
     assert "atomic_json_dump" not in hippo_source
     assert "_save_topic_cache_payload" in summarizer_source
+    assert "_topic_cache_file" not in summarizer_source
+    assert "_load_topic_cache_from_legacy_json" not in summarizer_source
     assert "json.dump(data" not in summarizer_source
     assert "_persist_sync" in social_source
     assert "json.dump(data" not in social_source
@@ -1123,41 +1116,35 @@ def check_db_backed_json_storage_contract() -> Dict[str, Any]:
     ]
     PersistenceSlot.delete().where(PersistenceSlot.slot_key.in_(slot_keys)).execute()
 
-    with tempfile.TemporaryDirectory() as temp_dir:
-        storage = SummaryStorage(summary_chat, max_summaries=5)
-        storage._file_path = Path(temp_dir) / f"{summary_chat}_summaries.json"
-        storage.add_summary(
-            TopicSummary(
-                topic="测试话题",
-                summary="测试摘要",
-                keywords=["测试"],
-                key_points=["重点"],
-                participants=["用户"],
-                start_time=1.0,
-                end_time=2.0,
-            )
-        )
-        assert not storage._file_path.exists()
-        assert PersistenceSlot.get_or_none(PersistenceSlot.slot_key == slot_keys[0]) is not None
-
-        summarizer = ChatHistorySummarizer(topic_chat)
-        summarizer._topic_cache_file = Path(temp_dir) / f"{topic_chat}.json"
-        summarizer.topic_cache["测试话题"] = TopicCacheItem(
+    storage = SummaryStorage(summary_chat, max_summaries=5)
+    storage.add_summary(
+        TopicSummary(
             topic="测试话题",
-            messages=["1. 用户: 内容"],
-            participants={"用户"},
+            summary="测试摘要",
+            keywords=["测试"],
+            key_points=["重点"],
+            participants=["用户"],
+            start_time=1.0,
+            end_time=2.0,
         )
-        summarizer._persist_topic_cache()
-        assert not summarizer._topic_cache_file.exists()
-        assert PersistenceSlot.get_or_none(PersistenceSlot.slot_key == slot_keys[1]) is not None
+    )
+    assert PersistenceSlot.get_or_none(PersistenceSlot.slot_key == slot_keys[0]) is not None
 
-        social = SocialStorage(storage_dir=str(Path(temp_dir) / "social"))
-        asyncio.run(social.set(social_user, social_channel, 12.5))
-        expected_social_file = Path(temp_dir) / "social" / social_user / f"{social_channel}.json"
-        assert not expected_social_file.exists()
-        social_row = PersistenceSlot.get_or_none(PersistenceSlot.slot_key == slot_keys[2])
-        assert social_row is not None
-        assert '"value":12.5' in social_row.slot_value
+    summarizer = ChatHistorySummarizer(topic_chat)
+    summarizer.topic_cache["测试话题"] = TopicCacheItem(
+        topic="测试话题",
+        messages=["1. 用户: 内容"],
+        participants={"用户"},
+    )
+    summarizer._persist_topic_cache()
+    assert PersistenceSlot.get_or_none(PersistenceSlot.slot_key == slot_keys[1]) is not None
+
+    social = SocialStorage(storage_dir="ignored-json-dir")
+    asyncio.run(social.set(social_user, social_channel, 12.5))
+    social_row = PersistenceSlot.get_or_none(PersistenceSlot.slot_key == slot_keys[2])
+    assert social_row is not None
+    assert '"value":12.5' in social_row.slot_value
+    assert not list((ROOT / "data").rglob("*.json"))
 
     PersistenceSlot.delete().where(PersistenceSlot.slot_key.in_(slot_keys)).execute()
     return {

@@ -1,10 +1,12 @@
 import asyncio
-import json
-import os
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Dict, List, Optional
+from src.common.database.slot_storage import (
+    delete_slot,
+    load_slot,
+    save_slot,
+)
 from src.common.logger import get_logger
 from src.config.core_config_engine import get_core_config
 from src.common.data_models.proactive_models import (
@@ -17,6 +19,7 @@ logger = get_logger("回忆录柜")
 
 # 心理日志最大保留条数
 _MAX_JOURNAL_CAPACITY = 60
+_MEMOIR_SLOT_PREFIX = "memoir_vault"
 
 
 def _safe_float(value: Any, default: float = 0.0) -> float:
@@ -386,9 +389,8 @@ class MemoirCabinet:
     def __init__(self):
         hub = get_core_config()
         schedule_blk = hub.resolve_module_view("schedule").values
-        self._vault_dir = Path(str(schedule_blk.get("session_storage_dir", "data/memoir_vault")))
+        self._vault_dir = f"Huoli.db:{_MEMOIR_SLOT_PREFIX}"
         self._stale_days = int(schedule_blk.get("session_max_age_days", 30))
-        self._vault_dir.mkdir(parents=True, exist_ok=True)
         self._memoirs: Dict[str, DialogueMemoir] = {}
         self._user_locks: Dict[str, asyncio.Lock] = {}
         logger.info(f"回忆录柜初始化: {self._vault_dir}")
@@ -400,9 +402,9 @@ class MemoirCabinet:
             self._user_locks[user_id] = lock
         return lock
 
-    def _build_filename(self, user_id: str) -> Path:
+    def _build_filename(self, user_id: str) -> str:
         safe = "".join(c if c.isalnum() or c in "-_" else "_" for c in user_id)
-        return self._vault_dir / f"{safe}.json"
+        return f"{_MEMOIR_SLOT_PREFIX}:{safe}"
 
     # ---- 获取 ----
 
@@ -466,14 +468,10 @@ class MemoirCabinet:
             if user_id not in self._memoirs:
                 return False
             memoir = self._memoirs[user_id]
-            fpath = self._build_filename(user_id)
+            slot_key = self._build_filename(user_id)
             try:
                 data = memoir.serialize()
-                tmp = fpath.with_suffix(".json.tmp")
-                with open(tmp, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
-                os.replace(str(tmp), str(fpath))
-                return True
+                return save_slot(slot_key, data, ttl_days=max(1, self._stale_days))
             except Exception as exc:
                 logger.error(f"持久化失败 {user_id[:8]}: {exc}")
                 return False
@@ -487,14 +485,13 @@ class MemoirCabinet:
         return ok_count
 
     async def _load_from_disk(self, user_id: str) -> Optional[DialogueMemoir]:
-        fpath = self._build_filename(user_id)
-        if not fpath.exists():
+        slot_key = self._build_filename(user_id)
+        data = load_slot(slot_key)
+        if not isinstance(data, dict):
             return None
         try:
-            with open(fpath, encoding="utf-8") as f:
-                data = json.load(f)
             memoir = DialogueMemoir.deserialize(data)
-            logger.debug(f"从磁盘加载回忆录: {user_id[:8]}")
+            logger.debug(f"从数据库加载回忆录: {user_id[:8]}")
             return memoir
         except Exception as exc:
             logger.error(f"加载失败 {user_id[:8]}: {exc}")
@@ -525,12 +522,9 @@ class MemoirCabinet:
         async with self._get_lock(user_id):
             if user_id in self._memoirs:
                 del self._memoirs[user_id]
-            fpath = self._build_filename(user_id)
-            if fpath.exists():
-                try:
-                    fpath.unlink()
-                except Exception as exc:
-                    logger.error(f"删除文件失败 {user_id[:8]}: {exc}")
+            slot_key = self._build_filename(user_id)
+            if not delete_slot(slot_key):
+                logger.debug(f"回忆录槽位不存在或删除失败: {user_id[:8]}")
         # 回忆录已删除，锁不再需要
         self._user_locks.pop(user_id, None)
         return True

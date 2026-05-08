@@ -1,12 +1,16 @@
 import asyncio
-import json
-import os
 import time
 from dataclasses import dataclass, field
 from threading import Lock
 from typing import Any, Dict, List, Optional
 
-from src.common.atomic_io import atomic_json_dump
+from src.common.database.slot_storage import (
+    delete_slot,
+    list_slot_keys,
+    load_slot,
+    save_slot,
+    slot_exists,
+)
 from src.common.logger import get_logger, sanitize_log_input
 from src.person_info.runtime_config import identity_module_view
 
@@ -16,6 +20,7 @@ _file_locks: Dict[str, Lock] = {}
 _locks_lock = Lock()
 _lock_access_times: Dict[str, float] = {}
 _last_cleanup_ts: float = 0.0
+_USER_SLOT_PREFIX = "identity_user"
 
 
 def _user_persistence_config() -> Dict[str, Any]:
@@ -88,39 +93,32 @@ class UserDataStorage:
         self._storage_dir = storage_dir or str(
             config.get("storage_dir", "data/users")
         )
-        self._ensure_dir()
         self._user_index: set[str] = set()
         self._index_loaded = False
 
-    def _ensure_dir(self) -> None:
-        """确保目录存在"""
-        if not os.path.exists(self._storage_dir):
-            os.makedirs(self._storage_dir, exist_ok=True)
-
-    def _get_file_path(self, user_id: str) -> str:
-        """获取用户数据文件路径（含穿越检查）"""
+    def _slot_key(self, user_id: str) -> str:
         safe_id = (
-            user_id.replace("/", "_")
+            str(user_id)
+            .replace("/", "_")
             .replace("\\", "_")
             .replace(":", "_")
             .replace("..", "__")
         )
-        candidate = os.path.normpath(
-            os.path.join(self._storage_dir, f"{safe_id}.json")
-        )
-        base = os.path.normpath(self._storage_dir)
-        if not candidate.startswith(base + os.sep) and candidate != base:
-            raise ValueError(f"路径穿越尝试被阻止: {user_id}")
-        return candidate
+        return f"{_USER_SLOT_PREFIX}:{safe_id}"
+
+    def _get_file_path(self, user_id: str) -> str:
+        """兼容旧调用：返回数据库槽位标识。"""
+        return f"Huoli.db:{self._slot_key(user_id)}"
 
     def save_user(self, user_id: str, data: Dict[str, Any]) -> bool:
         """保存用户数据"""
-        file_path = self._get_file_path(user_id)
+        slot_key = self._slot_key(user_id)
         data["last_updated"] = time.time()
-        lock = _get_file_lock(file_path)
+        lock = _get_file_lock(slot_key)
         with lock:
             try:
-                atomic_json_dump(data, file_path, ensure_ascii=False, indent=2)
+                if not save_slot(slot_key, data, ttl_days=3650):
+                    return False
                 self._user_index.add(user_id)
                 return True
             except Exception as e:
@@ -129,45 +127,41 @@ class UserDataStorage:
 
     def load_user(self, user_id: str) -> Optional[Dict[str, Any]]:
         """加载用户数据"""
-        file_path = self._get_file_path(user_id)
-        if not os.path.exists(file_path):
-            return None
-        lock = _get_file_lock(file_path)
+        slot_key = self._slot_key(user_id)
+        lock = _get_file_lock(slot_key)
         with lock:
             try:
-                with open(file_path, "r", encoding="utf-8") as f:
-                    return json.load(f)
+                payload = load_slot(slot_key)
+                return payload if isinstance(payload, dict) else None
             except Exception as e:
                 logger.error(f"加载用户数据失败: {e}")
                 return None
 
     def delete_user(self, user_id: str) -> bool:
         """删除用户数据"""
-        file_path = self._get_file_path(user_id)
-        if os.path.exists(file_path):
-            lock = _get_file_lock(file_path)
-            with lock:
-                try:
-                    os.remove(file_path)
-                    self._user_index.discard(user_id)
-                    return True
-                except Exception as e:
-                    logger.error(f"删除用户数据失败: {e}")
-                    return False
-        return False
+        slot_key = self._slot_key(user_id)
+        lock = _get_file_lock(slot_key)
+        with lock:
+            try:
+                removed = delete_slot(slot_key)
+                self._user_index.discard(user_id)
+                return removed
+            except Exception as e:
+                logger.error(f"删除用户数据失败: {e}")
+                return False
 
     def user_exists(self, user_id: str) -> bool:
         """检查用户是否存在"""
-        return os.path.exists(self._get_file_path(user_id))
+        return slot_exists(self._slot_key(user_id))
 
     def list_users(self) -> List[str]:
         """列出所有用户（首次调用后使用内存索引）"""
         if not self._index_loaded:
-            self._user_index.clear()
-            if os.path.exists(self._storage_dir):
-                for f in os.listdir(self._storage_dir):
-                    if f.endswith(".json"):
-                        self._user_index.add(f[:-5])
+            prefix = f"{_USER_SLOT_PREFIX}:"
+            self._user_index = {
+                key.removeprefix(prefix)
+                for key in list_slot_keys(prefix)
+            }
             self._index_loaded = True
         return list(self._user_index)
 
@@ -192,33 +186,46 @@ class UserDataExporter:
     def __init__(self, storage: UserDataStorage):
         self._storage = storage
 
+    def _export_slot_key(self, label: str) -> str:
+        safe = (
+            str(label or "default")
+            .replace("/", "_")
+            .replace("\\", "_")
+            .replace(":", "_")
+            .replace("..", "__")
+        )
+        return f"identity_user_export:{safe[:120]}"
+
     def export_all(self, output_path: str) -> bool:
-        """导出所有用户数据"""
+        """导出所有用户数据到数据库槽位，避免生成文件。"""
         all_data = {}
         for user_id in self._storage.list_users():
             user_data = self._storage.load_user(user_id)
             if user_data:
                 all_data[user_id] = user_data
         try:
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(all_data, f, ensure_ascii=False, indent=2)
-            logger.info(f"导出 {len(all_data)} 个用户数据到 {output_path}")
-            return True
+            slot_key = self._export_slot_key(output_path)
+            ok = save_slot(slot_key, all_data, ttl_days=365)
+            logger.info(
+                f"导出 {len(all_data)} 个用户数据到数据库槽位 {slot_key}"
+            )
+            return ok
         except Exception as e:
             logger.error(f"导出用户数据失败: {e}")
             return False
 
     def import_all(self, input_path: str) -> int:
-        """导入用户数据"""
-        if not os.path.exists(input_path):
-            logger.error(f"导入文件不存在: {input_path}")
+        """从数据库导出槽位导入用户数据。"""
+        all_data = load_slot(self._export_slot_key(input_path))
+        if not isinstance(all_data, dict):
+            logger.error(f"导入槽位不存在或格式无效: {input_path}")
             return 0
         try:
-            with open(input_path, "r", encoding="utf-8") as f:
-                all_data = json.load(f)
             count = 0
             for user_id, user_data in all_data.items():
-                if self._storage.save_user(user_id, user_data):
+                if isinstance(user_data, dict) and self._storage.save_user(
+                    user_id, user_data
+                ):
                     count += 1
             logger.info(f"导入 {count} 个用户数据")
             return count
@@ -227,15 +234,13 @@ class UserDataExporter:
             return 0
 
     def export_user(self, user_id: str, output_path: str) -> bool:
-        """导出单个用户数据"""
+        """导出单个用户数据到数据库槽位，避免生成文件。"""
         user_data = self._storage.load_user(user_id)
         if not user_data:
             logger.warning("用户 %s 不存在", sanitize_log_input(user_id))
             return False
         try:
-            with open(output_path, "w", encoding="utf-8") as f:
-                json.dump(user_data, f, ensure_ascii=False, indent=2)
-            return True
+            return save_slot(self._export_slot_key(output_path), user_data)
         except Exception as e:
             logger.error(f"导出用户数据失败: {e}")
             return False

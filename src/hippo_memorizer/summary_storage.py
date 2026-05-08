@@ -1,17 +1,11 @@
 import time
 import json
-import re
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from src.common.logger import get_logger
 from src.hippo_memorizer.config_loader import get_max_summaries
 
 logger = get_logger("摘要存储")
-
-_HIPPO_DATA_DIR = (
-    Path(__file__).resolve().parents[2] / "data" / "hippo_memorizer"
-)
 
 
 @dataclass
@@ -75,20 +69,8 @@ class SummaryStorage:
         self.chat_id = chat_id
         self._max_summaries = max_summaries or get_max_summaries()
         self._summaries: List[TopicSummary] = []
-        self._file_path = (
-            _HIPPO_DATA_DIR / f"{self._sanitize_id(chat_id)}_summaries.json"
-        )
         self._slot_key = f"hippo_summary:{self.chat_id}"
-        self._load_from_db_or_legacy_json()
-
-    def _sanitize_id(self, chat_id: str) -> str:
-        return re.sub(r"[^a-zA-Z0-9_.-]", "_", chat_id)
-
-    def _load_from_db_or_legacy_json(self):
-        if self._load_from_db():
-            return
-        if self._load_from_legacy_json():
-            self._save_to_db()
+        self._load_from_db()
 
     def _load_from_db(self) -> bool:
         try:
@@ -111,24 +93,6 @@ class SummaryStorage:
         except Exception as e:
             logger.error(f"从数据库加载话题摘要失败: {e}")
             return False
-
-    def _load_from_legacy_json(self) -> bool:
-        try:
-            if self._file_path.exists():
-                with self._file_path.open("r", encoding="utf-8") as f:
-                    data = json.load(f)
-                self._summaries = [
-                    TopicSummary.from_dict(item)
-                    for item in data.get("summaries", [])
-                    if isinstance(item, dict)
-                ]
-                logger.info(
-                    f"已从旧JSON加载 {len(self._summaries)} 个话题摘要，后续写入数据库"
-                )
-                return True
-        except Exception as e:
-            logger.error(f"加载旧JSON话题摘要失败: {e}")
-        return False
 
     def _save_to_db(self):
         try:

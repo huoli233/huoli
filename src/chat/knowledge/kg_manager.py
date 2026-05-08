@@ -1,4 +1,3 @@
-import json
 import os
 import threading
 from collections import defaultdict
@@ -7,6 +6,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 import numpy as np
 
+from src.common.database.slot_storage import load_slot, save_slot
 from src.common.logger import get_logger
 from src.chat.knowledge.constants import INVALID_ENTITY as DEFAULT_INVALID_ENTITY
 
@@ -305,9 +305,9 @@ class KGManager:
         self._pagerank = PageRankCalculator()
         self._lock = threading.RLock()
         os.makedirs(self.data_dir, exist_ok=True)
-        self.graph_file = os.path.join(self.data_dir, "knowledge_graph.json")
-        self.hash_file = os.path.join(self.data_dir, "paragraph_hashes.json")
-        self.cnt_file = os.path.join(self.data_dir, "entity_counts.json")
+        self.graph_file = "Huoli.db:knowledge_graph"
+        self.hash_file = "Huoli.db:knowledge_graph:paragraph_hashes"
+        self.cnt_file = "Huoli.db:knowledge_graph:entity_counts"
 
     def _get_default_data_dir(self) -> str:
         """获取默认数据目录"""
@@ -529,7 +529,7 @@ class KGManager:
         }
 
     def save_to_file(self) -> bool:
-        """保存到文件"""
+        """保存到数据库槽位"""
         with self._lock:
             try:
                 graph_data = {
@@ -554,12 +554,17 @@ class KGManager:
                             "attributes": edge.attributes,
                         }
                     )
-                with open(self.graph_file, "w", encoding="utf-8") as f:
-                    json.dump(graph_data, f, ensure_ascii=False, indent=2)
-                with open(self.hash_file, "w", encoding="utf-8") as f:
-                    json.dump(list(self.stored_paragraph_hashes), f)
-                with open(self.cnt_file, "w", encoding="utf-8") as f:
-                    json.dump(dict(self.ent_appear_cnt), f)
+                save_slot("knowledge_graph", graph_data, ttl_days=3650)
+                save_slot(
+                    "knowledge_graph:paragraph_hashes",
+                    list(self.stored_paragraph_hashes),
+                    ttl_days=3650,
+                )
+                save_slot(
+                    "knowledge_graph:entity_counts",
+                    dict(self.ent_appear_cnt),
+                    ttl_days=3650,
+                )
                 logger.info(f"[KGManager] 保存完成: {self.get_stats()}")
                 return True
             except Exception as e:
@@ -567,12 +572,11 @@ class KGManager:
                 return False
 
     def load_from_file(self) -> bool:
-        """从文件加载"""
+        """从数据库槽位加载"""
         with self._lock:
             try:
-                if os.path.exists(self.graph_file):
-                    with open(self.graph_file, "r", encoding="utf-8") as f:
-                        graph_data = json.load(f)
+                graph_data = load_slot("knowledge_graph", {})
+                if isinstance(graph_data, dict) and graph_data:
                     for node_data in graph_data.get("nodes", []):
                         self.graph.add_node(
                             node_data["name"],
@@ -587,12 +591,12 @@ class KGManager:
                             edge_data.get("weight", 1.0),
                             **edge_data.get("attributes", {}),
                         )
-                if os.path.exists(self.hash_file):
-                    with open(self.hash_file, "r", encoding="utf-8") as f:
-                        self.stored_paragraph_hashes = set(json.load(f))
-                if os.path.exists(self.cnt_file):
-                    with open(self.cnt_file, "r", encoding="utf-8") as f:
-                        self.ent_appear_cnt = defaultdict(int, json.load(f))
+                hashes = load_slot("knowledge_graph:paragraph_hashes", [])
+                if isinstance(hashes, list):
+                    self.stored_paragraph_hashes = set(hashes)
+                counts = load_slot("knowledge_graph:entity_counts", {})
+                if isinstance(counts, dict):
+                    self.ent_appear_cnt = defaultdict(int, counts)
                 logger.info(f"[KGManager] 加载完成: {self.get_stats()}")
                 return True
             except Exception as e:

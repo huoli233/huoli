@@ -1,4 +1,3 @@
-import os
 import json
 import time
 import asyncio
@@ -11,10 +10,11 @@ logger = get_logger("社交存储")
 
 
 class SocialStorage:
-    """社交值存储 - 内存缓存 + 数据库持久化，旧JSON只读迁移"""
+    """社交值存储 - 内存缓存 + 数据库持久化"""
 
-    def __init__(self, storage_dir: str = "data/huoli/social"):
-        self._storage_dir = storage_dir
+    def __init__(self, storage_dir: str = ""):
+        del storage_dir
+        self._storage_dir = "Huoli.db:social_value"
         self._cache: Dict[str, SocialValueRecord] = {}
         self._dirty: set = set()
         self._lock: Optional[asyncio.Lock] = None
@@ -61,12 +61,6 @@ class SocialStorage:
             except Exception as e:
                 logger.debug(f"Adapter 获取社交值失败: {e}")
         record = self._load_from_db(user_id, channel_id)
-        if record is None:
-            record = await self._load_from_legacy_json(user_id, channel_id)
-            if record:
-                self._cache[key] = record
-                await self._persist(key)
-                return record
         if record:
             self._cache[key] = record
         return record
@@ -74,7 +68,7 @@ class SocialStorage:
     def get_sync(
         self, user_id: str, channel_id: str
     ) -> Optional[SocialValueRecord]:
-        """同步获取社交值记录（从内存缓存或磁盘直接读取，不使用async）"""
+        """同步获取社交值记录（从内存缓存或数据库直接读取，不使用async）"""
         key = self._make_key(user_id, channel_id)
         with self._sync_lock:
             if key in self._cache:
@@ -82,11 +76,6 @@ class SocialStorage:
             record = self._load_from_db(user_id, channel_id)
             if record:
                 self._cache[key] = record
-                return record
-            record = self._load_legacy_json_sync(user_id, channel_id)
-            if record:
-                self._cache[key] = record
-                self._persist_sync(key)
                 return record
             return None
 
@@ -154,16 +143,6 @@ class SocialStorage:
                     records.append(record)
         except Exception as exc:
             logger.debug(f"数据库读取用户社交值失败: {exc}")
-        if records:
-            return records
-        user_dir = os.path.join(self._storage_dir, self._safe_filename(user_id))
-        if os.path.exists(user_dir):
-            for filename in os.listdir(user_dir):
-                if filename.endswith(".json"):
-                    channel_id = filename[:-5]
-                    record = await self.get(user_id, channel_id)
-                    if record:
-                        records.append(record)
         return records
 
     async def get_all_for_channel(
@@ -188,23 +167,10 @@ class SocialStorage:
                     records.append(record)
         except Exception as exc:
             logger.debug(f"数据库读取频道社交值失败: {exc}")
-        if records:
-            return records
-        if os.path.exists(self._storage_dir):
-            for user_dir_name in os.listdir(self._storage_dir):
-                user_dir = os.path.join(self._storage_dir, user_dir_name)
-                if os.path.isdir(user_dir):
-                    filepath = os.path.join(
-                        user_dir, self._safe_filename(channel_id) + ".json"
-                    )
-                    if os.path.exists(filepath):
-                        record = await self._load_file(filepath)
-                        if record:
-                            records.append(record)
         return records
 
     async def flush_all(self) -> int:
-        """将所有脏数据写入磁盘"""
+        """将所有脏数据写入数据库"""
         count = 0
         dirty_keys = list(self._dirty)
         for key in dirty_keys:
@@ -285,23 +251,6 @@ class SocialStorage:
         """持久化单条记录"""
         await asyncio.to_thread(self._persist_sync, key)
 
-    async def _load_from_disk(
-        self, user_id: str, channel_id: str
-    ) -> Optional[SocialValueRecord]:
-        """从磁盘加载记录"""
-        return await self._load_from_legacy_json(user_id, channel_id)
-
-    async def _load_from_legacy_json(
-        self, user_id: str, channel_id: str
-    ) -> Optional[SocialValueRecord]:
-        """从旧JSON加载记录，并由调用方迁移入数据库。"""
-        filepath = os.path.join(
-            self._storage_dir,
-            self._safe_filename(user_id),
-            self._safe_filename(channel_id) + ".json",
-        )
-        return await self._load_file(filepath)
-
     def _load_from_db(self, user_id: str, channel_id: str) -> Optional[SocialValueRecord]:
         try:
             from src.common.database.database import db
@@ -347,35 +296,6 @@ class SocialStorage:
             self._dirty.discard(key)
         except Exception as exc:
             logger.error(f"保存社交值到数据库失败: {exc}")
-
-    def _load_legacy_json_sync(self, user_id: str, channel_id: str) -> Optional[SocialValueRecord]:
-        filepath = os.path.join(
-            self._storage_dir,
-            self._safe_filename(user_id),
-            self._safe_filename(channel_id) + ".json",
-        )
-        if not os.path.exists(filepath):
-            return None
-        try:
-            with open(filepath, "r", encoding="utf-8") as f:
-                return self._record_from_payload(json.load(f))
-        except (json.JSONDecodeError, KeyError, TypeError, OSError, ValueError):
-            return None
-
-    async def _load_file(self, filepath: str) -> Optional[SocialValueRecord]:
-        """从文件加载记录"""
-        if not os.path.exists(filepath):
-            return None
-
-        def _read_json():
-            with open(filepath, "r", encoding="utf-8") as f:
-                return json.load(f)
-
-        try:
-            data = await asyncio.to_thread(_read_json)
-            return self._record_from_payload(data)
-        except (json.JSONDecodeError, KeyError, TypeError):
-            return None
 
     @staticmethod
     def _record_to_payload(record: SocialValueRecord) -> Dict[str, Any]:

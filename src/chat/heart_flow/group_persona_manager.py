@@ -1,8 +1,7 @@
-import os
-import json
 import time
 from typing import Dict, Optional, List
 from dataclasses import dataclass, field, asdict
+from src.common.database.slot_storage import list_slot_keys, load_slot, save_slot
 from src.common.logger import get_logger
 
 logger = get_logger("群人格管理")
@@ -33,18 +32,15 @@ class GroupPersonaManager:
     功能：
     1. 维护每个群的画像配置文件
     2. 定时自动更新群特点
-    3. 保存到本地 JSON 文件
+    3. 保存到 Huoli.db 统一槽位
     4. 支持手动触发更新
     """
 
-    def __init__(self, storage_path: str = "data/group_persona"):
-        self._storage_path = storage_path
+    def __init__(self, storage_path: str = ""):
+        del storage_path
+        self._storage_path = "Huoli.db:group_persona"
         self._profiles: Dict[str, GroupPersonaProfile] = {}
-        self._ensure_storage_dir()
         self._load_all_profiles()
-
-    def _ensure_storage_dir(self) -> None:
-        os.makedirs(self._storage_path, exist_ok=True)
 
     def _sanitize_id(self, id_str: str) -> str:
         """清理ID字符串，防止路径遍历攻击。"""
@@ -58,37 +54,35 @@ class GroupPersonaManager:
 
     def _get_profile_path(self, group_id: str) -> str:
         safe_id = self._sanitize_id(group_id)
-        return os.path.join(self._storage_path, f"{safe_id}.json")
+        return f"group_persona:{safe_id}"
 
     def _load_profile(self, group_id: str) -> Optional[GroupPersonaProfile]:
-        path = self._get_profile_path(group_id)
-        if not os.path.exists(path):
-            return None
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                return GroupPersonaProfile(**data)
+            data = load_slot(self._get_profile_path(group_id))
+            return GroupPersonaProfile(**data) if isinstance(data, dict) else None
         except Exception as e:
             logger.warning(f"加载群画像失败 {group_id}: {e}")
             return None
 
     def _save_profile(self, profile: GroupPersonaProfile) -> None:
-        path = self._get_profile_path(profile.group_id)
         try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(asdict(profile), f, ensure_ascii=False, indent=2)
+            save_slot(
+                self._get_profile_path(profile.group_id),
+                asdict(profile),
+                ttl_days=3650,
+            )
         except Exception as e:
             logger.error(f"保存群画像失败 {profile.group_id}: {e}")
 
     def _load_all_profiles(self) -> None:
         try:
-            for filename in os.listdir(self._storage_path):
-                if filename.endswith(".json"):
-                    group_id = filename[:-5]
-                    profile = self._load_profile(group_id)
-                    if profile:
-                        self._profiles[group_id] = profile
-                        logger.info(f"已加载群画像: {group_id}")
+            prefix = "group_persona:"
+            for slot_key in list_slot_keys(prefix):
+                group_id = slot_key.removeprefix(prefix)
+                profile = self._load_profile(group_id)
+                if profile:
+                    self._profiles[profile.group_id or group_id] = profile
+                    logger.info(f"已加载群画像: {profile.group_id or group_id}")
         except Exception as e:
             logger.error(f"加载所有群画像失败: {e}")
 

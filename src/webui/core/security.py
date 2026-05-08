@@ -4,14 +4,12 @@ WebUI Token 管理模块
 """
 
 import hashlib
-import json
-import os
 import secrets
-import tempfile
 import time
 from pathlib import Path
 from typing import Optional
 
+from src.common.database.slot_storage import load_slot, save_slot
 from src.common.logger import get_logger
 from src.common.constants import get_local_now
 
@@ -19,6 +17,18 @@ logger = get_logger("WebUI")
 
 # Token 过期时间（7天）
 TOKEN_EXPIRY_SECONDS = 7 * 24 * 60 * 60
+WEBUI_CONFIG_SLOT_KEY = "webui:config"
+
+
+def load_webui_config() -> dict:
+    """读取 WebUI 共享配置。"""
+    config = load_slot(WEBUI_CONFIG_SLOT_KEY, {})
+    return config if isinstance(config, dict) else {}
+
+
+def save_webui_config(config: dict) -> bool:
+    """保存 WebUI 共享配置。"""
+    return save_slot(WEBUI_CONFIG_SLOT_KEY, config, ttl_days=3650)
 
 
 def _token_digest(token: str) -> str:
@@ -36,94 +46,43 @@ class TokenManager:
         初始化 Token 管理器
 
         Args:
-            config_path: 配置文件路径，默认为项目根目录的 data/webui.json
+            config_path: 兼容旧接口，当前配置统一存入 Huoli.db
         """
-        if config_path is None:
-            # 获取项目根目录 (src/webui/core -> src/webui -> src -> 根目录)
-            project_root = Path(__file__).parent.parent.parent.parent
-            config_path = project_root / "data" / "webui.json"
+        self.config_path = config_path or Path(f"Huoli.db:{WEBUI_CONFIG_SLOT_KEY}")
 
-        self.config_path = config_path
-        self.config_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # 确保配置文件存在并包含有效的 token
+        # 确保数据库配置存在并包含有效的 token
         self._ensure_config()
 
     def _ensure_config(self):
-        """确保配置文件存在且包含有效的 token"""
-        if not self.config_path.exists():
-            logger.info(f"WebUI 配置文件不存在，正在创建: {self.config_path}")
+        """确保数据库配置存在且包含有效的 token"""
+        config = self._load_config()
+        if not config:
+            logger.info("WebUI 配置不存在，正在写入数据库")
             self._create_new_token()
         else:
-            # 验证配置文件格式
-            try:
-                config = self._load_config()
-                if not config.get("access_token"):
-                    logger.warning(
-                        "WebUI 配置文件中缺少 access_token，正在重新生成"
-                    )
+            if not config.get("access_token"):
+                logger.warning("WebUI 配置中缺少 access_token，正在重新生成")
+                self._create_new_token()
+            else:
+                # 检查Token是否过期
+                expires_at = config.get("token_expires_at", 0)
+                if expires_at and time.time() > expires_at:
+                    logger.warning("WebUI Token 已过期，正在重新生成")
                     self._create_new_token()
                 else:
-                    # 检查Token是否过期
-                    expires_at = config.get("token_expires_at", 0)
-                    if expires_at and time.time() > expires_at:
-                        logger.warning("WebUI Token 已过期，正在重新生成")
-                        self._create_new_token()
-                    else:
-                        logger.info(
-                            f"WebUI Token 已加载: {_token_digest(config['access_token'])}..."
-                        )
-            except Exception as e:
-                logger.error(f"读取 WebUI 配置文件失败: {e}，正在重新创建")
-                self._create_new_token()
+                    logger.info(
+                        f"WebUI Token 已加载: {_token_digest(config['access_token'])}..."
+                    )
 
     def _load_config(self) -> dict:
-        """加载配置文件"""
-        try:
-            with open(self.config_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception as e:
-            logger.error(f"加载 WebUI 配置失败: {e}")
-            return {}
+        """从数据库加载 WebUI 配置"""
+        return load_webui_config()
 
     def _save_config(self, config: dict):
-        """
-        原子化保存配置文件
-
-        使用临时文件 + 原子重命名策略，确保：
-        1. 写入过程中程序崩溃不会损坏原文件
-        2. 多线程/多进程并发写入时不会产生数据竞争
-        """
-        config_path = self.config_path
-
-        # 创建临时文件（同一目录确保原子重命名）
-        fd, temp_path = tempfile.mkstemp(
-            dir=config_path.parent,
-            prefix='.config_tmp_',
-            suffix='.json'
-        )
-
-        try:
-            # 写入临时文件
-            with os.fdopen(fd, 'w', encoding='utf-8') as f:
-                json.dump(config, f, ensure_ascii=False, indent=2)
-                f.flush()  # 确保数据写入磁盘
-                os.fsync(f.fileno())  # 强制同步到物理磁盘
-
-            # 原子重命名（跨平台兼容，Windows 也支持）
-            os.replace(temp_path, config_path)
-
-            logger.info(f"WebUI 配置已保存到: {self.config_path}")
-
-        except Exception as e:
-            # 清理临时文件，避免残留
-            if os.path.exists(temp_path):
-                try:
-                    os.unlink(temp_path)
-                except Exception:
-                    pass  # 忽略清理失败
-            logger.error(f"保存 WebUI 配置失败: {e}")
-            raise
+        """保存 WebUI 配置到 Huoli.db"""
+        if not save_webui_config(config):
+            raise RuntimeError("WebUI 配置写入数据库失败")
+        logger.debug("WebUI 配置已保存到 Huoli.db")
 
     def _create_new_token(self) -> str:
         """生成新的 64 位随机 token，并设置过期时间"""
