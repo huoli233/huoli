@@ -491,3 +491,24 @@
 - `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
 - 本轮根因是回复已进入强制生成，但 V4 Flash 请求携带 `reasoning_effort=minimal` 被接口拒绝，生成失败后才触发固定本地短兜底。
 - 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T06:21:28+08:00 - Task: 修复管理员快回夜间/清晨语气与状态校准
+
+### What was done:
+- 修复夜间行为摘要只在首次调用时评估的问题，超过 5 秒会重新按当前时间校准，避免重启后清晨/凌晨状态滞后。
+- 在管理员快回的灵魂状态兜底中注入夜间身体状态、清晨刚醒语气约束和夜间心境提示。
+- 扩展灵魂数据保留关键词和兜底行数，避免新增夜间语气约束被后续上下文拼装截断。
+- 补充 HeartFlow 回归契约，锁定清晨半醒状态必须进入管理员快回提示词。
+
+### Testing:
+- `uv run ruff check src\core\night_cycle_system.py src\chat\heart_flow\enhanced_modules\scene_planner_bridge_mixin.py scripts\heartflow_state_regression.py` 通过。
+- `uv run python -` 夜间灵魂状态 smoke 通过，确认清晨半醒提示可注入。
+- `uv run python scripts\model_runtime_audit.py` 通过，确认 V4 Flash 参数策略和夜间状态 DB 后端保持有效。
+- `uv run python scripts\config_profile_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新增 `night_soul_prompt` 契约。
+- `uv run python -m compileall -q src scripts` 通过，使用临时 `PYTHONPYCACHEPREFIX`。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 本轮不删除历史 `data/night_cycle_state/*.json`，仅继续沿用上一轮 DB 写入和旧 JSON 只读兼容策略。
+- 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。

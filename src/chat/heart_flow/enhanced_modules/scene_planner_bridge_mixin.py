@@ -494,6 +494,7 @@ class ScenePlannerBridgeMixin:
                 get_emotion_tracker,
             )
 
+            self._inject_night_soul_state(extra_parts)
             target_uid = str(getattr(self, "_last_user_id", "") or "").strip()
             if not target_uid:
                 extra_parts.append("[当前心理状态] 烦躁度0，回复平静。")
@@ -549,6 +550,55 @@ class ScenePlannerBridgeMixin:
             extra_parts.append("[当前心理状态] 烦躁度0，回复平静。")
             extra_parts.append("[当前情感状态] 感到平静")
 
+    def _inject_night_soul_state(self, extra_parts: list) -> None:
+        """管理员快回也必须带上夜间/清晨身体状态，避免跳过独白后变成默认平静。"""
+        try:
+            from src.core.night_cycle_system import get_night_cycle
+
+            summary = get_night_cycle(self.stream_id).night_behavior_summary()
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 夜间灵魂状态注入失败: {exc}")
+            summary = {}
+        if not isinstance(summary, dict) or not summary:
+            return
+        hour = int(summary.get("current_hour", 0) or 0) % 24
+        time_label = str(summary.get("time_band_label", "") or "")
+        phase_label = str(summary.get("phase_label", "") or "")
+        body_tag = str(summary.get("body_state_tag", "") or "").strip()
+        mood_hint = str(summary.get("monologue_mood_hint", "") or "").strip()
+        drowsiness = float(summary.get("drowsiness_value", 0.0) or 0.0)
+        pressure = float(summary.get("overnight_pressure", 0.0) or 0.0)
+        half_asleep = float(summary.get("half_asleep_level", 0.0) or 0.0)
+        sleep_debt = float(summary.get("sleep_debt", 0.0) or 0.0)
+        sleep_window = bool(summary.get("is_sleep_window", False))
+        pressure_window = bool(summary.get("is_pressure_window", False))
+        dawn_like = str(summary.get("time_band", "") or "") == "dawn" or 5 <= hour < 8
+        if not (sleep_window or pressure_window or dawn_like or half_asleep >= 0.2 or pressure >= 35.0 or drowsiness >= 35.0):
+            return
+        tone_bits = []
+        if sleep_window:
+            tone_bits.append("睡眠窗口")
+        if pressure_window:
+            tone_bits.append("熬夜压力窗口")
+        if dawn_like:
+            tone_bits.append("清晨刚醒")
+        if body_tag:
+            tone_bits.append(body_tag)
+        extra_parts.append(
+            "[夜间身体状态] "
+            f"现在约{hour}点({time_label or phase_label})，"
+            f"困意={drowsiness:.0f}，熬夜压力={pressure:.0f}，半醒={half_asleep:.2f}，睡眠债={sleep_debt:.2f}；"
+            f"{' / '.join(tone_bits) if tone_bits else phase_label}。"
+        )
+        if dawn_like:
+            extra_parts.append("[夜间语气约束] 回复要像清晨刚醒或熬夜后半醒的人：短、轻、带一点困倦，不要精神饱满地说“不困”。")
+        elif sleep_window or half_asleep >= 0.35:
+            extra_parts.append("[夜间语气约束] 回复必须带困倦、迟钝或被打断的底色；不要热情、不要长篇解释。")
+        elif pressure >= 60.0:
+            extra_parts.append("[夜间语气约束] 熬夜压力很高，回复要显得累、慢、克制。")
+        if mood_hint:
+            extra_parts.append(f"[夜间心境提示] {mood_hint}")
+
     @staticmethod
     def _soul_prompt_keywords() -> Tuple[str, ...]:
         return (
@@ -556,6 +606,9 @@ class ScenePlannerBridgeMixin:
             "情感状态",
             "当前情感状态",
             "当前心理状态",
+            "夜间身体状态",
+            "夜间语气约束",
+            "夜间心境提示",
             "灵魂指令",
             "冷拒模式",
             "烦躁",
@@ -586,7 +639,7 @@ class ScenePlannerBridgeMixin:
                 "[当前心理状态] 烦躁度0，回复平静。",
                 "[当前情感状态] 感到平静",
             ]
-        fallback_block = "\n".join(fallback_lines[:2]).strip()
+        fallback_block = "\n".join(fallback_lines[:4]).strip()
         if not fallback_block:
             return payload
         return f"{payload}\n{fallback_block}" if payload else fallback_block

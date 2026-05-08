@@ -1634,7 +1634,7 @@ class NightCycleSystem:
 
     def night_behavior_summary(self) -> Dict[str, Any]:
         """返回完整夜间行为约束字典，供主链和面板消费（增强版：含三维引擎数据）"""
-        if self._state.last_evaluated_at <= 0:
+        if self._state.last_evaluated_at <= 0 or time.time() - self._state.last_evaluated_at > 5.0:
             self.evaluate_current()
         s = self._state
         phase = s.current_phase

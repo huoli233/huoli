@@ -1,6 +1,7 @@
 # ruff: noqa: E402
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Any, Dict
 
@@ -18,6 +19,7 @@ from src.chat.heart_flow.heartfc_state_exporter import (
 )
 from src.chat.heart_flow.enhanced_modules.proactive_context_prompt_mixin import ProactiveContextPromptMixin
 from src.chat.heart_flow.enhanced_modules.proactive_reactive_flow_mixin import ProactiveReactiveFlowMixin
+from src.chat.heart_flow.enhanced_modules.scene_planner_bridge_mixin import ScenePlannerBridgeMixin
 from src.chat.heart_flow.enhanced_modules.scene_context_analysis_mixin import SceneContextAnalysisMixin
 from src.chat.heart_flow.enhanced_modules.strategy_relation_style_mixin import StrategyRelationStyleMixin
 from src.chat.heart_flow.enhanced_modules.interaction_core_mixin import EnhancedInteractionCoreMixin
@@ -1019,6 +1021,46 @@ def check_night_cycle_persistence_contract() -> Dict[str, Any]:
     }
 
 
+def check_night_soul_prompt_contract() -> Dict[str, Any]:
+    from src.core.night_cycle_system import NightPhase, get_night_cycle
+
+    channel_id = "regression-night-soul"
+    ncs = get_night_cycle(channel_id)
+    ncs._state.current_phase = NightPhase.DAWN_RECOVER
+    ncs._state.drowsiness_value = 72.0
+    ncs._state.overnight_pressure = 88.0
+    ncs._state.half_asleep_level = 0.62
+    ncs._state.sleep_debt = 0.58
+    ncs._state.body_state_tag = "半醒"
+    ncs._state.monologue_mood_hint = "刚醒，反应慢"
+    ncs._state.last_evaluated_at = time.time()
+    probe = type(
+        "NightSoulProbe",
+        (ScenePlannerBridgeMixin,),
+        {
+            "stream_id": channel_id,
+            "log_prefix": "[regression]",
+        },
+    )()
+    parts: list[str] = []
+    probe._inject_night_soul_state(parts)
+    joined = "\n".join(parts)
+    assert "[夜间身体状态]" in joined
+    assert "清晨刚醒" in joined
+    assert "不要精神饱满地说“不困”" in joined
+    assert "刚醒，反应慢" in joined
+    remove_night_cycle(channel_id)
+    source = (ROOT / "src/chat/heart_flow/enhanced_modules/scene_planner_bridge_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    assert "self._inject_night_soul_state(extra_parts)" in source
+    assert "fallback_lines[:4]" in source
+    return {
+        "night_soul_prompt_injected": True,
+        "dawn_sleepy_tone_guard": True,
+    }
+
+
 def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     msg = type(
         "FakeMessage",
@@ -1238,6 +1280,7 @@ def main() -> None:
         "content_state_scope": check_content_state_scope_contract(),
         "force_guard": check_force_guard_contract(),
         "night_cycle_persistence": check_night_cycle_persistence_contract(),
+        "night_soul_prompt": check_night_soul_prompt_contract(),
         "force_reply_generation_fallback": check_force_reply_generation_fallback_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),
