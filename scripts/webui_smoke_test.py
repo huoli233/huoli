@@ -258,18 +258,56 @@ async def check_message_api_send_failure() -> dict[str, Any]:
         await api.disconnect()
 
 
+def check_state_monitor_activation_contract() -> dict[str, Any]:
+    dashboard_source = (PROJECT_ROOT / "web/dashboard/src/components/EmotionDashboard/index.tsx").read_text(
+        encoding="utf-8"
+    )
+    state_monitor_source = (PROJECT_ROOT / "src/webui/routers/websocket/state_monitor.py").read_text(
+        encoding="utf-8"
+    )
+
+    required_dashboard_fragments = {
+        "activation_gate": "const shouldSyncRealtime = isPageActive && authReady;",
+        "auth_check": 'fetch("/api/webui/auth/check", {',
+        "visibility_listener": 'document.addEventListener("visibilitychange", handleActivation);',
+        "focus_listener": 'window.addEventListener("focus", handleActivation);',
+        "blur_listener": 'window.addEventListener("blur", handleActivation);',
+        "inactive_socket_guard": 'if (!shouldSyncRealtime) {\n      setConnectionState("idle");\n      return;\n    }',
+        "inactive_poll_guard": 'if (!shouldSyncRealtime || connectionState === "live") {',
+        "immediate_refresh": 'socket.send(JSON.stringify({ type: "refresh", data: { channel_id: selectedChannel } }));',
+        "auth_close_silent": 'setErrorMessage("");\n          return;',
+    }
+    missing_dashboard = [
+        name for name, fragment in required_dashboard_fragments.items() if fragment not in dashboard_source
+    ]
+    assert not missing_dashboard, f"状态监控前端激活契约缺失: {missing_dashboard}"
+    assert "轮询同步失败" not in dashboard_source, "后台轮询失败不应显示到状态页前台"
+    assert "状态页保持实时总览待机" not in dashboard_source, "后台 state_error 不应显示成前台错误"
+
+    assert "logger.debug" in state_monitor_source and "已静默关闭" in state_monitor_source, "未认证状态监控 WS 应静默关闭"
+    assert "logger.warning(f\"状态监控 WebSocket 认证失败" not in state_monitor_source, "未认证状态监控 WS 不应打 warning 噪声"
+
+    return {
+        "activation_gate": True,
+        "auth_check_before_ws": True,
+        "silent_auth_failure": True,
+    }
+
+
 def main() -> None:
     token = get_token_manager().get_token()
     with app_context() as app:
         with TestClient(app) as client:
             http_report = run_http_smoke(client, token)
             websocket_report = run_websocket_smoke(client, token)
+    state_monitor_activation_report = check_state_monitor_activation_contract()
     message_api_report = asyncio.run(check_message_api_send_failure())
     print(
         json.dumps(
             {
                 "http": http_report,
                 "websocket": websocket_report,
+                "state_monitor_activation": state_monitor_activation_report,
                 "message_api": message_api_report,
             },
             ensure_ascii=False,

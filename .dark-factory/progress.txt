@@ -65,3 +65,21 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
 - 本轮只应提交 `config/core_config.toml`、`template/core_config_template.toml`、`scripts/config_profile_regression.py`、`src/llm_models/utils_model.py`、`src/llm_models/model_client/openai_client.py`、`src/llm_models/model_client/gemini_client.py` 和本进度文件；工作区内已有前端构建、文档删除、`.gitmessage-cn.txt` 删除和 `.trae/` 不属于本轮。
+
+## 2026-05-08T10:03:00 - Task: 状态监控前端激活策略与后台认证噪声收口
+
+### What was done:
+- 状态页 WebSocket 改为页面可见且认证检查通过后才建立连接；页面隐藏、失焦或未认证时保持关闭，不再后台反复探测。
+- WebSocket 打开后立即发送 `refresh`，前端激活时直接同步当前状态；兜底轮询也接入同一激活门控。
+- 未认证的 `/ws/state-monitor` 探测从 warning 降级为 debug 静默关闭，避免后台认证失败噪声出现在日志主视野。
+- WebUI smoke 增加状态监控激活契约检查，覆盖认证前置、未激活不连、静默认证失败和前台错误文案禁用。
+
+### Testing:
+- `uv run python -m ruff check scripts/webui_smoke_test.py src/webui/routers/websocket/state_monitor.py` 通过。
+- `npm run build` 通过，生成最新状态页构建产物。
+- `uv run python scripts/webui_smoke_test.py` 通过，`state_monitor_activation.activation_gate=true`、`auth_check_before_ws=true`、`silent_auth_failure=true`。
+- 使用临时 WebUI 服务 + headless Chrome 打开 `http://127.0.0.1:18082/dashboard/` 通过：页面渲染出“火力状态监控/机器人实时状态栏/当前会话/最后同步”，且未出现“认证失败”“未提供有效的认证信息”“实时通道暂不可用”“轮询同步失败”。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
+- 本轮只应提交 `scripts/webui_smoke_test.py`、`src/webui/routers/websocket/state_monitor.py`、`web/dashboard/src/components/EmotionDashboard/index.tsx`、`web/dashboard/src/components/EmotionDashboard/styles.css`、`web/dashboard/dist/` 和本进度文件；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png` 以及其他模块差异不属于本轮。

@@ -621,6 +621,7 @@ function connectionLabel(value: string): string {
     idle: "未连接",
     connecting: "连接中",
     live: "实时同步",
+    polling: "轮询同步",
     reconnecting: "重连中",
     error: "连接异常",
   }[value] ?? value;
@@ -655,7 +656,15 @@ export function EmotionDashboard() {
   const [configScopeError, setConfigScopeError] = useState("");
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("editable");
   const [scopeQuery, setScopeQuery] = useState("");
+  const [isPageActive, setIsPageActive] = useState(
+    () =>
+      typeof document === "undefined" ||
+      (document.visibilityState === "visible" &&
+        (typeof document.hasFocus !== "function" || document.hasFocus())),
+  );
+  const [authReady, setAuthReady] = useState(false);
   const reconnectTimerRef = useRef<number | null>(null);
+  const fallbackPollTimerRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
 
   const residentCards = useMemo(() => {
@@ -729,42 +738,115 @@ export function EmotionDashboard() {
   const selectedScopeLabel = conversationScopeLabel(selectedOverview);
   const predictionPercent =
     prediction?.probability_percent ?? Math.round((prediction?.speak_probability ?? 0) * 100);
+  const shouldSyncRealtime = isPageActive && authReady;
 
   useEffect(() => {
     let ignore = false;
 
-    async function bootstrap() {
-      const [monitorResult, scopeResult] = await Promise.allSettled([
-        fetch("/api/heartflow/monitor", {
-          credentials: "same-origin",
-        }).then((response) => response.json()),
-        fetch("/api/heartflow/config-scope", {
-          credentials: "same-origin",
-        }).then((response) => response.json()),
-      ]);
-
-      if (ignore) {
+    async function syncActivationState() {
+      const visible =
+        typeof document === "undefined" ||
+        (document.visibilityState === "visible" &&
+          (typeof document.hasFocus !== "function" || document.hasFocus()));
+      if (!ignore) {
+        setIsPageActive(visible);
+      }
+      if (!visible) {
+        if (!ignore) {
+          setAuthReady(false);
+          setConnectionState("idle");
+          setErrorMessage("");
+        }
         return;
       }
 
-      if (monitorResult.status === "fulfilled") {
-        const monitor = monitorResult.value?.monitor as OverviewPayload | undefined;
-        setOverview(monitor ?? null);
-        const initialChannel = monitor?.channels?.[0]?.channel_id ?? "";
-        setSelectedChannel(initialChannel);
-      } else {
-        setErrorMessage(`初始化状态页失败: ${String(monitorResult.reason)}`);
-      }
-
-      if (scopeResult.status === "fulfilled") {
-        setConfigScope(scopeResult.value?.config_scope ?? null);
-        setConfigScopeError("");
-      } else {
-        setConfigScopeError(`读取配置分级失败: ${String(scopeResult.reason)}`);
+      try {
+        const response = await fetch("/api/webui/auth/check", {
+          credentials: "same-origin",
+        });
+        const data = response.ok ? await response.json() : null;
+        const authenticated = Boolean(data?.authenticated);
+        if (!ignore) {
+          setAuthReady(authenticated);
+          if (!authenticated) {
+            setConnectionState("idle");
+            setErrorMessage("");
+          }
+        }
+      } catch {
+        if (!ignore) {
+          setAuthReady(false);
+          setConnectionState("idle");
+          setErrorMessage("");
+        }
       }
     }
 
-    bootstrap();
+    const handleActivation = () => {
+      void syncActivationState();
+    };
+
+    document.addEventListener("visibilitychange", handleActivation);
+    window.addEventListener("focus", handleActivation);
+    window.addEventListener("blur", handleActivation);
+    void syncActivationState();
+
+    return () => {
+      ignore = true;
+      document.removeEventListener("visibilitychange", handleActivation);
+      window.removeEventListener("focus", handleActivation);
+      window.removeEventListener("blur", handleActivation);
+    };
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadMonitorOverview() {
+      try {
+        const response = await fetch("/api/heartflow/monitor", {
+          credentials: "same-origin",
+        });
+        if (!response.ok) {
+          throw new Error(`monitor ${response.status}`);
+        }
+        const data = await response.json();
+        if (ignore) {
+          return;
+        }
+        const monitor = data?.monitor as OverviewPayload | undefined;
+        setOverview(monitor ?? null);
+        const initialChannel = monitor?.channels?.[0]?.channel_id ?? "";
+        setSelectedChannel(initialChannel);
+      } catch (error) {
+        if (!ignore) {
+          setErrorMessage(`初始化状态页失败: ${String(error)}`);
+        }
+      }
+    }
+
+    async function loadConfigScope() {
+      try {
+        const response = await fetch("/api/heartflow/config-scope", {
+          credentials: "same-origin",
+        });
+        if (!response.ok) {
+          throw new Error(`config-scope ${response.status}`);
+        }
+        const data = await response.json();
+        if (!ignore) {
+          setConfigScope(data?.config_scope ?? null);
+          setConfigScopeError("");
+        }
+      } catch (error) {
+        if (!ignore) {
+          setConfigScopeError(`读取配置分级失败: ${String(error)}`);
+        }
+      }
+    }
+
+    void loadMonitorOverview();
+    void loadConfigScope();
 
     return () => {
       ignore = true;
@@ -818,15 +900,24 @@ export function EmotionDashboard() {
       reconnectTimerRef.current = null;
     }
 
+    if (!shouldSyncRealtime) {
+      setConnectionState("idle");
+      return;
+    }
+
     let closedByCleanup = false;
 
     const connect = () => {
+      if (closedByCleanup) {
+        return;
+      }
       setConnectionState("connecting");
       const socket = new WebSocket(wsUrl(selectedChannel));
       socketRef.current = socket;
 
       socket.onopen = () => {
         setConnectionState("live");
+        socket.send(JSON.stringify({ type: "refresh", data: { channel_id: selectedChannel } }));
       };
 
       socket.onmessage = (event) => {
@@ -853,7 +944,6 @@ export function EmotionDashboard() {
             }
           } else if (message.type === "state_error") {
             setPacket(null);
-            setErrorMessage("当前没有活跃会话，状态页保持实时总览待机。");
           }
         } catch (error) {
           setErrorMessage(`解析实时状态失败: ${String(error)}`);
@@ -861,11 +951,18 @@ export function EmotionDashboard() {
       };
 
       socket.onerror = () => {
-        setConnectionState("error");
+        setConnectionState("reconnecting");
       };
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
+        socketRef.current = null;
         if (closedByCleanup) {
+          return;
+        }
+        if (event.code === 4001 || event.code === 4002) {
+          setAuthReady(false);
+          setConnectionState("idle");
+          setErrorMessage("");
           return;
         }
         setConnectionState("reconnecting");
@@ -881,12 +978,95 @@ export function EmotionDashboard() {
       closedByCleanup = true;
       if (reconnectTimerRef.current) {
         window.clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
       }
       if (socketRef.current) {
         socketRef.current.close();
+        socketRef.current = null;
       }
     };
-  }, [selectedChannel]);
+  }, [selectedChannel, shouldSyncRealtime]);
+
+  useEffect(() => {
+    if (fallbackPollTimerRef.current) {
+      window.clearTimeout(fallbackPollTimerRef.current);
+      fallbackPollTimerRef.current = null;
+    }
+
+    if (!shouldSyncRealtime || connectionState === "live") {
+      return;
+    }
+
+    let stopped = false;
+
+    async function pollMonitorFallback() {
+      try {
+        const overviewResponse = await fetch("/api/heartflow/monitor", {
+          credentials: "same-origin",
+        });
+        if (!overviewResponse.ok) {
+          throw new Error(`overview ${overviewResponse.status}`);
+        }
+        const overviewData = await overviewResponse.json();
+        if (stopped) {
+          return;
+        }
+
+        const monitor = overviewData?.monitor as OverviewPayload | undefined;
+        const channels = monitor?.channels ?? [];
+        setOverview(monitor ?? null);
+
+        const channelToLoad =
+          selectedChannel && channels.some((channel) => channel.channel_id === selectedChannel)
+            ? selectedChannel
+            : (channels[0]?.channel_id ?? "");
+
+        if (!channelToLoad) {
+          setPacket(null);
+          return;
+        }
+
+        if (channelToLoad !== selectedChannel) {
+          setSelectedChannel(channelToLoad);
+          return;
+        }
+
+        const packetResponse = await fetch(`/api/heartflow/monitor/${encodeURIComponent(channelToLoad)}`, {
+          credentials: "same-origin",
+        });
+        if (!packetResponse.ok) {
+          throw new Error(`channel ${packetResponse.status}`);
+        }
+        const packetData = await packetResponse.json();
+        if (!stopped) {
+          setPacket(packetData?.monitor ?? null);
+          setConnectionState((current) => (current === "live" ? current : "polling"));
+          setErrorMessage("");
+        }
+      } catch {
+        if (!stopped) {
+          setConnectionState((current) => (current === "live" ? current : "reconnecting"));
+        }
+      } finally {
+        if (!stopped) {
+          fallbackPollTimerRef.current = window.setTimeout(pollMonitorFallback, 1800);
+        }
+      }
+    }
+
+    fallbackPollTimerRef.current = window.setTimeout(
+      pollMonitorFallback,
+      connectionState === "idle" || connectionState === "connecting" ? 0 : 600,
+    );
+
+    return () => {
+      stopped = true;
+      if (fallbackPollTimerRef.current) {
+        window.clearTimeout(fallbackPollTimerRef.current);
+        fallbackPollTimerRef.current = null;
+      }
+    };
+  }, [connectionState, selectedChannel, shouldSyncRealtime]);
 
   return (
     <div className="dashboard-shell">

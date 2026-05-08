@@ -45,7 +45,7 @@ async def _authorize_state_monitor_websocket(
         if token:
             reason = "无效的认证令牌"
             close_code = 4002
-        logger.warning(f"状态监控 WebSocket 认证失败: {reason}")
+        logger.debug(f"状态监控 WebSocket 认证未通过，已静默关闭: {reason}")
         await websocket.close(code=close_code, reason=reason)
         return False
 
