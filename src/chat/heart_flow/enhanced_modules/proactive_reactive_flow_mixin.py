@@ -262,6 +262,10 @@ class ProactiveReactiveFlowMixin:
             from src.chat.heart_flow.reply_coordinator import acquire_reply_coordinator
 
             generation_failure_reason = "voice_generation_failed"
+            force_reply_timeout = _rt_float("heartfc_force_reply_generation_timeout_seconds", 35.0)
+            if force_generation_fallback:
+                force_reply_timeout = _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds", 8.0)
+                logger.debug(f"{self.log_prefix} ⚡ 直接快回生成预算={force_reply_timeout:.1f}s")
             reply_generation = acquire_reply_coordinator().generate_reply(
                 channel_id=self.stream_id,
                 chat_stream=self.chat_stream,
@@ -280,13 +284,13 @@ class ProactiveReactiveFlowMixin:
                 try:
                     success, llm_response = await asyncio.wait_for(
                         reply_generation,
-                        timeout=_rt_float("heartfc_force_reply_generation_timeout_seconds", 35.0),
+                        timeout=force_reply_timeout,
                     )
                 except asyncio.TimeoutError:
                     success = False
                     llm_response = None
-                    generation_failure_reason = "force_reply_generation_timeout"
-                    logger.warning(f"{self.log_prefix} 💭 强制回复生成超时，启用本地短兜底")
+                    generation_failure_reason = "direct_fast_reply_generation_timeout"
+                    logger.warning(f"{self.log_prefix} 💭 直接快回生成超时({force_reply_timeout:.1f}s)，启用本地短兜底")
             else:
                 success, llm_response = await reply_generation
 

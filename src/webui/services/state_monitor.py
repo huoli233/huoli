@@ -1313,16 +1313,16 @@ def _build_circadian_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     if not time_band:
         if 13 <= current_hour < 17:
             time_band, time_band_label, time_band_description = "afternoon", "下午", "午后低谷"
-        elif 17 <= current_hour < 20:
-            time_band, time_band_label, time_band_description = "early_evening", "傍晚", "傍晚过渡"
-        elif 20 <= current_hour < 23:
-            time_band, time_band_label, time_band_description = "evening", "晚上", "晚上阶段"
-        elif 23 <= current_hour or current_hour < 2:
-            time_band, time_band_label, time_band_description = "late_night", "半夜", "半夜熬夜"
-        elif 2 <= current_hour < 5:
-            time_band, time_band_label, time_band_description = "midnight", "凌晨", "凌晨深夜"
-        elif 5 <= current_hour < 7:
-            time_band, time_band_label, time_band_description = "dawn", "清晨", "清晨恢复"
+        elif 20 <= current_hour < 22:
+            time_band, time_band_label, time_band_description = "evening", "晚上", "夜间社交窗口"
+        elif 22 <= current_hour < 23:
+            time_band, time_band_label, time_band_description = "late_evening", "晚上", "熬夜压力预热"
+        elif current_hour >= 23:
+            time_band, time_band_label, time_band_description = "late_night", "半夜", "睡眠窗口开始"
+        elif 0 <= current_hour < 4:
+            time_band, time_band_label, time_band_description = "midnight", "凌晨", "凌晨反思窗口"
+        elif 4 <= current_hour < 7:
+            time_band, time_band_label, time_band_description = "dawn", "清晨", "清晨恢复窗口"
         elif 7 <= current_hour < 11:
             time_band, time_band_label, time_band_description = "morning", "上午", "上午清醒"
         elif 11 <= current_hour < 13:
@@ -1332,6 +1332,9 @@ def _build_circadian_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     pressure_breakdown = circadian.get("pressure_breakdown", {})
     if not isinstance(pressure_breakdown, dict):
         pressure_breakdown = {}
+    mechanism_windows = circadian.get("mechanism_windows", {})
+    if not isinstance(mechanism_windows, dict):
+        mechanism_windows = {}
     phase = str(circadian.get("phase", "awake") or "awake")
     phase_label = str(circadian.get("phase_label", "清醒") or "清醒")
     phase_label = {
@@ -1350,6 +1353,14 @@ def _build_circadian_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
         "time_band_description": time_band_description,
         "current_hour": current_hour,
         "is_night": bool(circadian.get("is_night", False)),
+        "is_sleep_window": bool(circadian.get("is_sleep_window", False)),
+        "is_night_social_window": bool(circadian.get("is_night_social_window", False)),
+        "is_pressure_window": bool(circadian.get("is_pressure_window", False)),
+        "mechanism_windows": mechanism_windows,
+        "system_started_at": round(_safe_float(circadian.get("system_started_at", 0.0)), 3),
+        "last_evaluated_at": round(_safe_float(circadian.get("last_evaluated_at", 0.0)), 3),
+        "sync_label": str(circadian.get("sync_label", "") or "运行时实时计算"),
+        "sync_source": str(circadian.get("sync_source", "") or "state_monitor"),
         "is_sleeping": bool(circadian.get("is_sleeping", False)),
         "is_burnthrough": bool(circadian.get("is_burnthrough", False)),
         "can_reply": bool(circadian.get("can_reply", True)),
@@ -2053,7 +2064,7 @@ def _build_display_policy() -> Dict[str, list[str]]:
         ],
         "detail": [
             "资源账本的聊天值和思考值",
-            "作息分区、晚上/半夜/凌晨阶段、睡眠债、困意和熬夜压力",
+            "夜间机制窗口、睡眠债、困意和熬夜压力",
             "情绪账本、主动驱动和当前感受",
             "记忆栈、记忆过载、回忆录和知识条目",
             "主动意图、待结算事件和后台随机事件",

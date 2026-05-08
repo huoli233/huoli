@@ -314,3 +314,26 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
 - 本轮只应提交 `.dark-factory/progress.txt`、夜间链路相关 Python 文件、WebUI 状态页源码、回归脚本、`web/dashboard/dist/index.html` 和新构建资产；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T02:43:00+08:00 - Task: 直接快回超时与夜间机制窗口修复
+
+### What was done:
+- 修复直接快回仍等待模型提供方 18 秒超时的问题：强制/点名直接快回改用独立 `heartfc_direct_fast_reply_generation_timeout_seconds=8.0` 外层预算，超时后立即走本地短兜底。
+- 将该快回预算加入 runtime_tuning 配置、模板和配置分级回归，允许在 WebUI 配置分级里单独调整。
+- 修复夜间系统语义：20:00 后只作为夜间社交窗口参与社交/亢奋阶段，不再把晚上社交窗口传给三维困倦/睡眠压力引擎当完整夜间。
+- 恢复夜间机制以 `NightCycleSystem` 原始窗口为准：夜间社交、22:00 熬夜压力、23:00-07:00 睡眠窗口、00:00-04:00 凌晨反思、04:00-07:00 清晨恢复。
+- 状态导出新增 `mechanism_windows`、`is_sleep_window`、`is_pressure_window`、`system_started_at`、`last_evaluated_at` 和同步来源，让状态页说明这些值从状态对象创建后按运行时实时评估同步。
+- WebUI 夜间状态面板移除硬编码“下午/傍晚/晚上/半夜/凌晨/清晨”序列，改为显示后端真实机制窗口和状态同步时间。
+
+### Testing:
+- `.venv\Scripts\ruff.exe check src\core\night_cycle_system.py src\chat\heart_flow\enhanced_modules\proactive_reactive_flow_mixin.py src\chat\heart_flow\heartfc_state_exporter.py src\webui\services\state_monitor.py scripts\heartflow_state_regression.py scripts\config_profile_regression.py` 通过。
+- `.venv\Scripts\python.exe scripts\heartflow_state_regression.py` 通过，直接快回和夜间状态契约均通过。
+- `.venv\Scripts\python.exe scripts\config_profile_regression.py` 通过，runtime_tuning 新可调项被配置分级覆盖。
+- `.venv\Scripts\python.exe -m compileall src scripts` 通过。
+- `npm run build` 在 `web/dashboard` 通过，生成 `index-DB_A4TXZ.js` 和 `index-DqLheVE_.css`。
+- `.venv\Scripts\python.exe scripts\webui_smoke_test.py` 通过，HTTP 81 个检查全部 ok，WebSocket 状态监控 public/token/cookie 三种路径均 ok。
+- Chrome headless 打开临时 FastAPI WebUI `http://127.0.0.1:8765/dashboard` 通过，DOM 中存在“夜间状态 / 当前时段 / 状态同步 / 社交窗口”，截图写入系统临时目录。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 本轮提交只应包含快回超时、夜间机制窗口、状态页展示、配置模板、回归脚本和 dashboard dist 构建资产；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。

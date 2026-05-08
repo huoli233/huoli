@@ -684,19 +684,25 @@ def check_night_status_label_contract() -> Dict[str, Any]:
     exporter_source = (ROOT / "src/chat/heart_flow/heartfc_state_exporter.py").read_text(encoding="utf-8")
     assert '"circadian": "夜间"' in state_monitor_source
     assert '"circadian_rhythm": "夜间状态"' in state_monitor_source
-    assert "作息分区、晚上/半夜/凌晨阶段、睡眠债、困意和熬夜压力" in state_monitor_source
+    assert "夜间机制窗口、睡眠债、困意和熬夜压力" in state_monitor_source
+    assert "作息分区、晚上/半夜/凌晨阶段、睡眠债、困意和熬夜压力" not in state_monitor_source
     assert '"昼夜节律"' not in state_monitor_source
     assert 'get_logger("夜间状态")' in night_source
     assert 'NightPhase.NIGHT_ACTIVE: "晚上阶段"' in night_source
     assert 'NightPhase.MIDNIGHT_REFLECT: "凌晨阶段"' in night_source
     assert "def resolve_time_band" in night_source
+    assert "def mechanism_windows" in night_source
+    assert "is_night=clock_is_night" in night_source
+    assert "self._state.in_night_mode = clock_is_night" in night_source
     assert "self._state.last_stimulus_at = now" in night_source
-    assert '"late_night", "半夜", "半夜熬夜"' in night_source
-    assert '"midnight", "凌晨", "凌晨深夜"' in night_source
+    assert '"late_night", "半夜", "睡眠窗口开始"' in night_source
+    assert '"midnight", "凌晨", "凌晨反思窗口"' in night_source
     assert "_ncs.evaluate(" in runtime_source
     assert "record_overnight_activity(\"peek\"" in runtime_source
     assert "record_overnight_activity(\"interrupt\"" in runtime_source
     assert '"pressure_breakdown"' in exporter_source
+    assert '"mechanism_windows"' in exporter_source
+    assert '"last_evaluated_at"' in exporter_source
     feedback_source = (ROOT / "src/chat/heart_flow/enhanced_modules/loop_resource_feedback_mixin.py").read_text(
         encoding="utf-8"
     )
@@ -714,8 +720,12 @@ def check_night_status_label_contract() -> Dict[str, Any]:
                 "phase_label": "午夜反思",
                 "time_band": "midnight",
                 "time_band_label": "凌晨",
-                "time_band_description": "凌晨深夜",
+                "time_band_description": "凌晨反思窗口",
                 "current_hour": 3,
+                "mechanism_windows": {
+                    "midnight_reflect": {"label": "凌晨反思", "range": "00:00-04:00", "active": True}
+                },
+                "last_evaluated_at": 1778258282.0,
                 "pressure_breakdown": {
                     "total": 0.42,
                     "chat_minutes": 12,
@@ -730,6 +740,8 @@ def check_night_status_label_contract() -> Dict[str, Any]:
     )
     assert detail["phase_label"] == "凌晨阶段"
     assert detail["time_band_label"] == "凌晨"
+    assert detail["mechanism_windows"]["midnight_reflect"]["active"] is True
+    assert detail["last_evaluated_at"] == 1778258282.0
     assert detail["pressure_breakdown"]["interrupt_count"] == 2
     assert detail["reply_quota_label"] == "1/2"
     exported = _extract_circadian_rhythm(
@@ -740,14 +752,23 @@ def check_night_status_label_contract() -> Dict[str, Any]:
                 "phase_label": "晚上阶段",
                 "time_band": "late_night",
                 "time_band_label": "半夜",
-                "time_band_description": "半夜熬夜",
+                "time_band_description": "睡眠窗口开始",
                 "current_hour": 23,
+                "is_sleep_window": True,
+                "is_pressure_window": True,
+                "mechanism_windows": {
+                    "sleep_window": {"label": "睡眠窗口", "range": "23:00-07:00", "active": True},
+                    "overnight_pressure": {"label": "熬夜压力", "range": "22:00-07:00", "active": True},
+                },
                 "pressure_breakdown": {"total": 0.3, "chat_minutes": 9, "interrupt_count": 1},
             }
         },
         {},
     )
     assert exported["time_band_label"] == "半夜"
+    assert exported["is_sleep_window"] is True
+    assert exported["is_pressure_window"] is True
+    assert exported["mechanism_windows"]["sleep_window"]["active"] is True
     assert exported["pressure_breakdown"]["chat_minutes"] == 9
     return {
         "night_labels": True,
@@ -917,6 +938,11 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     assert fallback_response.reply_set is not None
     assert fallback_response.reply_set.reply_data[0].content == "看到了，怎么了？"
     assert fallback_response.timing["fallback_reason"] == "force_reply_generation_timeout"
+    direct_fallback = ProactiveReactiveFlowMixin()._build_forced_reply_fallback_response(
+        msg,
+        "direct_fast_reply_generation_timeout",
+    )
+    assert direct_fallback.timing["fallback_reason"] == "direct_fast_reply_generation_timeout"
 
     probe = type(
         "ModelGovernorProbe",
@@ -967,6 +993,8 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     generator_source = (ROOT / "src/plugin_system/apis/generator_api.py").read_text(encoding="utf-8")
     group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
     assert "heartfc_force_reply_generation_timeout_seconds" in flow_source
+    assert "heartfc_direct_fast_reply_generation_timeout_seconds" in flow_source
+    assert "direct_fast_reply_generation_timeout" in flow_source
     assert "强制回复生成失败，已启用本地短兜底" in flow_source
     assert "_is_direct_reply_fastlane = bool(_is_admin_force_wake or getattr(self, \"_cached_targeted_to_bot\", False))" in loop_source
     assert "if _target_uid and not _is_direct_reply_fastlane" in loop_source
@@ -1007,12 +1035,16 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "fallbackPollTimerRef" in dashboard_source
     assert "pollMonitorFallback" in dashboard_source
     assert "夜间状态" in dashboard_source
-    assert "作息分区、晚上/半夜/凌晨阶段、睡眠债、困意和熬夜压力" in dashboard_source
-    assert "作息分区" in dashboard_source
+    assert "夜间机制窗口、睡眠债、困意和熬夜压力" in dashboard_source
+    assert "当前时段" in dashboard_source
+    assert "机制窗口" in dashboard_source or "mechanism_windows" in dashboard_source
     assert "压力分解" in dashboard_source
-    assert "下午 / 傍晚 / 晚上 / 半夜 / 凌晨 / 清晨" in dashboard_source
+    assert "下午 / 傍晚 / 晚上 / 半夜 / 凌晨 / 清晨" not in dashboard_source
+    assert "社交窗口" in dashboard_source
+    assert "睡眠窗口" in dashboard_source
+    assert "状态同步" in dashboard_source
     assert "function resolveTimeBand" in dashboard_source
-    assert 'return { hour, label: "凌晨", description: "凌晨深夜" }' in dashboard_source
+    assert 'return { hour, label: "凌晨", description: "凌晨反思窗口" }' in dashboard_source
     assert "夜间影响" in dashboard_source
     assert "昼夜节律" not in dashboard_source
     assert "Promise.allSettled" not in dashboard_source

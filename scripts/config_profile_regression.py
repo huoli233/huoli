@@ -172,6 +172,7 @@ expression_learning_interval_seconds = 456.0
 
 [profile_mapping.semantic_domains.runtime_tuning]
 autosave_interval_seconds = 321.0
+heartfc_direct_fast_reply_generation_timeout_seconds = 7.0
 heartfc_voice_cooldown_sec = 9.0
 
 [profile_mapping.semantic_domains.phase_timing]
@@ -524,7 +525,7 @@ system_only_keys = ["active_user_cleanup_interval_seconds", "backend_event_coold
 [profile_mapping.module_views.runtime_tuning]
 semantic_domains = ["runtime_tuning"]
 edit_scope = "mixed"
-user_editable_keys = ["autosave_interval_seconds", "flow_planner_slow_threshold_seconds", "heartfc_perception_cooldown_sec", "heartfc_voice_cooldown_sec"]
+user_editable_keys = ["autosave_interval_seconds", "flow_planner_slow_threshold_seconds", "heartfc_direct_fast_reply_generation_timeout_seconds", "heartfc_perception_cooldown_sec", "heartfc_voice_cooldown_sec"]
 system_only_keys = ["flow_planner_timeout_seconds", "heartfc_dormant_poll_sec", "heartfc_energy_drain_floor", "heartfc_post_message_retry_sec", "heartfc_tick_floor_sec", "vlm_concurrency_limit"]
 
 [profile_mapping.module_views.phase_timing]
@@ -863,8 +864,15 @@ def main() -> None:
         llm_runtime = _check_llm_routing_runtime_contract()
         runtime_tuning = hub.resolve_module_view("runtime_tuning")
         assert runtime_tuning.values["autosave_interval_seconds"] == 321.0
+        assert runtime_tuning.values["heartfc_direct_fast_reply_generation_timeout_seconds"] == 7.0
         assert runtime_tuning.edit_scope == "mixed"
-        assert runtime_tuning.user_editable_keys == ("autosave_interval_seconds", "flow_planner_slow_threshold_seconds", "heartfc_perception_cooldown_sec", "heartfc_voice_cooldown_sec")
+        assert runtime_tuning.user_editable_keys == (
+            "autosave_interval_seconds",
+            "flow_planner_slow_threshold_seconds",
+            "heartfc_direct_fast_reply_generation_timeout_seconds",
+            "heartfc_perception_cooldown_sec",
+            "heartfc_voice_cooldown_sec",
+        )
         phase_timing = hub.resolve_module_view("phase_timing")
         assert phase_timing.values["max_idle_wait_seconds"] == 99
         assert phase_timing.edit_scope == "mixed"

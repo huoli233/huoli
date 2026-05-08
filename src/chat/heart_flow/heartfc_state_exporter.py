@@ -177,6 +177,7 @@ def _time_band_label(value: Any) -> str:
         "afternoon": "下午",
         "early_evening": "傍晚",
         "evening": "晚上",
+        "late_evening": "晚上",
         "late_night": "半夜",
         "midnight": "凌晨",
         "dawn": "清晨",
@@ -192,16 +193,16 @@ def _resolve_time_band(hour: Optional[int] = None) -> Dict[str, Any]:
     h = _time.localtime().tm_hour if hour is None else int(hour) % 24
     if 13 <= h < 17:
         key, desc = "afternoon", "午后低谷"
-    elif 17 <= h < 20:
-        key, desc = "early_evening", "傍晚过渡"
-    elif 20 <= h < 23:
-        key, desc = "evening", "晚上阶段"
-    elif 23 <= h or h < 2:
-        key, desc = "late_night", "半夜熬夜"
-    elif 2 <= h < 5:
-        key, desc = "midnight", "凌晨深夜"
-    elif 5 <= h < 7:
-        key, desc = "dawn", "清晨恢复"
+    elif 20 <= h < 22:
+        key, desc = "evening", "夜间社交窗口"
+    elif 22 <= h < 23:
+        key, desc = "late_evening", "熬夜压力预热"
+    elif 23 <= h:
+        key, desc = "late_night", "睡眠窗口开始"
+    elif 0 <= h < 4:
+        key, desc = "midnight", "凌晨反思窗口"
+    elif 4 <= h < 7:
+        key, desc = "dawn", "清晨恢复窗口"
     elif 7 <= h < 11:
         key, desc = "morning", "上午清醒"
     elif 11 <= h < 13:
@@ -529,6 +530,16 @@ def _extract_circadian_rhythm(
     pressure_breakdown = summary.get("pressure_breakdown", {})
     if not isinstance(pressure_breakdown, dict):
         pressure_breakdown = {}
+    mechanism_windows = summary.get("mechanism_windows", {})
+    if not isinstance(mechanism_windows, dict):
+        mechanism_windows = {}
+    system_started_at = _safe_float(summary.get("system_started_at", 0.0), 0.0)
+    last_evaluated_at = _safe_float(summary.get("last_evaluated_at", 0.0), 0.0)
+    sync_label = str(summary.get("sync_label", "") or "")
+    sync_source = str(summary.get("sync_source", "") or "")
+    is_sleep_window = bool(summary.get("is_sleep_window", False))
+    is_night_social_window = bool(summary.get("is_night_social_window", False))
+    is_pressure_window = bool(summary.get("is_pressure_window", False))
     is_burnthrough = bool(summary.get("is_burnthrough", False)) or phase == "burnthrough"
     is_sleeping = bool(summary.get("is_sleeping", subject.get("is_sleeping", False))) or phase in {
         "light_sleep",
@@ -552,6 +563,16 @@ def _extract_circadian_rhythm(
                 behavior.get("time_band_description", time_band_description) or time_band_description
             )
             current_hour = _safe_int(behavior.get("current_hour", current_hour), current_hour)
+            mechanism_windows = behavior.get("mechanism_windows", mechanism_windows)
+            if not isinstance(mechanism_windows, dict):
+                mechanism_windows = {}
+            system_started_at = _safe_float(behavior.get("system_started_at", system_started_at), system_started_at)
+            last_evaluated_at = _safe_float(behavior.get("last_evaluated_at", last_evaluated_at), last_evaluated_at)
+            sync_label = str(behavior.get("sync_label", sync_label) or sync_label)
+            sync_source = str(behavior.get("sync_source", sync_source) or sync_source)
+            is_sleep_window = bool(behavior.get("is_sleep_window", is_sleep_window))
+            is_night_social_window = bool(behavior.get("is_night_social_window", is_night_social_window))
+            is_pressure_window = bool(behavior.get("is_pressure_window", is_pressure_window))
             can_reply = bool(behavior.get("can_reply", can_reply))
             remaining_replies = _safe_int(behavior.get("remaining_replies", remaining_replies))
             sleep_debt = _safe_float(behavior.get("sleep_debt", sleep_debt))
@@ -564,7 +585,7 @@ def _extract_circadian_rhythm(
             peek_window = bool(behavior.get("is_peek_window", peek_window))
             is_burnthrough = bool(behavior.get("burned_out", is_burnthrough)) or phase == "burnthrough"
             is_sleeping = bool(behavior.get("is_sleeping", is_sleeping)) or phase in {"light_sleep", "deep_sleep"}
-            is_night = phase not in {"awake"}
+            is_night = bool(behavior.get("is_night", phase not in {"awake"}))
             dawn_progress = _safe_float(getattr(state, "dawn_recovery_progress", dawn_progress))
             sleep_reply_used = _safe_int(getattr(state, "sleep_reply_used", sleep_reply_used))
             sleep_reply_cap = _safe_int(getattr(state, "night_reply_cap", sleep_reply_cap))
@@ -602,6 +623,14 @@ def _extract_circadian_rhythm(
         "time_band_description": time_band_description,
         "current_hour": current_hour,
         "is_night": is_night,
+        "is_sleep_window": is_sleep_window,
+        "is_night_social_window": is_night_social_window,
+        "is_pressure_window": is_pressure_window,
+        "mechanism_windows": mechanism_windows,
+        "system_started_at": round(system_started_at, 3),
+        "last_evaluated_at": round(last_evaluated_at, 3),
+        "sync_label": sync_label or "运行时实时计算",
+        "sync_source": sync_source or "heartfc_state_exporter",
         "is_sleeping": is_sleeping,
         "is_burnthrough": is_burnthrough,
         "can_reply": can_reply,

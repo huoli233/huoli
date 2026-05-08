@@ -163,6 +163,18 @@ type CircadianDetail = {
   time_band_description?: string;
   current_hour?: number;
   is_night: boolean;
+  is_sleep_window?: boolean;
+  is_night_social_window?: boolean;
+  is_pressure_window?: boolean;
+  mechanism_windows?: Record<string, {
+    label?: string;
+    range?: string;
+    active?: boolean;
+  }>;
+  system_started_at?: number;
+  last_evaluated_at?: number;
+  sync_label?: string;
+  sync_source?: string;
   is_sleeping: boolean;
   is_burnthrough: boolean;
   can_reply: boolean;
@@ -530,7 +542,7 @@ const severityRank: Record<string, number> = {
 const fallbackDisplayPolicy: DisplayPolicy = {
   resident: ["精力储备", "内在心情", "注意状态", "社交姿态", "安全护盾", "流转阶段", "场景热度", "发言预测"],
   active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "情绪低落/好奇心/社交欲显著变化", "浅睡/深睡/熬穿/清晨恢复/睡眠债", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/会话升温"],
-  detail: ["资源账本的聊天值和思考值", "作息分区、晚上/半夜/凌晨阶段、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "会话整体状态", "当前对象状态", "安全护盾细节", "值变化原因", "发言预测的驱动和抑制因素"],
+  detail: ["资源账本的聊天值和思考值", "夜间机制窗口、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "会话整体状态", "当前对象状态", "安全护盾细节", "值变化原因", "发言预测的驱动和抑制因素"],
   hidden: ["内部阈值", "调试原因", "缓存字段", "旧命名残留", "纯计数器原值"],
 };
 
@@ -653,20 +665,20 @@ function resolveTimeBand(value: number | undefined | null): { hour: number; labe
   if (hour >= 13 && hour < 17) {
     return { hour, label: "下午", description: "午后低谷" };
   }
-  if (hour >= 17 && hour < 20) {
-    return { hour, label: "傍晚", description: "傍晚过渡" };
+  if (hour >= 20 && hour < 22) {
+    return { hour, label: "晚上", description: "夜间社交窗口" };
   }
-  if (hour >= 20 && hour < 23) {
-    return { hour, label: "晚上", description: "晚上阶段" };
+  if (hour >= 22 && hour < 23) {
+    return { hour, label: "晚上", description: "熬夜压力预热" };
   }
-  if (hour >= 23 || hour < 2) {
-    return { hour, label: "半夜", description: "半夜熬夜" };
+  if (hour >= 23) {
+    return { hour, label: "半夜", description: "睡眠窗口开始" };
   }
-  if (hour >= 2 && hour < 5) {
-    return { hour, label: "凌晨", description: "凌晨深夜" };
+  if (hour >= 0 && hour < 4) {
+    return { hour, label: "凌晨", description: "凌晨反思窗口" };
   }
-  if (hour >= 5 && hour < 7) {
-    return { hour, label: "清晨", description: "清晨恢复" };
+  if (hour >= 4 && hour < 7) {
+    return { hour, label: "清晨", description: "清晨恢复窗口" };
   }
   if (hour >= 7 && hour < 11) {
     return { hour, label: "上午", description: "上午清醒" };
@@ -675,6 +687,25 @@ function resolveTimeBand(value: number | undefined | null): { hour: number; labe
     return { hour, label: "中午", description: "中午平稳" };
   }
   return { hour, label: "白天", description: "白天平稳" };
+}
+
+function mechanismWindowText(
+  windows: CircadianDetail["mechanism_windows"] | undefined,
+  key: string,
+  fallback: string,
+): string {
+  const item = windows?.[key];
+  const label = item?.label ?? fallback;
+  const range = item?.range ?? "--:-- - --:--";
+  return `${label} ${range}`;
+}
+
+function timestampText(value: number | undefined | null): string {
+  const raw = Number(value ?? 0);
+  if (raw <= 0) {
+    return "等待同步";
+  }
+  return formatClock(raw);
 }
 
 function yesNo(value: boolean | undefined | null): string {
@@ -1214,7 +1245,7 @@ export function EmotionDashboard() {
           </div>
           <div className="metric-wall">
             <div className="metric-tile">
-              <span>作息分区</span>
+              <span>当前时段</span>
               <strong>{circadianDetail?.time_band_label ?? fallbackTimeBand.label}</strong>
               <p>{hourText(circadianDetail?.current_hour ?? fallbackTimeBand.hour)} · {circadianDetail?.time_band_description ?? fallbackTimeBand.description}</p>
             </div>
@@ -1241,12 +1272,17 @@ export function EmotionDashboard() {
             <div className="metric-tile">
               <span>熬夜压力</span>
               <strong>{countText(circadianDetail?.overnight_pressure, "")}</strong>
-              <p>分项 {fixed(circadianDetail?.pressure_breakdown?.total, 2)} · {circadianDetail?.is_burnthrough ? "熬穿已激活" : circadianDetail?.is_sleeping ? "睡眠中" : circadianDetail?.is_night ? "夜间阶段" : "清醒时段"}</p>
+              <p>分项 {fixed(circadianDetail?.pressure_breakdown?.total, 2)} · {circadianDetail?.is_burnthrough ? "熬穿已激活" : circadianDetail?.is_sleeping ? "睡眠中" : circadianDetail?.is_pressure_window ? "压力窗口" : circadianDetail?.is_sleep_window ? "睡眠窗口" : "清醒时段"}</p>
             </div>
             <div className="metric-tile">
               <span>表达风格</span>
               <strong>{circadianDetail?.expression_style_label ?? "正常"}</strong>
               <p>回复抑制 {percent(circadianDetail?.response_suppression)}</p>
+            </div>
+            <div className="metric-tile">
+              <span>状态同步</span>
+              <strong>{circadianDetail?.sync_label ?? "运行时实时计算"}</strong>
+              <p>上次 {timestampText(circadianDetail?.last_evaluated_at)} · 启动 {timestampText(circadianDetail?.system_started_at)}</p>
             </div>
           </div>
           <div className="detail-grid compact circadian-breakdown">
@@ -1271,8 +1307,24 @@ export function EmotionDashboard() {
               <strong>{circadianDetail?.pressure_breakdown?.interrupt_count ?? 0}</strong>
             </div>
             <div className="detail-row">
-              <span>阶段序列</span>
-              <strong>下午 / 傍晚 / 晚上 / 半夜 / 凌晨 / 清晨</strong>
+              <span>社交窗口</span>
+              <strong>{mechanismWindowText(circadianDetail?.mechanism_windows, "night_social", "夜间社交")}</strong>
+            </div>
+            <div className="detail-row">
+              <span>压力窗口</span>
+              <strong>{mechanismWindowText(circadianDetail?.mechanism_windows, "overnight_pressure", "熬夜压力")}</strong>
+            </div>
+            <div className="detail-row">
+              <span>睡眠窗口</span>
+              <strong>{mechanismWindowText(circadianDetail?.mechanism_windows, "sleep_window", "睡眠窗口")}</strong>
+            </div>
+            <div className="detail-row">
+              <span>反思窗口</span>
+              <strong>{mechanismWindowText(circadianDetail?.mechanism_windows, "midnight_reflect", "凌晨反思")}</strong>
+            </div>
+            <div className="detail-row">
+              <span>恢复窗口</span>
+              <strong>{mechanismWindowText(circadianDetail?.mechanism_windows, "dawn_recover", "清晨恢复")}</strong>
             </div>
           </div>
         </section>
