@@ -83,3 +83,22 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
 - 本轮只应提交 `scripts/webui_smoke_test.py`、`src/webui/routers/websocket/state_monitor.py`、`web/dashboard/src/components/EmotionDashboard/index.tsx`、`web/dashboard/src/components/EmotionDashboard/styles.css`、`web/dashboard/dist/` 和本进度文件；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png` 以及其他模块差异不属于本轮。
+
+## 2026-05-08T18:38:00 - Task: 记忆分层判定与上下文污染收口
+
+### What was done:
+- 将记忆检索入口拆分为当前上下文、短期临时回忆、长期记忆三层，不再把普通关键词消息自动升级成长程历史检索。
+- 明确长期记忆只在显式长期回忆意图或内部关系联想提示下进入检索；短期临时回忆只走 `query_direct_memory`，不复用旧 ThinkingBack 缓存。
+- 给回复提示增加层级说明：长期记忆标注为旧记忆，短期回忆标注为近期临时信息，避免模型把旧内容当成当前对话原文。
+- 移除“当次未命中仍混入近期缓存答案”的行为，防止上一次回忆结果污染下一轮普通回复。
+- 新增独立回归脚本 `scripts/memory_tier_regression.py` 覆盖普通上下文跳过、短期/长期分层、关系联想和已烧毁上下文阻断。
+
+### Testing:
+- `uv run python scripts/memory_tier_regression.py` 通过，返回 `normal_context_skip=true`、`temporary_only_direct_memory=true`、`explicit_long_term_enabled=true`、`internal_associative_recall=true`、`burned_context_blocks_recall=true`。
+- `uv run python -m ruff check src/memory_system/memory_retrieval.py scripts/memory_tier_regression.py` 通过。
+- `uv run python -m compileall src/memory_system/memory_retrieval.py scripts/memory_tier_regression.py` 通过。
+- `ReadLints` 检查 `src/memory_system/memory_retrieval.py`、`scripts/memory_tier_regression.py` 未发现新增问题。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
+- 本轮只应提交 `src/memory_system/memory_retrieval.py`、`scripts/memory_tier_regression.py` 和本进度文件；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`src/webui/routers/heartflow.py`、`scripts/heartflow_state_regression.py`、`.trae/`、`dashboard-status-smoke.png` 不属于本轮。

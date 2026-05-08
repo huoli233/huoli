@@ -481,21 +481,56 @@ _MEMORY_SELF_RECALL_HINTS = (
     "刚刚那句",
 )
 
-_MEMORY_AMBIGUOUS_HINTS = (
-    "上次",
-    "之前",
+_MEMORY_TEMPORARY_RECALL_HINTS = (
     "刚才",
     "刚刚",
-    "那个",
-    "这个",
+    "上一句",
+    "上句",
+    "前一句",
     "那句",
     "这句",
     "那条",
     "这个事",
+    "那个",
+    "这个",
     "继续",
     "然后呢",
     "后来",
+)
+
+_MEMORY_LONG_TERM_RECALL_HINTS = (
+    "上次",
+    "之前",
+    "以前",
+    "从前",
+    "过去",
+    "那次",
+    "上回",
+    "当时",
     "记得吗",
+    "还记得",
+    "你记不记得",
+    "我们聊过",
+    "以前说过",
+    "之前说过",
+    "旧事",
+    "老早",
+)
+
+_MEMORY_AMBIGUOUS_HINTS = tuple(
+    dict.fromkeys(_MEMORY_TEMPORARY_RECALL_HINTS + _MEMORY_LONG_TERM_RECALL_HINTS)
+)
+
+_CONTEXT_BURNED_MARKERS = (
+    "already_well_replied",
+    "over_processed",
+    "currently_processing",
+    "避免复读",
+    "刚处理过",
+    "回应质量足够",
+    "过度处理",
+    "不要重复",
+    "不再延伸",
 )
 
 
@@ -519,6 +554,64 @@ def _looks_like_ambiguous_memory_reference(
     return len(_squash_text_for_match(payload)) <= 6
 
 
+def _contains_any_memory_hint(text: str, hints: Tuple[str, ...]) -> bool:
+    payload = str(text or "")
+    return any(hint in payload for hint in hints)
+
+
+def _context_looks_burned(extra_context: str) -> bool:
+    payload = str(extra_context or "")
+    if not payload:
+        return False
+    return any(marker in payload for marker in _CONTEXT_BURNED_MARKERS)
+
+
+def _classify_recall_intent(latest: str, split_terms: List[str], context: str = "") -> Tuple[str, str, bool]:
+    """区分当前上下文、短期临时回忆和长期记忆，避免把旧内容伪装成前情。"""
+    if _looks_like_self_recall_memory_query(latest):
+        return "temporary", "self_recall", False
+    if _contains_any_memory_hint(latest, _MEMORY_LONG_TERM_RECALL_HINTS):
+        return "long_term", "explicit_long_term_recall", True
+    context_payload = str(context or "")
+    if any(marker in context_payload for marker in ("[关系优先]", "优先检索", "关系回避")):
+        return "long_term", "internal_associative_recall", True
+    if _contains_any_memory_hint(latest, _MEMORY_TEMPORARY_RECALL_HINTS):
+        return "temporary", "temporary_context_recall", False
+    if not split_terms and len(_squash_text_for_match(latest)) <= 6:
+        return "temporary", "short_context_continuation", False
+    return "current_context", "none", False
+
+
+def _filter_memory_payload_for_tier(text: Optional[str], memory_tier: str) -> str:
+    """按记忆层级过滤结果，短期临时回忆不接收明显长期摘要。"""
+    sanitized = _sanitize_memory_payload(text)
+    if not sanitized:
+        return ""
+    if memory_tier != "temporary":
+        return sanitized
+    kept: List[str] = []
+    for line in sanitized.splitlines():
+        item = line.strip()
+        if not item:
+            continue
+        if any(marker in item for marker in ("记忆ID：", "主题：", "线索标签：", "[相似度")):
+            continue
+        if re.match(r"^\d{2}-\d{2}\s+\d{2}:\d{2}", item):
+            continue
+        if "小时前" in item or "天前" in item:
+            continue
+        kept.append(item)
+    return "\n".join(kept).strip()
+
+
+def _memory_prompt_intro(memory_tier: str) -> str:
+    if memory_tier == "long_term":
+        return "你从长期记忆中想起了以下信息（这是旧记忆，不是当前对话原文）："
+    if memory_tier == "temporary":
+        return "你临时想起了以下近期信息（只用于续接当前话头，不等同于当前消息）："
+    return "你回忆起了以下信息："
+
+
 def plan_memory_retrieval(message: str, target: str, extra_context: str = "") -> Dict[str, Any]:
     """统一记忆检索 governor：决定是否跳过、查询文本和工具升级顺序。"""
     latest = str(target or "").strip()
@@ -534,6 +627,9 @@ def plan_memory_retrieval(message: str, target: str, extra_context: str = "") ->
         "max_tool_steps": 0,
         "max_result_chars": 0,
         "stop_after_first_hit": True,
+        "memory_tier": "current_context",
+        "recall_intent": "none",
+        "allow_long_term": False,
     }
     if not normalized_latest:
         plan["should_skip"] = True
@@ -582,6 +678,11 @@ def plan_memory_retrieval(message: str, target: str, extra_context: str = "") ->
         plan["reason"] = "emoji_only"
         return plan
 
+    if _context_looks_burned(context):
+        plan["should_skip"] = True
+        plan["reason"] = "context_burned"
+        return plan
+
     _recent_cache = getattr(should_skip_memory_retrieval, "_recent_queries", None)
     if _recent_cache is None:
         _recent_cache = {}
@@ -598,37 +699,44 @@ def plan_memory_retrieval(message: str, target: str, extra_context: str = "") ->
         for _ok in _old_keys:
             del _recent_cache[_ok]
 
+    split_terms = [
+        token.strip()
+        for token in _re.split(r"[\s,，。！？!?;；:：|/]+", latest)
+        if len(token.strip()) >= 2
+    ]
+    memory_tier, recall_intent, allow_long_term = _classify_recall_intent(latest, split_terms, context)
+    plan["memory_tier"] = memory_tier
+    plan["recall_intent"] = recall_intent
+    plan["allow_long_term"] = allow_long_term
+
+    if memory_tier == "current_context":
+        plan["should_skip"] = True
+        plan["reason"] = "current_context_only"
+        return plan
+
     query_text = _build_compound_query_context(history, latest)
     compressed_query = _compress_memory_query_text(history, latest)
     if _is_valid_memory_query_text(compressed_query):
         query_text = compressed_query
     plan["query_text"] = query_text
 
-    split_terms = [
-        token.strip()
-        for token in _re.split(r"[\s,，。！？!?;；:：|/]+", latest)
-        if len(token.strip()) >= 2
-    ]
-    if _looks_like_self_recall_memory_query(latest):
-        tool_order = ["query_direct_memory", "search_chat_history"]
-        plan["reason"] = "self_recall"
-        plan["max_result_chars"] = 720
-    elif _looks_like_ambiguous_memory_reference(latest, split_terms):
-        tool_order = [
-            "query_direct_memory",
-            "search_chat_history",
-            "search_memory_by_embedding",
-        ]
-        plan["reason"] = "ambiguous_short_reference"
-        plan["max_result_chars"] = 880
-    elif len(split_terms) >= 1:
-        tool_order = ["search_chat_history", "query_direct_memory"]
-        plan["reason"] = "keyword_history_first"
-        plan["max_result_chars"] = 960
+    if memory_tier == "temporary":
+        if recall_intent == "self_recall":
+            tool_order = ["query_direct_memory"]
+            plan["max_result_chars"] = 640
+        else:
+            tool_order = ["query_direct_memory"]
+            plan["max_result_chars"] = 520
+        plan["reason"] = recall_intent
+    elif memory_tier == "long_term":
+        tool_order = ["search_chat_history", "query_direct_memory", "search_memory_by_embedding"]
+        plan["reason"] = recall_intent
+        plan["max_result_chars"] = 960 if allow_long_term else 0
     else:
-        tool_order = ["query_direct_memory", "search_chat_history", "search_memory_by_embedding"]
-        plan["reason"] = "ambiguous_short_reference"
-        plan["max_result_chars"] = 880
+        plan["should_skip"] = True
+        plan["reason"] = "current_context_only"
+        return plan
+
     plan["tool_order"] = list(dict.fromkeys(tool_order))
     plan["max_tool_steps"] = len(plan["tool_order"])
     return plan
@@ -2470,6 +2578,7 @@ async def _process_memory_retrieval(
     preferred_tools: Optional[List[str]] = None,
     max_tool_steps: Optional[int] = None,
     stop_after_first_hit: bool = False,
+    cache_enabled: bool = True,
 ) -> Optional[str]:
     """三阶段记忆检索管线: 1)缓存探测 → 2)直驱工具扫描 → 3)ReAct Agent推理。
 
@@ -2489,9 +2598,10 @@ async def _process_memory_retrieval(
 
     # —— 第1阶段：缓存探测 ——
     # 从ThinkingBack中查找近1小时内、同一聊天流的相似问题答案
-    cached_hit = _thinking_cache.probe(chat_history[:200], chat_id)
-    if cached_hit:
-        return cached_hit
+    if cache_enabled:
+        cached_hit = _thinking_cache.probe(chat_history[:200], chat_id)
+        if cached_hit:
+            return cached_hit
 
     preferred_tool_order = list(dict.fromkeys(preferred_tools or []))
     if max_tool_steps is not None and max_tool_steps > 0:
@@ -2513,14 +2623,15 @@ async def _process_memory_retrieval(
         react_tool_budget = max(0, int(max_tool_steps) - max(0, int(probe_steps)))
     if probe_hit:
         # 命中时存储到ThinkingBack以便后续缓存复用
-        _store_thinking_back(
-            chat_id=chat_id,
-            question=chat_history[:200],
-            context=context,
-            found_answer=True,
-            answer=probe_hit,
-            thinking_steps=[{"iteration": 0, "method": "direct_tool_probe"}],
-        )
+        if cache_enabled:
+            _store_thinking_back(
+                chat_id=chat_id,
+                question=chat_history[:200],
+                context=context,
+                found_answer=True,
+                answer=probe_hit,
+                thinking_steps=[{"iteration": 0, "method": "direct_tool_probe"}],
+            )
         return probe_hit
     if react_tool_budget is not None and react_tool_budget <= 0:
         return None
@@ -2545,7 +2656,7 @@ async def _process_memory_retrieval(
     )
 
     # 存储推理结果到ThinkingBack（超时时除外）
-    if not is_timeout:
+    if cache_enabled and not is_timeout:
         _store_thinking_back(
             chat_id=chat_id,
             question=chat_history[:200],
@@ -2554,7 +2665,7 @@ async def _process_memory_retrieval(
             answer=answer if found_answer else "",
             thinking_steps=thinking_steps,
         )
-    else:
+    elif is_timeout:
         logger.info("ReAct Agent超时，不存储结果")
 
     sanitized_answer = _sanitize_memory_payload(answer)
@@ -2608,7 +2719,8 @@ async def build_memory_retrieval_prompt(
     logger.info(f"{log_prefix}检测是否需要回忆，元消息：{message[:30]}...，消息长度: {len(message)}")
     try:
         chat_id = chat_stream.stream_id
-        retrieval_plan = plan_memory_retrieval(message, target, extra_context=extra_context)
+        plan_context = "\n".join(part for part in (extra_context, relation_context) if str(part or "").strip())
+        retrieval_plan = plan_memory_retrieval(message, target, extra_context=plan_context)
         if retrieval_plan.get("should_skip"):
             logger.info(
                 f"{log_prefix}记忆检索已跳过: {retrieval_plan.get('reason', 'skip')} | target={target[:40]}"
@@ -2664,6 +2776,7 @@ async def build_memory_retrieval_prompt(
                 preferred_tools=list(retrieval_plan.get("tool_order", []) or []),
                 max_tool_steps=max_tool_steps,
                 stop_after_first_hit=bool(retrieval_plan.get("stop_after_first_hit", True)),
+                cache_enabled=str(retrieval_plan.get("memory_tier", "")) == "long_term",
             )
         except Exception as e:
             logger.error(f"{log_prefix}处理记忆检索时发生异常: {e}")
@@ -2671,31 +2784,23 @@ async def build_memory_retrieval_prompt(
 
         end_time = time.time()
 
-        sanitized_result = _sanitize_memory_payload(result)
+        memory_tier = str(retrieval_plan.get("memory_tier", "current_context") or "current_context")
+        sanitized_result = _filter_memory_payload_for_tier(result, memory_tier)
         max_result_chars = int(retrieval_plan.get("max_result_chars", 0) or 0)
         if sanitized_result:
-            # 合并当前结果与近期缓存答案（去重）
-            all_findings = _collect_recent_findings(chat_id, sanitized_result, window_seconds=600.0, ceiling=3)
-            if all_findings:
-                retrieved_memory = _trim_retrieval_findings(all_findings, max_result_chars)
-                current_cnt = 1
-                cached_cnt = len(all_findings) - current_cnt
-                logger.info(
-                    f"{log_prefix}记忆检索成功，耗时: {(end_time - start_time):.3f}秒，"
-                    f"当前查询 {current_cnt} 条，缓存 {cached_cnt} 条，共 {len(all_findings)} 条"
-                )
-                return f"你回忆起了以下信息：\n{retrieved_memory}\n如果与回复内容相关，可以参考这些回忆的信息。\n"
-            logger.info(f"{log_prefix}记忆检索成功，耗时: {(end_time - start_time):.3f}秒")
-            return f"你回忆起了以下信息：\n{sanitized_result}\n如果与回复内容相关，可以参考这些回忆的信息。\n"
-        else:
-            # 即使当次没查到，也尝试返回近期缓存答案
-            cached_only = _collect_recent_findings(chat_id, None, window_seconds=600.0, ceiling=3)
-            if cached_only:
-                retrieved_memory = _trim_retrieval_findings(cached_only, max_result_chars)
-                logger.info(f"{log_prefix}当次未找到新结果，但有 {len(cached_only)} 条近期缓存答案")
-                return f"你回忆起了以下信息：\n{retrieved_memory}\n如果与回复内容相关，可以参考这些回忆的信息。\n"
-            logger.debug(f"{log_prefix}记忆检索未找到相关信息")
-            return ""
+            retrieved_memory = _trim_retrieval_findings([sanitized_result], max_result_chars)
+            intro = _memory_prompt_intro(memory_tier)
+            logger.info(
+                f"{log_prefix}记忆检索成功，耗时: {(end_time - start_time):.3f}秒，"
+                f"层级={memory_tier}，意图={retrieval_plan.get('recall_intent', '')}"
+            )
+            return f"{intro}\n{retrieved_memory}\n如果与回复内容相关，可以参考这些回忆的信息。\n"
+
+        logger.debug(
+            f"{log_prefix}记忆检索未找到可进入回复的相关信息，"
+            f"层级={memory_tier}，意图={retrieval_plan.get('recall_intent', '')}"
+        )
+        return ""
 
     except Exception as e:
         logger.error(f"{log_prefix}记忆检索时发生异常: {str(e)}")
