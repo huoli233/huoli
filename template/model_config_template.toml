@@ -145,7 +145,7 @@ price_out = 0
 
 
 [model_task_config.utils] # 在麦麦的一些组件中使用的模型，例如表情包模块，取名模块，关系模块，麦麦的情绪变化等，是麦麦必须的模型
-model_list = ["siliconflow-deepseek-v3.2"] # 使用的模型列表，每个子项对应上面的模型名称(name)
+model_list = ["siliconflow-deepseek-v4-flash"] # 统一使用硅基流动 DeepSeek V4 Flash，避免本地模型加载失败
 temperature = 0.2                        # 模型温度，新V3建议0.1-0.3
 max_tokens = 4096                         # 最大输出token数
 slow_threshold = 15.0                     # 慢请求阈值（秒），模型等待回复时间超过此值会输出警告日志
@@ -166,7 +166,7 @@ slow_threshold = 25.0
 selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
 [model_task_config.planner] #决策：负责决定麦麦该什么时候回复的模型
-model_list = ["siliconflow-deepseek-v3.2"]
+model_list = ["siliconflow-deepseek-v4-flash"]
 temperature = 0.3
 max_tokens = 800
 slow_threshold = 12.0
@@ -192,14 +192,14 @@ selection_strategy = "random"           # 模型选择策略：balance（负载�
 # ------------LPMM知识库模型------------
 
 [model_task_config.lpmm_entity_extract] # 实体提取模型
-model_list = ["siliconflow-deepseek-v3.2"]
+model_list = ["siliconflow-deepseek-v4-flash"]
 temperature = 0.2
 max_tokens = 800
 slow_threshold = 20.0
 selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
 [model_task_config.lpmm_rdf_build] # RDF构建模型
-model_list = ["siliconflow-deepseek-v3.2"]
+model_list = ["siliconflow-deepseek-v4-flash"]
 temperature = 0.2
 max_tokens = 800
 slow_threshold = 20.0

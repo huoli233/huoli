@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import io
 import json
 import re
@@ -788,6 +789,7 @@ class OpenaiClient(BaseClient):
                     _apply_model_reasoning_policy(model_info, parsed_response)
                     return parsed_response, usage_record
 
+        req_task: asyncio.Task | None = None
         try:
             # 使用 asyncio.wait_for 包装整个请求，确保超时后能正确取消
             # 同时定期检查中断信号
@@ -803,12 +805,22 @@ class OpenaiClient(BaseClient):
                 await asyncio.sleep(0.1)
 
             resp, usage_record = await req_task
+        except asyncio.CancelledError:
+            if req_task is not None and not req_task.done():
+                req_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await req_task
+            raise
         except APIConnectionError as e:
             # 重封装APIConnectionError为NetworkConnectionError
             raise NetworkConnectionError() from e
         except APIStatusError as e:
             # 重封装APIError为RespNotOkException
             raise RespNotOkException(e.status_code, e.message) from e
+        finally:
+            if req_task is not None and req_task.done() and not req_task.cancelled():
+                with contextlib.suppress(Exception):
+                    req_task.exception()
 
         if usage_record:
             resp.usage = UsageRecord(

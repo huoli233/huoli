@@ -559,6 +559,18 @@ class BotActivityEntry(BaseModel):
         table_name = "bot_activity_entry"
 
 
+class ReplyerActionRecord(BaseModel):
+    """回复器动作选择记录，替代 data/temp/replyer_action_*.json 临时文件"""
+
+    chat_id = TextField(index=True)
+    reason = TextField(default="")
+    think_level = IntegerField(default=0)
+    birth_ts = DoubleField(index=True)
+
+    class Meta:
+        table_name = "replyer_action_record"
+
+
 MODELS = [
     ChatStreams,
     LLMUsage,
@@ -583,6 +595,7 @@ MODELS = [
     RevisionSnapshot,
     SlotCatalog,
     BotActivityEntry,
+    ReplyerActionRecord,
 ]
 
 

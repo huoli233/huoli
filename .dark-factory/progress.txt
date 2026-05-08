@@ -399,3 +399,26 @@
 - `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
 - 本轮只应提交 `.dark-factory/progress.txt`、`loop_main_driver_mixin.py`、`scene_bot_lifecycle_mixin.py`、`scripts/heartflow_state_regression.py`。
 - 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T04:00:30+08:00 - Task: 修复残留 Qwen 调用、未处理模型异常与回复动作 JSON 增量
+
+### What was done:
+- 将本地运行配置 `config/model_config.toml` 和 `config/model_config_optimized.toml` 中的 `utils/model_monitor/planner/focus_chat/lightweight/lpmm_entity_extract/lpmm_rdf_build` 统一切到 `siliconflow-deepseek-v4-flash`，修复 `phase_tracker/focus_audit/repeat_judge` 仍调用本地 Qwen 导致 400/500 的问题。
+- 同步模板 `template/model_config_template.toml` 的非工具任务池默认模型到 `siliconflow-deepseek-v4-flash`；`tool_use` 保留支持 function calling 的模型池，避免工具调用链失效。
+- 修复 OpenAI 客户端请求子任务在外层取消/超时后未回收异常的问题，减少 `事件循环捕获未处理异常` 日志。
+- 将 `record_replyer_action_temp()` 从每次写 `data/temp/replyer_action_*.json` 改为写入 `Huoli.db` 的 `replyer_action_record` 表，避免回复动作记录继续生成增量 JSON 文件。
+- 新增 `scripts/model_runtime_audit.py`，用于检查非工具任务池模型路由和统计 `data` 下 JSON 来源。
+
+### Testing:
+- `.venv\Scripts\python.exe scripts\model_runtime_audit.py` 通过，确认本地运行配置和模板的非工具任务池均已路由到 `siliconflow-deepseek-v4-flash`，并统计当前 data 下 23 个 JSON 中 16 个是历史 `replyer_action_*.json`。
+- `.venv\Scripts\ruff.exe check src\llm_models\model_client\openai_client.py src\common\database\database_model.py src\chat\utils\utils.py scripts\model_runtime_audit.py` 通过。
+- `.venv\Scripts\python.exe scripts\config_profile_regression.py` 通过。
+- `.venv\Scripts\python.exe scripts\heartflow_state_regression.py` 通过，数据库健康检查显示表数为 24。
+- `.venv\Scripts\python.exe -m compileall src scripts` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- `config/model_config.toml` 与 `config/model_config_optimized.toml` 是 `.gitignore` 忽略的本地运行配置，本轮已修改本机运行态但不会提交真实密钥配置。
+- `tool_use` 未统一切到 V4 Flash，因为当前 V4 Flash 配置 `supports_tool_calling=false`，而工具执行器、知识检索 ReAct、表达学习等链路依赖 function calling；强切会破坏工具链。
+- 本轮不删除历史 `data/temp/replyer_action_*.json`，只停止后续新增；如需清理历史运行数据，应单独确认清理策略。
+- 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
