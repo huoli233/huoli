@@ -1,3 +1,4 @@
+from collections import deque
 import enum
 import time
 from dataclasses import asdict, is_dataclass
@@ -23,7 +24,7 @@ def _plain(value: Any, depth: int = 0) -> Any:
             return repr(value)
     if isinstance(value, dict):
         return {str(k): _plain(v, depth + 1) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
+    if isinstance(value, (list, tuple, set, deque)):
         return [_plain(item) for item in value]
     if hasattr(value, "__dict__"):
         safe: Dict[str, Any] = {}
@@ -222,6 +223,8 @@ def _extract_runtime_snapshot(chat: Any) -> Dict[str, Any]:
         "last_model_governor": "_last_model_governor_verdict",
         "last_decision_runtime": "_last_decision_runtime",
         "last_execution_runtime": "_last_execution_runtime",
+        "last_timing_gate_runtime": "_last_timing_gate_runtime",
+        "timing_gate_history": "_timing_gate_history",
         "cached_night_phase": "_cached_night_phase",
         "cached_night_summary": "_cached_night_summary",
         "cached_metabolism_constraints": "_cached_metabolism_constraints",
@@ -1160,6 +1163,10 @@ def _extract_domains(chat: Any, channel_id: str) -> Dict[str, Any]:
         },
         "decision_runtime": runtime.get("last_decision_runtime") or {},
         "execution_runtime": runtime.get("last_execution_runtime") or {},
+        "timing_gate": {
+            "current": runtime.get("last_timing_gate_runtime") or {},
+            "history": list(runtime.get("timing_gate_history") or [])[-20:],
+        },
         "pending_response": {
             "pending_active": pending_active,
             "pending_seconds": round(pending_seconds, 2),

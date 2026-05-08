@@ -40,6 +40,7 @@ from src.webui.services.state_monitor import (
     _build_current_user_detail,
     _build_participant_impacts,
     _build_safety_detail,
+    _build_timing_gate_detail,
 )
 
 
@@ -559,7 +560,60 @@ def check_statusbar_export_contract() -> Dict[str, Any]:
     assert "会话升温" in service_source
     assert "会话整体状态" in dashboard_source
     assert "runtime_sync_label" in dashboard_source
-    return {"prediction_sync": True, "safety_aliases": True, "statusbar_copy": True}
+
+    timing_gate_detail = _build_timing_gate_detail(
+        {
+            "timing_gate": {
+                "current": {
+                    "verdict_id": "gate-current",
+                    "at": 123.0,
+                    "gate_result": "continue",
+                    "stage": "full_pipeline_entry",
+                    "reason": "状态门控放行，进入完整回复管线",
+                    "source": "timing_gate",
+                    "final_action": "continue",
+                    "next_action": "continue",
+                    "model_path": "pending",
+                    "confidence": 0.72,
+                },
+                "history": [
+                    {
+                        "verdict_id": "gate-observe",
+                        "at": 122.0,
+                        "gate_result": "observe",
+                        "stage": "peek_gate_observe",
+                        "reason": "窥屏态观察完成，内心无波澜",
+                        "source": "peek_gate",
+                        "final_action": "observe",
+                        "next_action": "observe",
+                        "model_path": "skip",
+                        "confidence": 0.81,
+                    },
+                    {
+                        "verdict_id": "gate-current",
+                        "at": 123.0,
+                        "gate_result": "continue",
+                        "stage": "full_pipeline_entry",
+                        "reason": "状态门控放行，进入完整回复管线",
+                        "source": "timing_gate",
+                        "final_action": "continue",
+                        "next_action": "continue",
+                        "model_path": "pending",
+                        "confidence": 0.72,
+                    },
+                ],
+            }
+        }
+    )
+    assert timing_gate_detail["current"]["gate_result_label"] == "继续完整管线"
+    assert timing_gate_detail["current"]["stage_label"] == "完整管线入口"
+    assert timing_gate_detail["current"]["final_action_label"] == "继续管线"
+    assert timing_gate_detail["history_count"] == 2
+    assert timing_gate_detail["history"][0]["stage_label"] == "窥屏后继续观察"
+    assert "timing_gate_detail" in service_source
+    assert "Timing Gate" in dashboard_source
+    assert "timingGateDetail" in dashboard_source
+    return {"prediction_sync": True, "safety_aliases": True, "statusbar_copy": True, "timing_gate_detail": True}
 
 
 def check_monitor_overview_contract() -> Dict[str, Any]:

@@ -89,6 +89,7 @@ type Presentation = {
   circadian_detail?: CircadianDetail;
   emotion_detail?: EmotionDetail;
   behavior_detail?: BehaviorDetail;
+  timing_gate_detail?: TimingGateDetail;
   context_detail?: ContextDetail;
   memory_detail?: MemoryDetail;
   autonomy_detail?: AutonomyDetail;
@@ -256,6 +257,29 @@ type ModelGovernorDetail = {
   dynamic_hourly_cap: number;
   reason_codes: string[];
   reason_labels: string[];
+};
+
+type TimingGateVerdict = {
+  verdict_id: string;
+  at: number;
+  gate_result: string;
+  gate_result_label?: string;
+  stage: string;
+  stage_label?: string;
+  reason: string;
+  source: string;
+  final_action: string;
+  final_action_label?: string;
+  next_action: string;
+  model_path: string;
+  blocker: string;
+  confidence: number;
+};
+
+type TimingGateDetail = {
+  current: TimingGateVerdict;
+  history: TimingGateVerdict[];
+  history_count: number;
 };
 
 type BehaviorDetail = {
@@ -542,6 +566,7 @@ function humanExecutionStage(value: string | undefined): string {
     dashboard_hard_block: "仪表盘硬阻断",
     pattern_route_skip: "群体模式硬路由",
     scene_constraint_skip: "会话场景硬约束",
+    full_pipeline_entry: "完整管线入口",
     decision_runtime_skip: "初裁直接跳过",
     voice_action_rest: "内心要求休息",
     voice_action_disengage: "内心要求放下会话",
@@ -690,6 +715,7 @@ export function EmotionDashboard() {
   const circadianDetail = packet?.presentation?.circadian_detail;
   const emotionDetail = packet?.presentation?.emotion_detail;
   const behaviorDetail = packet?.presentation?.behavior_detail;
+  const timingGateDetail = packet?.presentation?.timing_gate_detail;
   const contextDetail = packet?.presentation?.context_detail;
   const memoryDetail = packet?.presentation?.memory_detail;
   const autonomyDetail = packet?.presentation?.autonomy_detail;
@@ -1331,6 +1357,50 @@ export function EmotionDashboard() {
                 {item}
               </span>
             ))}
+          </div>
+        </section>
+
+        <section className="panel panel-timing-gate">
+          <div className="panel-header">
+            <h2>Timing Gate</h2>
+            <span>{timingGateDetail?.current?.gate_result_label ?? "等待门控"}</span>
+          </div>
+          <div className="metric-wall">
+            <div className="metric-tile">
+              <span>当前裁定</span>
+              <strong>{timingGateDetail?.current?.gate_result_label ?? "暂无"}</strong>
+              <p>{timingGateDetail?.current?.reason ?? "尚未记录门控原因"}</p>
+            </div>
+            <div className="metric-tile">
+              <span>门控阶段</span>
+              <strong>{timingGateDetail?.current?.stage_label || humanExecutionStage(timingGateDetail?.current?.stage)}</strong>
+              <p>来源 {timingGateDetail?.current?.source || "timing_gate"}</p>
+            </div>
+            <div className="metric-tile">
+              <span>后续动作</span>
+              <strong>{timingGateDetail?.current?.final_action_label || timingGateDetail?.current?.final_action || "-"}</strong>
+              <p>next={timingGateDetail?.current?.next_action || "-"} · {modelPathLabel(timingGateDetail?.current?.model_path)}</p>
+            </div>
+            <div className="metric-tile">
+              <span>历史记录</span>
+              <strong>{timingGateDetail?.history_count ?? 0}</strong>
+              <p>置信度 {percent(timingGateDetail?.current?.confidence)}</p>
+            </div>
+          </div>
+          <div className="timing-gate-list">
+            {(timingGateDetail?.history ?? []).length === 0 ? (
+              <div className="empty-state">暂无门控历史，等待下一轮 Heartflow 裁定。</div>
+            ) : (
+              (timingGateDetail?.history ?? []).slice(-6).map((item, index) => (
+                <article className="timing-gate-item" key={`${item.verdict_id || item.stage}-${index}`}>
+                  <div>
+                    <strong>{item.gate_result_label ?? item.gate_result}</strong>
+                    <span>{item.stage_label || humanExecutionStage(item.stage)}</span>
+                  </div>
+                  <p>{item.reason || item.blocker || "暂无门控原因"}</p>
+                </article>
+              ))
+            )}
           </div>
         </section>
 

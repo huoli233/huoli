@@ -857,6 +857,19 @@ class LoopMainDriverMixin:
                 await asyncio.sleep(_TICK_FLOOR_SEC * 2)
                 return True
 
+        self._store_gate_runtime(
+            now=now,
+            stage="full_pipeline_entry",
+            reason="状态门控放行，进入完整回复管线",
+            source="timing_gate",
+            final_action="continue",
+            next_action="continue",
+            model_path="pending",
+            confidence=0.72,
+            gate_result="continue",
+            persist_runtime=False,
+        )
+
         # 用户过滤：同步即可
         _t_prep = time.time()
         filtered_messages = self._filter_messages_by_user_preference(incoming_batch)

@@ -195,6 +195,10 @@ class EnhancedHeartFChatting(
         self._last_behavior_governor_verdict = BehaviorGovernorVerdict()
         self._last_rest_governor_verdict = RestGovernorVerdict()
         self._last_model_governor_verdict = ModelGovernorVerdict()
+        self._last_decision_runtime: Dict[str, Any] = {}
+        self._last_execution_runtime: Dict[str, Any] = {}
+        self._last_timing_gate_runtime: Dict[str, Any] = {}
+        self._timing_gate_history: deque = deque(maxlen=20)
         self._model_large_last_ts: float = 0.0
         self._model_large_hour_window_start: float = 0.0
         self._model_large_proactive_hour_calls: int = 0

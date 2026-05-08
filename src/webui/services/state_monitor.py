@@ -353,6 +353,7 @@ def _label_behavior_reason(code: Any) -> str:
 
 def _label_final_action(value: Any) -> str:
     return {
+        "continue": "继续管线",
         "reply": "已回复",
         "upgrade": "升级处理",
         "observe": "继续观察",
@@ -376,6 +377,7 @@ def _label_execution_stage(value: Any) -> str:
         "dashboard_hard_block": "仪表盘硬阻断",
         "pattern_route_skip": "群体模式硬路由",
         "scene_constraint_skip": "会话场景硬约束",
+        "full_pipeline_entry": "完整管线入口",
         "decision_runtime_skip": "初裁直接跳过",
         "voice_action_rest": "内心要求休息",
         "voice_action_disengage": "内心要求放下会话",
@@ -399,6 +401,16 @@ def _label_execution_stage(value: Any) -> str:
         "reply_aborted": "进入执行后中止",
         "final_no_action": "最终未执行动作",
     }.get(str(value or "").strip().lower(), str(value or "") or "执行中")
+
+
+def _label_timing_gate_result(value: Any) -> str:
+    return {
+        "continue": "继续完整管线",
+        "no_reply": "不回复",
+        "wait": "等待",
+        "observe": "观察",
+        "task_only": "仅处理任务",
+    }.get(str(value or "").strip().lower(), str(value or "") or "观察")
 
 
 def _signal_card(
@@ -1202,21 +1214,34 @@ def _build_timeline(
     active_signals: list[Dict[str, Any]],
 ) -> list[Dict[str, Any]]:
     execution_runtime = domains.get("execution_runtime", {})
+    timing_gate = domains.get("timing_gate", {}) if isinstance(domains.get("timing_gate"), dict) else {}
+    gate_history = timing_gate.get("history", []) if isinstance(timing_gate.get("history"), list) else []
     change_events = dashboard_snapshot.get("change_events", []) if isinstance(dashboard_snapshot, dict) else []
-    if change_events:
-        timeline = []
-        for event in change_events[-10:]:
-            timeline.append(
-                {
-                    "at": event.get("timestamp", time.time()),
-                    "label": str(event.get("type", "state_change") or "state_change"),
-                    "detail": str(event.get("detail", "") or event.get("summary", "") or "状态发生变化"),
-                    "family": "dashboard",
-                }
-            )
-        return timeline
-
     generated = []
+    for event in change_events[-6:]:
+        generated.append(
+            {
+                "at": event.get("timestamp", time.time()),
+                "label": str(event.get("type", "state_change") or "state_change"),
+                "detail": str(event.get("detail", "") or event.get("summary", "") or "状态发生变化"),
+                "family": "dashboard",
+            }
+        )
+
+    for gate in gate_history[-8:]:
+        if not isinstance(gate, dict):
+            continue
+        stage = str(gate.get("stage", "") or "")
+        result = str(gate.get("gate_result", "") or "observe")
+        generated.append(
+            {
+                "at": _safe_float(gate.get("at", time.time()), time.time()),
+                "label": f"Timing Gate · {_label_timing_gate_result(result)}",
+                "detail": f"{_label_execution_stage(stage)}：{str(gate.get('reason', '') or '暂无门控原因')}",
+                "family": "门控",
+            }
+        )
+
     if bool(execution_runtime.get("verdict_id")):
         generated.append(
             {
@@ -1426,6 +1451,60 @@ def _build_behavior_detail(
             "reason_codes": model_codes,
             "reason_labels": [_label_behavior_reason(code) for code in model_codes],
         },
+    }
+
+
+def _build_timing_gate_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
+    timing_gate = domains.get("timing_gate", {})
+    if not isinstance(timing_gate, dict):
+        timing_gate = {}
+    current = timing_gate.get("current", {}) if isinstance(timing_gate.get("current"), dict) else {}
+    history_raw = timing_gate.get("history", []) if isinstance(timing_gate.get("history"), list) else []
+    history = []
+    for item in history_raw[-20:]:
+        if not isinstance(item, dict):
+            continue
+        stage = str(item.get("stage", "") or "")
+        result = str(item.get("gate_result", "") or "observe")
+        history.append(
+            {
+                "verdict_id": str(item.get("verdict_id", "") or ""),
+                "at": _safe_float(item.get("at", 0.0)),
+                "gate_result": result,
+                "gate_result_label": str(item.get("gate_result_label", "") or _label_timing_gate_result(result)),
+                "stage": stage,
+                "stage_label": _label_execution_stage(stage),
+                "reason": str(item.get("reason", "") or "暂无门控原因"),
+                "source": str(item.get("source", "") or "timing_gate"),
+                "final_action": str(item.get("final_action", "") or "observe"),
+                "final_action_label": _label_final_action(item.get("final_action", "")),
+                "next_action": str(item.get("next_action", "") or ""),
+                "model_path": str(item.get("model_path", "") or "skip"),
+                "blocker": str(item.get("blocker", "") or ""),
+                "confidence": round(_safe_float(item.get("confidence", 0.0)), 3),
+            }
+        )
+    current_stage = str(current.get("stage", "") or "")
+    current_result = str(current.get("gate_result", "") or "observe")
+    return {
+        "current": {
+            "verdict_id": str(current.get("verdict_id", "") or ""),
+            "at": _safe_float(current.get("at", 0.0)),
+            "gate_result": current_result,
+            "gate_result_label": str(current.get("gate_result_label", "") or _label_timing_gate_result(current_result)),
+            "stage": current_stage,
+            "stage_label": _label_execution_stage(current_stage),
+            "reason": str(current.get("reason", "") or "暂无门控原因"),
+            "source": str(current.get("source", "") or "timing_gate"),
+            "final_action": str(current.get("final_action", "") or "observe"),
+            "final_action_label": _label_final_action(current.get("final_action", "")),
+            "next_action": str(current.get("next_action", "") or ""),
+            "model_path": str(current.get("model_path", "") or "skip"),
+            "blocker": str(current.get("blocker", "") or ""),
+            "confidence": round(_safe_float(current.get("confidence", 0.0)), 3),
+        },
+        "history": history,
+        "history_count": len(history),
     }
 
 
@@ -1930,6 +2009,7 @@ def _build_display_policy() -> Dict[str, list[str]]:
             "会话感知、话题焦点、活跃人数",
             "目标用户关系、好感、信任、压力",
             "发言预测的驱动和抑制因素",
+            "Timing Gate 当前裁定和最近门控历史",
         ],
         "hidden": [
             "内部阈值",
@@ -1962,6 +2042,7 @@ def _build_presentation(
     circadian_detail = _build_circadian_detail(domains)
     emotion_detail = _build_emotion_detail(domains)
     behavior_detail = _build_behavior_detail(chat, domains, dashboard_snapshot)
+    timing_gate_detail = _build_timing_gate_detail(domains)
     memory_detail = _build_memory_detail(domains)
     autonomy_detail = _build_autonomy_detail(domains)
     context_detail = _build_context_detail(domains)
@@ -2078,6 +2159,7 @@ def _build_presentation(
         "circadian_detail": circadian_detail,
         "emotion_detail": emotion_detail,
         "behavior_detail": behavior_detail,
+        "timing_gate_detail": timing_gate_detail,
         "context_detail": context_detail,
         "attention_runtime_detail": attention_runtime_detail,
         "safety_detail": safety_detail,

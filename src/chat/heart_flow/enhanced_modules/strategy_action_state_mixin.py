@@ -256,6 +256,70 @@ class StrategyActionStateMixin:
                 merged.append(value)
         return merged
 
+    def _normalize_timing_gate_result(self, value: str, *, final_action: str = "") -> str:
+        raw = str(value or "").strip().lower()
+        if raw in {"continue", "no_reply", "wait", "observe", "task_only"}:
+            return raw
+        action = str(final_action or "").strip().lower()
+        if action in {"reply", "upgrade", "continue"}:
+            return "continue"
+        if action == "wait":
+            return "wait"
+        if action in {"rest", "disengage", "lurk"}:
+            return "task_only"
+        if action in {"skip", "no_reply"}:
+            return "no_reply"
+        return "observe"
+
+    def _record_timing_gate_runtime(
+        self,
+        *,
+        now: float,
+        stage: str,
+        result: str,
+        reason: str,
+        source: str,
+        final_action: str = "observe",
+        next_action: str = "observe",
+        model_path: str = "skip",
+        blocker: str = "",
+        confidence: float = 0.78,
+        extra_votes: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        normalized_result = self._normalize_timing_gate_result(result, final_action=final_action)
+        resolved_stage = str(stage or "timing_gate")
+        resolved_reason = str(reason or blocker or resolved_stage or "状态门控裁定")
+        resolved_blocker = str(blocker or "")
+        runtime = {
+            "verdict_id": f"gate-{resolved_stage}-{int(now * 1000)}",
+            "at": float(now or time.time()),
+            "gate_result": normalized_result,
+            "gate_result_label": {
+                "continue": "继续完整管线",
+                "no_reply": "不回复",
+                "wait": "等待",
+                "observe": "观察",
+                "task_only": "仅处理任务",
+            }.get(normalized_result, normalized_result),
+            "stage": resolved_stage,
+            "stage_label": resolved_stage,
+            "reason": resolved_reason,
+            "source": str(source or "timing_gate"),
+            "final_action": str(final_action or "observe"),
+            "next_action": str(next_action or normalized_result),
+            "model_path": str(model_path or "skip"),
+            "blocker": resolved_blocker,
+            "confidence": round(float(confidence or 0.0), 3),
+            "source_votes": dict(extra_votes or {}),
+        }
+        history = getattr(self, "_timing_gate_history", None)
+        if history is None:
+            history = deque(maxlen=20)
+            self._timing_gate_history = history
+        history.append(runtime)
+        self._last_timing_gate_runtime = runtime
+        return runtime
+
     def _store_gate_runtime(
         self,
         *,
@@ -268,14 +332,31 @@ class StrategyActionStateMixin:
         model_path: str = "skip",
         blocker: str = "",
         confidence: float = 0.78,
+        gate_result: str = "",
+        persist_runtime: bool = True,
         extra_votes: Dict[str, Any] | None = None,
         extra_blocking: List[str] | None = None,
         extra_driving: List[str] | None = None,
     ) -> Dict[str, Any]:
         resolved_reason = str(reason or blocker or stage or "状态门控跳过")
         resolved_blocker = str(blocker or resolved_reason)
+        gate_runtime = self._record_timing_gate_runtime(
+            now=now,
+            stage=stage,
+            result=gate_result,
+            reason=resolved_reason,
+            source=source,
+            final_action=final_action,
+            next_action=next_action,
+            model_path=model_path,
+            blocker=resolved_blocker,
+            confidence=confidence,
+            extra_votes=extra_votes,
+        )
+        if not persist_runtime:
+            return gate_runtime
         gate_verdict = DecisionRuntimeVerdict(
-            verdict_id=f"gate-{stage}-{int(now * 1000)}",
+            verdict_id=str(gate_runtime.get("verdict_id", f"gate-{stage}-{int(now * 1000)}")),
             should_reply=final_action in {"reply", "upgrade"},
             next_action=str(next_action or "observe"),
             decision_stage=str(stage or "gate_skip"),
@@ -287,6 +368,7 @@ class StrategyActionStateMixin:
             source_votes={
                 "gate_stage": str(stage or ""),
                 "gate_source": str(source or ""),
+                "gate_result": str(gate_runtime.get("gate_result", "observe")),
             },
             blocking_factors=[resolved_blocker] if resolved_blocker else [],
             driving_factors=[],

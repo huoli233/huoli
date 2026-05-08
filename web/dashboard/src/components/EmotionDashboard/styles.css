@@ -275,7 +275,8 @@ body {
 
 .panel-signals,
 .panel-timeline,
-.panel-policy {
+.panel-policy,
+.panel-timing-gate {
   grid-column: span 2;
 }
 
@@ -494,9 +495,40 @@ body {
   line-height: 1.7;
 }
 
-.timeline-list {
+.timeline-list,
+.timing-gate-list {
   display: grid;
   gap: 12px;
+}
+
+.timing-gate-list {
+  margin-top: 16px;
+}
+
+.timing-gate-item {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(35, 26, 21, 0.08);
+}
+
+.timing-gate-item div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.timing-gate-item span,
+.timing-gate-item p {
+  color: var(--muted);
+}
+
+.timing-gate-item p {
+  margin: 0;
+  line-height: 1.5;
 }
 
 .timeline-item {
@@ -773,7 +805,8 @@ body {
 
   .panel-signals,
   .panel-timeline,
-  .panel-policy {
+  .panel-policy,
+  .panel-timing-gate {
     grid-column: auto;
   }
 
