@@ -874,12 +874,37 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     flow_source = (ROOT / "src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py").read_text(
         encoding="utf-8"
     )
+    loop_source = (ROOT / "src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    scene_source = (ROOT / "src/chat/heart_flow/enhanced_modules/scene_planner_bridge_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    coordinator_source = (ROOT / "src/chat/heart_flow/reply_coordinator.py").read_text(encoding="utf-8")
+    generator_source = (ROOT / "src/plugin_system/apis/generator_api.py").read_text(encoding="utf-8")
+    group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
     assert "heartfc_force_reply_generation_timeout_seconds" in flow_source
     assert "强制回复生成失败，已启用本地短兜底" in flow_source
+    assert "if _target_uid and not _is_admin_fastlane" in loop_source
+    assert "1.2 if _is_admin_fastlane else 6.0" in loop_source
+    assert "跳过阶段2.5b深度集成" in loop_source
+    assert "跳过记忆预取" in loop_source
+    assert "跳过关系度聚合" in loop_source
+    assert "src=admin_fastlane" in loop_source
+    assert "if gw_ctx.admin_force" in scene_source
+    assert "跳过被动策略规划" in scene_source
+    assert "fast_path=force_generation_fallback" in flow_source
+    assert "enable_chinese_typo=not force_generation_fallback" in flow_source
+    assert "fast_path: bool = False" in coordinator_source
+    assert "fast_path: bool = False" in generator_source
+    assert "if fast_path:" in group_reply_source
+    assert "跳过自然化错字和二次改写" in group_reply_source
+    assert "跳过补充回复判断" in group_reply_source
     return {
         "local_force_reply_fallback": True,
         "admin_model_governor_bypass": True,
         "stale_voice_cache_cleared": True,
+        "admin_fast_reply_path": True,
     }
 
 

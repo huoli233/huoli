@@ -248,6 +248,9 @@ class ReplyCoordinator:
         extra_info: str,
         request_type: str,
         think_level: int = 1,
+        fast_path: bool = False,
+        enable_splitter: bool = True,
+        enable_chinese_typo: bool = True,
     ):
         from src.plugin_system.apis import generator_api
         from src.config.config import global_config
@@ -279,6 +282,9 @@ class ReplyCoordinator:
             reply_time_point=_tm.time(),
             think_level=think_level,
             extra_info=extra_info,
+            enable_splitter=enable_splitter,
+            enable_chinese_typo=enable_chinese_typo,
+            fast_path=fast_path,
         )
 
     def select_reply_target(

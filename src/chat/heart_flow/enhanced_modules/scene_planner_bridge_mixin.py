@@ -376,7 +376,10 @@ class ScenePlannerBridgeMixin:
         gateway = DecisionGateway.get_instance()
         verdict = gateway.decide(votes, gw_ctx)
         self._last_gateway_verdict = verdict
-        if not verdict.should_skip:
+        if gw_ctx.admin_force:
+            self._last_reactive_plan = None
+            logger.debug(f"{self.log_prefix} 👑 管理员极速通道: 跳过被动策略规划")
+        elif not verdict.should_skip:
             try:
                 from src.chat.heart_flow.flow_planner import acquire_flow_planner
 
@@ -1587,4 +1590,3 @@ class ScenePlannerBridgeMixin:
         except Exception as exc:
             logger.debug(f"{self.log_prefix} [GAP-T] 跨引擎验证异常: {exc}")
             return {"error": str(exc)[:60]}
-

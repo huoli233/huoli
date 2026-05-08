@@ -236,3 +236,21 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
 - 本轮只应提交 `.dark-factory/progress.txt`、`scripts/heartflow_state_regression.py`、`src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py`、`src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py`、`src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py`；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+## 2026-05-09T00:55:00+08:00 - Task: 管理员强制回复快路径性能修复
+
+### What was done:
+- 分析 00:38:54 到 00:39:42 的回复链路，确认慢点由主循环等待、阶段2.5、关系/网关、回复包装、模型生成、错字/改写后处理叠加造成。
+- 为管理员强制快回提前识别 `_is_admin_fastlane`，跳过完整世界快照重建、阶段2.5b深度集成和记忆预取。
+- 将管理员阶段2.5默认超时从 3.0s 降到 1.2s，并只保留身份、自回复、内容状态、情绪、预处理等关键任务。
+- 管理员强制场景跳过关系度聚合、维度网关投票和被动策略规划，直接进入 force_reply 语义，同时保留后续安全守卫。
+- 回复生成链路新增 `fast_path` 参数，强制回复时使用极简上下文，并关闭错字自然化、二次改写、补充回复判断和消息分割/错字处理。
+- 补充回归脚本源码契约断言，防止管理员快回重新接回慢链路。
+
+### Testing:
+- `uv run python -m ruff check ...` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，`force_reply_generation_fallback.admin_fast_reply_path=true`。
+- `uv run python -m compileall src scripts` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 工作区已有无关删除/修改/未跟踪文件，本轮提交只应包含快路径相关文件和 progress 记录。

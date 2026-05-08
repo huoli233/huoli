@@ -564,6 +564,8 @@ class LoopMainDriverMixin:
             await asyncio.sleep(_TICK_FLOOR_SEC)
             return True
 
+        _is_admin_fastlane = self._is_force_wake_admin(incoming_batch, pinged_msg)
+
         # 重建完整世界快照（携带目标用户ID），供 Phase 2.5+ 所有门控使用
         _target_uid = ""
         for _m_snap in reversed(incoming_batch):
@@ -571,7 +573,7 @@ class LoopMainDriverMixin:
             if _uid_snap and not self._is_bot_message_obj(_m_snap):
                 _target_uid = _uid_snap
                 break
-        if _target_uid:
+        if _target_uid and not _is_admin_fastlane:
             try:
                 from src.core.world_snapshot import build_world_snapshot
 
@@ -583,32 +585,42 @@ class LoopMainDriverMixin:
                 logger.warning(f"{self.log_prefix} 完整快照重建超时(15s)，跳过")
             except Exception as _snap_full:
                 logger.debug(f"{self.log_prefix} 完整快照重建失败: {_snap_full}")
+        elif _is_admin_fastlane:
+            self._tick_world_snapshot = None
+            logger.debug(f"{self.log_prefix} 👑 管理员极速通道: 跳过完整世界快照重建")
 
         # ── 阶段 2.5：核心系统集成（关键门控快速返回，非关键画像后台降级） ──
         _t25 = time.time()
-        _is_admin_fastlane = self._is_force_wake_admin(incoming_batch, pinged_msg)
         _stage25_timeout = _rt_float(
             "heartfc_stage25_admin_timeout_seconds" if _is_admin_fastlane else "heartfc_stage25_timeout_seconds",
-            3.0 if _is_admin_fastlane else 6.0,
+            1.2 if _is_admin_fastlane else 6.0,
         )
-        _stage25_tasks = [
-            self._check_identity_context(incoming_batch),
-            self._update_dynamic_context(incoming_batch),
-            self._check_self_reply_risk(incoming_batch),
-            self._track_content_state(incoming_batch),
-            self._store_interaction_memory(incoming_batch),
-            self._update_emotion_tracker_state(incoming_batch),
-            self._update_trauma_system_state(incoming_batch),
-            self._analyze_group_sense(incoming_batch),
-            self._analyze_message_preprocessor(incoming_batch),
-            self._update_user_interaction_styles(incoming_batch),
-            self._sync_memoir_on_message(incoming_batch),
+        _stage25_task_specs = [
+            ("identity", self._check_identity_context(incoming_batch)),
+            ("dynamic_context", self._update_dynamic_context(incoming_batch)),
+            ("self_reply", self._check_self_reply_risk(incoming_batch)),
+            ("content_state", self._track_content_state(incoming_batch)),
+            ("emotion", self._update_emotion_tracker_state(incoming_batch)),
+            ("preprocessor", self._analyze_message_preprocessor(incoming_batch)),
         ]
-        _stage25_results = [None] * len(_stage25_tasks)
-        _pending_stage25_tasks = [asyncio.create_task(_task) for _task in _stage25_tasks]
+        if not _is_admin_fastlane:
+            _stage25_task_specs.extend(
+                [
+                    ("memory_store", self._store_interaction_memory(incoming_batch)),
+                    ("trauma", self._update_trauma_system_state(incoming_batch)),
+                    ("group_sense", self._analyze_group_sense(incoming_batch)),
+                    ("user_style", self._update_user_interaction_styles(incoming_batch)),
+                    ("memoir_sync", self._sync_memoir_on_message(incoming_batch)),
+                ]
+            )
+        _stage25_results_by_name: dict[str, Any] = {}
+        _pending_stage25_tasks = [
+            (name, asyncio.create_task(coro))
+            for name, coro in _stage25_task_specs
+        ]
         try:
             _done, _pending = await asyncio.wait(
-                _pending_stage25_tasks,
+                [task for _, task in _pending_stage25_tasks],
                 timeout=_stage25_timeout,
                 return_when=asyncio.ALL_COMPLETED,
             )
@@ -620,12 +632,12 @@ class LoopMainDriverMixin:
                 for _task in _pending:
                     _task.cancel()
                 await asyncio.gather(*_pending, return_exceptions=True)
-            for _idx, _task in enumerate(_pending_stage25_tasks):
+            for _name, _task in _pending_stage25_tasks:
                 if _task in _done:
                     try:
-                        _stage25_results[_idx] = _task.result()
+                        _stage25_results_by_name[_name] = _task.result()
                     except Exception as _exc:
-                        _stage25_results[_idx] = _exc
+                        _stage25_results_by_name[_name] = _exc
         finally:
             _pending_stage25_tasks = []
         _identity_default = {
@@ -633,34 +645,41 @@ class LoopMainDriverMixin:
             "response_mode": "normal",
             "has_conflict": False,
         }
+        _identity_result = _stage25_results_by_name.get("identity")
         identity_context = (
-            _stage25_results[0]
-            if isinstance(_stage25_results[0], dict)
+            _identity_result
+            if isinstance(_identity_result, dict)
             else _identity_default
         )
+        _self_reply_result = _stage25_results_by_name.get("self_reply")
         self_reply_risk = (
-            _stage25_results[2]
-            if isinstance(_stage25_results[2], dict)
+            _self_reply_result
+            if isinstance(_self_reply_result, dict)
             else {"is_self_reply": False, "similarity": 0.0}
         )
-        group_sense_result = _stage25_results[7] if isinstance(_stage25_results[7], dict) else {}
-        preprocessor_signal = _stage25_results[8] if isinstance(_stage25_results[8], dict) else {}
-        for _idx, _r in enumerate(_stage25_results):
+        _group_sense_result = _stage25_results_by_name.get("group_sense")
+        group_sense_result = _group_sense_result if isinstance(_group_sense_result, dict) else {}
+        _preprocessor_result = _stage25_results_by_name.get("preprocessor")
+        preprocessor_signal = _preprocessor_result if isinstance(_preprocessor_result, dict) else {}
+        for _name, _r in _stage25_results_by_name.items():
             if isinstance(_r, Exception):
-                logger.debug(f"{self.log_prefix} 阶段2.5任务[{_idx}]异常: {_r}")
+                logger.debug(f"{self.log_prefix} 阶段2.5任务[{_name}]异常: {_r}")
         logger.info(f"{self.log_prefix} 🔄 阶段2.5完成 {time.time() - _t25:.2f}s")
 
         # ── 阶段 2.5-b：核心模块深度理解 + 群场景 + 记忆激活 ──
         _t25b = time.time()
-        self._integrate_deep_understanding(incoming_batch)
-        self._integrate_scene_tracking(incoming_batch)
-        self._integrate_event_learning(incoming_batch)
-        self._integrate_memory_reactivation(incoming_batch)
-        group_sense_result = self._merge_group_context_signal(group_sense_result)
-        _now_af = time.time()
-        self._run_attention_flow_tick(_now_af)
-        self._integrate_gossip_ritual_strategy(_now_af)
-        logger.debug(f"{self.log_prefix} 阶段2.5b(深度集成) {time.time() - _t25b:.2f}s")
+        if _is_admin_fastlane:
+            logger.debug(f"{self.log_prefix} 👑 管理员极速通道: 跳过阶段2.5b深度集成")
+        else:
+            self._integrate_deep_understanding(incoming_batch)
+            self._integrate_scene_tracking(incoming_batch)
+            self._integrate_event_learning(incoming_batch)
+            self._integrate_memory_reactivation(incoming_batch)
+            group_sense_result = self._merge_group_context_signal(group_sense_result)
+            _now_af = time.time()
+            self._run_attention_flow_tick(_now_af)
+            self._integrate_gossip_ritual_strategy(_now_af)
+            logger.debug(f"{self.log_prefix} 阶段2.5b(深度集成) {time.time() - _t25b:.2f}s")
 
         # ── 阶段 2.5-bis：群体模式硬路由 + 群场景硬约束 + 夜间节律 ──
         _now_hr = time.time()
@@ -921,7 +940,11 @@ class LoopMainDriverMixin:
         )
         self._update_decision_trace(semantic_route_summary=dict(getattr(self, "_cached_route_summary", None) or {}))
         await self._apply_repetition_emotion_feedback(decision_messages, repetition_signal)
-        await self._prefetch_memory_hint(decision_messages)
+        if _is_admin_fastlane:
+            self._latest_memory_hint = ""
+            logger.debug(f"{self.log_prefix} 👑 管理员极速通道: 跳过记忆预取")
+        else:
+            await self._prefetch_memory_hint(decision_messages)
         if repetition_signal.get("detected"):
             logger.info(f"{self.log_prefix} 重复输入提示 {repetition_signal.get('reason', '当前内容重复度偏高')}")
         if harassment_signal.get("detected"):
@@ -1008,24 +1031,30 @@ class LoopMainDriverMixin:
                 )
             )
             _task_keys.append("voice")
-        _parallel_tasks.append(self._compute_relation_metrics(decision_messages))
-        _task_keys.append("relation")
+        if _is_admin_msg:
+            logger.info(f"{self.log_prefix} 👑 管理员极速通道: 跳过关系度聚合")
+        else:
+            _parallel_tasks.append(self._compute_relation_metrics(decision_messages))
+            _task_keys.append("relation")
 
-        try:
-            _stage_timeout = _parallel_stage_timeout()
-            _parallel_results = await asyncio.wait_for(
-                asyncio.gather(*_parallel_tasks, return_exceptions=True),
-                timeout=_stage_timeout,
-            )
-        except asyncio.TimeoutError:
-            logger.error(f"{self.log_prefix} 🔄 阶段3+4 LLM调用超时({_stage_timeout:.0f}s)，跳过本轮")
-            await asyncio.sleep(_TICK_FLOOR_SEC)
-            return True
-        _result_map = dict(zip(_task_keys, _parallel_results, strict=True))
-        # 检查是否有异常
-        for _k, _v in _result_map.items():
-            if isinstance(_v, BaseException):
-                logger.warning(f"{self.log_prefix} 🔄 阶段3+4 {_k} 异常: {_v}")
+        if _parallel_tasks:
+            try:
+                _stage_timeout = _parallel_stage_timeout()
+                _parallel_results = await asyncio.wait_for(
+                    asyncio.gather(*_parallel_tasks, return_exceptions=True),
+                    timeout=_stage_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"{self.log_prefix} 🔄 阶段3+4 LLM调用超时({_stage_timeout:.0f}s)，跳过本轮")
+                await asyncio.sleep(_TICK_FLOOR_SEC)
+                return True
+            _result_map = dict(zip(_task_keys, _parallel_results, strict=True))
+            # 检查是否有异常
+            for _k, _v in _result_map.items():
+                if isinstance(_v, BaseException):
+                    logger.warning(f"{self.log_prefix} 🔄 阶段3+4 {_k} 异常: {_v}")
+        else:
+            _result_map = {}
         logger.info(f"{self.log_prefix} 🔄 阶段3+4完成 {time.time() - _t345:.2f}s")
 
         # 拆包感知结果
@@ -1258,14 +1287,26 @@ class LoopMainDriverMixin:
             logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-无视早期退出: {early_exit['reason']}")
 
         # ── 阶段 4.5：多维状态系统统一决策（唯一决策入口） ──
-        gateway_result = await self._run_dimension_gateway(
-            decision_messages=decision_messages,
-            pinged_msg=pinged_msg,
-            voice_conclusion=voice_conclusion,
-            relation_result=relation_result,
-            repetition_signal=repetition_signal,
-            harassment_signal=harassment_signal,
-        )
+        if _is_admin_fastlane:
+            gateway_result = {
+                "gate": "force_reply",
+                "should_skip": False,
+                "reason": "管理员强制回复",
+            }
+            self._last_gateway_verdict = None
+            logger.info(
+                f"{self.log_prefix} [维度网关] gate=force_reply prob=1.000 "
+                "skip=False src=admin_fastlane reason=管理员强制回复"
+            )
+        else:
+            gateway_result = await self._run_dimension_gateway(
+                decision_messages=decision_messages,
+                pinged_msg=pinged_msg,
+                voice_conclusion=voice_conclusion,
+                relation_result=relation_result,
+                repetition_signal=repetition_signal,
+                harassment_signal=harassment_signal,
+            )
         legacy_gate = "allow"
         legacy_constraint = {"should_skip": False, "gate": "allow", "reason": ""}
         _is_admin_forced = False

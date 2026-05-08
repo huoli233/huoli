@@ -119,6 +119,7 @@ async def generate_reply(
     request_type: str = "generator_api",
     from_plugin: bool = True,
     reply_time_point: Optional[float] = None,
+    fast_path: bool = False,
 ) -> Tuple[bool, Optional["LLMGenerationDataModel"]]:
     """生成回复
 
@@ -140,6 +141,7 @@ async def generate_reply(
         request_type: 请求类型（可选，记录LLM使用）
         from_plugin: 是否来自插件
         reply_time_point: 回复时间点
+        fast_path: 是否使用快回复路径，跳过非关键后处理
     Returns:
         Tuple[bool, List[Tuple[str, Any]], Optional[str]]: (是否成功, 回复集合, 提示词)
     """
@@ -188,6 +190,7 @@ async def generate_reply(
             stream_id=chat_stream.stream_id if chat_stream else chat_id,
             reply_time_point=reply_time_point,
             log_reply=False,
+            fast_path=fast_path,
         )
         if not success:
             logger.warning("[GeneratorAPI] 回复生成失败")

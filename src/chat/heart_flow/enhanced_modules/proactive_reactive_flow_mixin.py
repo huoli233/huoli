@@ -134,10 +134,11 @@ class ProactiveReactiveFlowMixin:
                 logger.info(f"{self.log_prefix} 🧯 自省闸门拦截 voice 回复: {restraint.get('reason', 'skip')}")
                 return False
             self._mark_message_content_processing(target_message)
+            force_generation_fallback = bool(force_bypass or getattr(self, "_is_admin_forced", False))
 
             # 获取目标用户的风格指导
             user_style_guide = ""
-            if target_message:
+            if target_message and not force_generation_fallback:
                 target_user_id = getattr(target_message, "user_id", "")
                 if target_user_id:
                     user_style_guide = self._get_user_style_guide(target_user_id)
@@ -158,35 +159,40 @@ class ProactiveReactiveFlowMixin:
             current_target_block = self._build_current_target_message_block(target_message)
             if current_target_block:
                 extra_info_parts.append(current_target_block)
-            decision_context_packet = self._build_decision_context_packet(
-                list(incoming_batch),
-                repetition_signal=self._analyze_repetition_pressure(incoming_batch),
-            )
             relation_view = self._resolve_relation_view()
-            context_execution_block = self._build_context_execution_block(
-                target_message=target_message,
-                voice_conclusion=voice_conclusion,
-                repetition_signal=self._analyze_repetition_pressure(incoming_batch),
-                decision_context_packet=decision_context_packet,
-                relation_snapshot=relation_view,
-            )
-            if context_execution_block:
-                extra_info_parts.append(context_execution_block)
-            from src.chat.replyer.context_block_builder import build_shared_reply_parts
-            self_reference_parts = self._build_self_reference_parts(target_message)
-
-            extra_info_parts.extend(
-                build_shared_reply_parts(
-                    self_memory=self_reference_parts.get("self_memory", ""),
-                    continuity_context=self_reference_parts.get("continuity_context", ""),
-                    user_style_guide=user_style_guide,
-                    persona_hint="",
-                    reply_style_context=self._build_reply_style_context(relation_view),
-                    length_hint=self._build_dynamic_length_hint(target_message, user_style_guide),
-                    restraint_mode=str(restraint.get("mode", "allow") or "allow"),
-                    short_only_text="[自省闸门约束] 你已经连续说了不少，这次只准一句短话，不展开，不补充，不连发。",
+            context_execution_block = ""
+            if force_generation_fallback:
+                extra_info_parts.append("[管理员快回] 一句短口语，直接回应当前消息；不做长篇解释，不二次改写，不补充追发。")
+                self._inject_fallback_soul_state(extra_info_parts)
+            else:
+                decision_context_packet = self._build_decision_context_packet(
+                    list(incoming_batch),
+                    repetition_signal=self._analyze_repetition_pressure(incoming_batch),
                 )
-            )
+                context_execution_block = self._build_context_execution_block(
+                    target_message=target_message,
+                    voice_conclusion=voice_conclusion,
+                    repetition_signal=self._analyze_repetition_pressure(incoming_batch),
+                    decision_context_packet=decision_context_packet,
+                    relation_snapshot=relation_view,
+                )
+                if context_execution_block:
+                    extra_info_parts.append(context_execution_block)
+                from src.chat.replyer.context_block_builder import build_shared_reply_parts
+                self_reference_parts = self._build_self_reference_parts(target_message)
+
+                extra_info_parts.extend(
+                    build_shared_reply_parts(
+                        self_memory=self_reference_parts.get("self_memory", ""),
+                        continuity_context=self_reference_parts.get("continuity_context", ""),
+                        user_style_guide=user_style_guide,
+                        persona_hint="",
+                        reply_style_context=self._build_reply_style_context(relation_view),
+                        length_hint=self._build_dynamic_length_hint(target_message, user_style_guide),
+                        restraint_mode=str(restraint.get("mode", "allow") or "allow"),
+                        short_only_text="[自省闸门约束] 你已经连续说了不少，这次只准一句短话，不展开，不补充，不连发。",
+                    )
+                )
 
             takeover_thought = getattr(self, "_takeover_decision", None)
             if takeover_thought:
@@ -217,14 +223,15 @@ class ProactiveReactiveFlowMixin:
             from src.chat.replyer.context_block_builder import append_reply_style
 
             append_reply_style(extra_info_parts, style_route)
-            # 注入多维状态系统的LLM提示词
-            self._inject_dimension_state_prompt(extra_info_parts)
-            _diversity_warn = self._check_reply_diversity()
-            if _diversity_warn:
-                extra_info_parts.append(_diversity_warn)
-            _meme_quick = self._build_meme_injection()
-            if _meme_quick:
-                extra_info_parts.append(_meme_quick)
+            if not force_generation_fallback:
+                # 注入多维状态系统的LLM提示词
+                self._inject_dimension_state_prompt(extra_info_parts)
+                _diversity_warn = self._check_reply_diversity()
+                if _diversity_warn:
+                    extra_info_parts.append(_diversity_warn)
+                _meme_quick = self._build_meme_injection()
+                if _meme_quick:
+                    extra_info_parts.append(_meme_quick)
             extra_info = build_reply_context_block(
                 recent_context="",
                 relevant_context="",
@@ -254,7 +261,6 @@ class ProactiveReactiveFlowMixin:
 
             from src.chat.heart_flow.reply_coordinator import acquire_reply_coordinator
 
-            force_generation_fallback = bool(force_bypass or getattr(self, "_is_admin_forced", False))
             generation_failure_reason = "voice_generation_failed"
             reply_generation = acquire_reply_coordinator().generate_reply(
                 channel_id=self.stream_id,
@@ -266,6 +272,9 @@ class ProactiveReactiveFlowMixin:
                 extra_info=extra_info,
                 request_type="voice_driven_reply",
                 think_level=1,
+                fast_path=force_generation_fallback,
+                enable_splitter=not force_generation_fallback,
+                enable_chinese_typo=not force_generation_fallback,
             )
             if force_generation_fallback:
                 try:

@@ -896,6 +896,7 @@ class DefaultReplyer:
         unknown_words: Optional[List[str]] = None,
         log_reply: bool = True,
         use_multi_turn: Optional[bool] = None,
+        fast_path: bool = False,
     ) -> Tuple[bool, LLMGenerationDataModel]:
         # sourcery skip: merge-nested-ifs
         """
@@ -956,6 +957,7 @@ class DefaultReplyer:
                     think_level=think_level,
                     unknown_words=unknown_words,
                     use_multi_turn=use_multi_turn,
+                    fast_path=fast_path,
                 )
             prompt_duration_ms = (time.perf_counter() - prompt_start) * 1000
 
@@ -1056,16 +1058,19 @@ class DefaultReplyer:
                 except Exception as e:
                     logger.warning(f"输出日志时出错: {e}")
 
-                content = self._apply_adaptive_recall(content, chat_id, user_id)
+                if fast_path:
+                    logger.info("[fast_path] 跳过自然化错字和二次改写")
+                else:
+                    content = self._apply_adaptive_recall(content, chat_id, user_id)
 
-                content = await self._apply_rewrite_if_needed(
-                    content,
-                    chat_id,
-                    user_id,
-                    expression_habits_block=expression_habits_block,
-                    reply_reason=reply_reason or "",
-                    reply_style_context=reply_style_context,
-                )
+                    content = await self._apply_rewrite_if_needed(
+                        content,
+                        chat_id,
+                        user_id,
+                        expression_habits_block=expression_habits_block,
+                        reply_reason=reply_reason or "",
+                        reply_style_context=reply_style_context,
+                    )
 
                 llm_response.content = content
                 llm_response.reasoning = reasoning_content
@@ -1155,14 +1160,18 @@ class DefaultReplyer:
                         logger.exception("记录reply日志失败")
                 return False, llm_response  # LLM 调用失败则无法生成回复
 
-            self._pending_followup_task = asyncio.ensure_future(
-                self._decide_and_generate_followups(
-                    primary_content=content or "",
-                    llm_response=llm_response,
-                    extra_info=extra_info,
-                    reply_reason=reply_reason or "",
+            if fast_path:
+                self._pending_followup_task = None
+                logger.info("[fast_path] 跳过补充回复判断")
+            else:
+                self._pending_followup_task = asyncio.ensure_future(
+                    self._decide_and_generate_followups(
+                        primary_content=content or "",
+                        llm_response=llm_response,
+                        extra_info=extra_info,
+                        reply_reason=reply_reason or "",
+                    )
                 )
-            )
 
             return True, llm_response
 
@@ -2794,6 +2803,7 @@ class DefaultReplyer:
         think_level: int = 1,
         unknown_words: Optional[List[str]] = None,
         use_multi_turn: bool = False,
+        fast_path: bool = False,
     ) -> Tuple[str | List[Message], List[int], List[str], str]:
         """
         构建回复器上下文
@@ -2838,6 +2848,71 @@ class DefaultReplyer:
 
         # 将[picid:xxx]替换为具体的图片描述
         target = self._replace_picids_with_descriptions(target)
+
+        if fast_path:
+            message_list_fast = get_raw_msg_before_timestamp_with_chat(
+                chat_id=chat_id,
+                timestamp=reply_time_point,
+                limit=min(int(global_config.chat.max_context_size * 0.25), 6),
+                filter_intercept_message_level=1,
+            )
+            sanitized_messages_fast = self._sanitize_prompt_history_messages(message_list_fast)
+            chat_talking_prompt_fast = build_readable_messages(
+                sanitized_messages_fast,
+                replace_bot_name=True,
+                timestamp_mode="relative",
+                read_mark=0.0,
+                show_actions=True,
+                long_time_notice=False,
+            )
+            chat_talking_prompt_fast = self._sanitize_history_prompt_text(chat_talking_prompt_fast)
+            prompt_extra_info = self._prune_redundant_context_sources(
+                extra_info,
+                recent_context_present=bool(chat_talking_prompt_fast),
+            )
+            extra_info_block = build_reply_context_block(
+                recent_context=chat_talking_prompt_fast,
+                relevant_context="",
+                extra_info=self._sanitize_extra_info(prompt_extra_info),
+                recent_reply_guard="",
+                max_total_tokens=180,
+            )
+            if sender:
+                if has_only_pics and not has_text:
+                    reply_target_block = f"这会儿{sender}发了张图：{pic_part}"
+                elif has_text and pic_part:
+                    reply_target_block = f"这会儿{sender}发图并说：{text_part}"
+                elif has_text:
+                    reply_target_block = f"这会儿{sender}说：{text_part}"
+                else:
+                    reply_target_block = f"这会儿{sender}说：{target}"
+            else:
+                reply_target_block = ""
+            planner_reasoning = self._build_compact_planner_reasoning(
+                reply_reason,
+                low_info_input=False,
+            )
+            fast_behavioral_directive = "管理员强制快回：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
+            prompt = get_group_responder_prompt(
+                think_level=think_level,
+                expression_habits_block="",
+                tool_info_block="",
+                bot_name=global_config.bot.nickname,
+                knowledge_prompt="",
+                extra_info_block=extra_info_block,
+                jargon_explanation="",
+                identity="",
+                dialogue_prompt="",
+                time_block="",
+                reply_target_block=reply_target_block,
+                reply_style="",
+                memory_retrieval="",
+                chat_prompt="",
+                planner_reasoning=planner_reasoning,
+                length_guide="请用一句短话回复，通常不超过20个字。",
+                behavioral_directive=fast_behavioral_directive,
+            )
+            return prompt, [], ["快回上下文: 0.0s"], ""
 
         message_list_before_now_long = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_id,

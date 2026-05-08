@@ -616,6 +616,7 @@ class PrivateReplyer:
         reply_time_point: Optional[float] = None,
         unknown_words: Optional[List[str]] = None,
         log_reply: bool = True,
+        fast_path: bool = False,
     ) -> Tuple[bool, LLMGenerationDataModel]:
         # sourcery skip: merge-nested-ifs
         """
