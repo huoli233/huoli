@@ -885,16 +885,19 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
     assert "heartfc_force_reply_generation_timeout_seconds" in flow_source
     assert "强制回复生成失败，已启用本地短兜底" in flow_source
-    assert "if _target_uid and not _is_admin_fastlane" in loop_source
-    assert "1.2 if _is_admin_fastlane else 6.0" in loop_source
+    assert "_is_direct_reply_fastlane = bool(_is_admin_force_wake or getattr(self, \"_cached_targeted_to_bot\", False))" in loop_source
+    assert "if _target_uid and not _is_direct_reply_fastlane" in loop_source
+    assert "heartfc_stage25_fast_reply_timeout_seconds" in loop_source
+    assert "1.2 if _is_direct_reply_fastlane else 6.0" in loop_source
     assert "跳过阶段2.5b深度集成" in loop_source
     assert "跳过记忆预取" in loop_source
-    assert "跳过关系度聚合" in loop_source
-    assert "src=admin_fastlane" in loop_source
+    assert "直接快回链路" in loop_source
+    assert "src=admin_force" in loop_source
     assert "if gw_ctx.admin_force" in scene_source
     assert "跳过被动策略规划" in scene_source
     assert "fast_path=force_generation_fallback" in flow_source
     assert "enable_chinese_typo=not force_generation_fallback" in flow_source
+    assert "[直接快回]" in flow_source
     assert "fast_path: bool = False" in coordinator_source
     assert "fast_path: bool = False" in generator_source
     assert "if fast_path:" in group_reply_source
@@ -904,7 +907,7 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
         "local_force_reply_fallback": True,
         "admin_model_governor_bypass": True,
         "stale_voice_cache_cleared": True,
-        "admin_fast_reply_path": True,
+        "direct_fast_reply_path": True,
     }
 
 

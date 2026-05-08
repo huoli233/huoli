@@ -162,7 +162,7 @@ class ProactiveReactiveFlowMixin:
             relation_view = self._resolve_relation_view()
             context_execution_block = ""
             if force_generation_fallback:
-                extra_info_parts.append("[管理员快回] 一句短口语，直接回应当前消息；不做长篇解释，不二次改写，不补充追发。")
+                extra_info_parts.append("[直接快回] 一句短口语，直接回应当前消息；不做长篇解释，不二次改写，不补充追发。")
                 self._inject_fallback_soul_state(extra_info_parts)
             else:
                 decision_context_packet = self._build_decision_context_packet(

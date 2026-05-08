@@ -254,3 +254,21 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
 - 工作区已有无关删除/修改/未跟踪文件，本轮提交只应包含快路径相关文件和 progress 记录。
+## 2026-05-09T01:10:00+08:00 - Task: 全局直接快回与管理员强制语义拆分
+
+### What was done:
+- 根据反馈重新划分语义：直接快回是全局性能路径，管理员强制只是绕过门控规则的特权。
+- 将主循环前置快路径从 `_is_admin_fastlane` 改为 `_is_direct_reply_fastlane`，触发条件为管理员强制或当前消息明确找 bot。
+- 普通用户明确找 bot 时同样跳过完整世界快照、阶段2.5b深度集成、记忆预取和观察/独白，但仍继续走关系、维度网关、自治守卫等正常规则。
+- 管理员强制仍单独跳过维度网关投票，直接进入 `force_reply`，保留安全守卫。
+- 将回复包装提示从 `[管理员快回]` 改为 `[直接快回]`，避免普通用户快回时语义错误。
+- 更新回归脚本源码契约，锁定全局直接快回与管理员强制的边界。
+
+### Testing:
+- `uv run python -m ruff check src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python -m compileall src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，快回契约更新为 `direct_fast_reply_path=true`。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 本轮提交只应包含快回语义拆分相关文件；工作区内既有无关删除/修改/未跟踪文件仍需排除。

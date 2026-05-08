@@ -564,7 +564,8 @@ class LoopMainDriverMixin:
             await asyncio.sleep(_TICK_FLOOR_SEC)
             return True
 
-        _is_admin_fastlane = self._is_force_wake_admin(incoming_batch, pinged_msg)
+        _is_admin_force_wake = self._is_force_wake_admin(incoming_batch, pinged_msg)
+        _is_direct_reply_fastlane = bool(_is_admin_force_wake or getattr(self, "_cached_targeted_to_bot", False))
 
         # 重建完整世界快照（携带目标用户ID），供 Phase 2.5+ 所有门控使用
         _target_uid = ""
@@ -573,7 +574,7 @@ class LoopMainDriverMixin:
             if _uid_snap and not self._is_bot_message_obj(_m_snap):
                 _target_uid = _uid_snap
                 break
-        if _target_uid and not _is_admin_fastlane:
+        if _target_uid and not _is_direct_reply_fastlane:
             try:
                 from src.core.world_snapshot import build_world_snapshot
 
@@ -585,15 +586,15 @@ class LoopMainDriverMixin:
                 logger.warning(f"{self.log_prefix} 完整快照重建超时(15s)，跳过")
             except Exception as _snap_full:
                 logger.debug(f"{self.log_prefix} 完整快照重建失败: {_snap_full}")
-        elif _is_admin_fastlane:
+        elif _is_direct_reply_fastlane:
             self._tick_world_snapshot = None
-            logger.debug(f"{self.log_prefix} 👑 管理员极速通道: 跳过完整世界快照重建")
+            logger.debug(f"{self.log_prefix} ⚡ 直接快回链路: 跳过完整世界快照重建")
 
         # ── 阶段 2.5：核心系统集成（关键门控快速返回，非关键画像后台降级） ──
         _t25 = time.time()
         _stage25_timeout = _rt_float(
-            "heartfc_stage25_admin_timeout_seconds" if _is_admin_fastlane else "heartfc_stage25_timeout_seconds",
-            1.2 if _is_admin_fastlane else 6.0,
+            "heartfc_stage25_fast_reply_timeout_seconds" if _is_direct_reply_fastlane else "heartfc_stage25_timeout_seconds",
+            1.2 if _is_direct_reply_fastlane else 6.0,
         )
         _stage25_task_specs = [
             ("identity", self._check_identity_context(incoming_batch)),
@@ -603,7 +604,7 @@ class LoopMainDriverMixin:
             ("emotion", self._update_emotion_tracker_state(incoming_batch)),
             ("preprocessor", self._analyze_message_preprocessor(incoming_batch)),
         ]
-        if not _is_admin_fastlane:
+        if not _is_direct_reply_fastlane:
             _stage25_task_specs.extend(
                 [
                     ("memory_store", self._store_interaction_memory(incoming_batch)),
@@ -668,8 +669,8 @@ class LoopMainDriverMixin:
 
         # ── 阶段 2.5-b：核心模块深度理解 + 群场景 + 记忆激活 ──
         _t25b = time.time()
-        if _is_admin_fastlane:
-            logger.debug(f"{self.log_prefix} 👑 管理员极速通道: 跳过阶段2.5b深度集成")
+        if _is_direct_reply_fastlane:
+            logger.debug(f"{self.log_prefix} ⚡ 直接快回链路: 跳过阶段2.5b深度集成")
         else:
             self._integrate_deep_understanding(incoming_batch)
             self._integrate_scene_tracking(incoming_batch)
@@ -940,9 +941,9 @@ class LoopMainDriverMixin:
         )
         self._update_decision_trace(semantic_route_summary=dict(getattr(self, "_cached_route_summary", None) or {}))
         await self._apply_repetition_emotion_feedback(decision_messages, repetition_signal)
-        if _is_admin_fastlane:
+        if _is_direct_reply_fastlane:
             self._latest_memory_hint = ""
-            logger.debug(f"{self.log_prefix} 👑 管理员极速通道: 跳过记忆预取")
+            logger.debug(f"{self.log_prefix} ⚡ 直接快回链路: 跳过记忆预取")
         else:
             await self._prefetch_memory_hint(decision_messages)
         if repetition_signal.get("detected"):
@@ -993,8 +994,8 @@ class LoopMainDriverMixin:
         _t345 = time.time()
         ambient_info = self._sample_channel_ambient()
         _is_admin_msg = self._is_force_wake_admin(incoming_batch, pinged_msg)
-        run_perception = False if _is_admin_msg else self._should_run_perception(now)
-        run_voice = False if _is_admin_msg else self._should_run_voice(now, incoming_batch, pinged_msg)
+        run_perception = False if _is_direct_reply_fastlane else self._should_run_perception(now)
+        run_voice = False if _is_direct_reply_fastlane else self._should_run_voice(now, incoming_batch, pinged_msg)
         # 窥屏态升级复用：如果窥屏态 LLM 已决定 reply/followup 且缓存有效，跳过重复独白
         _peek_voice_reuse = False
         if (
@@ -1013,6 +1014,8 @@ class LoopMainDriverMixin:
         )
         if _is_admin_msg:
             logger.info(f"{self.log_prefix} 👑 管理员极速通道: 跳过观察+独白")
+        elif _is_direct_reply_fastlane:
+            logger.info(f"{self.log_prefix} ⚡ 直接快回链路: 跳过观察+独白")
 
         # 组装并行任务列表
         _parallel_tasks: list = []
@@ -1287,7 +1290,7 @@ class LoopMainDriverMixin:
             logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-无视早期退出: {early_exit['reason']}")
 
         # ── 阶段 4.5：多维状态系统统一决策（唯一决策入口） ──
-        if _is_admin_fastlane:
+        if _is_admin_force_wake:
             gateway_result = {
                 "gate": "force_reply",
                 "should_skip": False,
@@ -1296,7 +1299,7 @@ class LoopMainDriverMixin:
             self._last_gateway_verdict = None
             logger.info(
                 f"{self.log_prefix} [维度网关] gate=force_reply prob=1.000 "
-                "skip=False src=admin_fastlane reason=管理员强制回复"
+                "skip=False src=admin_force reason=管理员强制回复"
             )
         else:
             gateway_result = await self._run_dimension_gateway(
