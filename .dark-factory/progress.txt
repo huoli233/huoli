@@ -293,3 +293,24 @@
 - `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
 - 本轮只应提交 `.dark-factory/progress.txt`、`scripts/heartflow_state_regression.py`、`src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py`、`src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py`、`src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py`、`src/core/night_cycle_system.py`、`src/webui/services/state_monitor.py`、`web/dashboard/src/components/EmotionDashboard/index.tsx`、`web/dashboard/dist/index.html`、`web/dashboard/dist/assets/index-BXvGMUDG.js`。
 - 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T02:18:00+08:00 - Task: 夜间作息分区与熬夜机制激活
+
+### What was done:
+- 修复夜间系统“配置很完善但没被稳定调用”的问题：Heartflow 运行集成阶段现在每轮都会用 D6 能量、活跃度、无聊度、近期连续活跃时长推进 `NightCycleSystem.evaluate()`。
+- 将窥屏、思考、夜间回复和深夜近期消息打断写入 `record_overnight_activity()`，让聊天/窥屏/思考/打断四类熬夜压力分解真正累积，而不是只停在面板字段。
+- 修复夜间社交能量更新时间戳不刷新的隐患，避免首次启用后被历史时间差直接衰减为空。
+- 增加统一作息分区：下午、傍晚、晚上、半夜、凌晨、清晨、上午、中午、白天，并从 NightCycle summary、HeartFC 状态导出、WebUI presentation 全链路透出。
+- WebUI 夜间状态面板新增“作息分区”和“压力分解”，显示阶段序列、聊天累积、窥屏累积、思考负荷和打断次数；空会话/降级快照也按当前小时兜底，不再凌晨显示“白天平稳”。
+- 补充回归契约，锁定 `NightCycleSystem.evaluate()` 每轮调用、熬夜活动记录、作息分区字段、压力分解字段和 WebUI 文案。
+
+### Testing:
+- `uv run python -m ruff check src/core/night_cycle_system.py src/chat/heart_flow/heartfc_state_exporter.py src/chat/heart_flow/enhanced_modules/runtime_integration_lifecycle_mixin.py src/chat/heart_flow/enhanced_modules/loop_resource_feedback_mixin.py src/chat/heart_flow/enhanced_modules/scene_bot_lifecycle_mixin.py src/webui/services/state_monitor.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，`night_status_labels` 和 `webui` 契约均返回通过。
+- `uv run python -m compileall src scripts` 通过。
+- `npm run build` 在 `web/dashboard` 通过，生成 `index-CB62xN-1.js` 和 `index-DqLheVE_.css`。
+- Chrome headless 打开真实 FastAPI WebUI `http://127.0.0.1:8019/dashboard` 渲染通过，DOM 中存在“作息分区 / 压力分解 / 半夜 / 凌晨”，并验证 02:00 空面板显示“凌晨深夜”。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 本轮只应提交 `.dark-factory/progress.txt`、夜间链路相关 Python 文件、WebUI 状态页源码、回归脚本、`web/dashboard/dist/index.html` 和新构建资产；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。

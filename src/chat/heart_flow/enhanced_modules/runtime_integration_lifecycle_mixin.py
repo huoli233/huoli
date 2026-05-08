@@ -1258,6 +1258,41 @@ class RuntimeIntegrationLifecycleMixin:
             return None
         try:
             _d6 = EnergyChainDimension.get_instance()
+            _d6_state = _d6._ensure_channel(self.stream_id)
+            _energy_ratio = (
+                float(_d6_state.combined_ratio())
+                if _d6_state is not None and hasattr(_d6_state, "combined_ratio")
+                else 1.0
+            )
+            _activity_level = (
+                float(getattr(_d6_state, "activity_level", 50.0) or 50.0)
+                if _d6_state is not None
+                else 50.0
+            )
+            _group_activity = max(0.0, min(1.0, float(getattr(self, "_group_activity_level", 0.0) or 0.0)))
+            _social_stimulus = max(_group_activity, max(0.0, min(1.0, (_activity_level - 35.0) / 65.0)))
+            _metabolism = getattr(self, "_cached_metabolism_constraints", None) or {}
+            _emotion_state = getattr(self, "_cached_emotion_state", None) or {}
+            if isinstance(_emotion_state, dict):
+                _boredom_raw = _emotion_state.get("boredom", _metabolism.get("boredom", 0.0))
+            else:
+                _boredom_raw = getattr(_emotion_state, "boredom", _metabolism.get("boredom", 0.0))
+            try:
+                _boredom = float(_boredom_raw or 0.0)
+            except (TypeError, ValueError):
+                _boredom = 0.0
+            if _boredom <= 1.0:
+                _boredom *= 100.0
+            _boredom = max(0.0, min(100.0, _boredom))
+            _recent_user_times = [
+                float(_ts)
+                for _ts in list(getattr(self, "_user_msg_timeline", []) or [])
+                if now - float(_ts or 0.0) <= 900.0
+            ]
+            _consecutive_active_minutes = 0.0
+            if _recent_user_times:
+                _consecutive_active_minutes = min(180.0, max(1.0, (now - min(_recent_user_times)) / 60.0))
+            _current_hour = datetime.datetime.now().hour
             _night_mode = _d6._get_night_mode(self.stream_id)
             _phase_value = str(_night_mode.phase or "").strip()
             _phase_name = _phase_value.upper()
@@ -1292,6 +1327,24 @@ class RuntimeIntegrationLifecycleMixin:
                 from src.core.night_cycle_system import get_night_cycle
 
                 _ncs = get_night_cycle(self.stream_id)
+                _ncs.evaluate(
+                    energy_ratio=max(0.0, min(1.0, _energy_ratio)),
+                    activity_level=max(0.0, min(100.0, _activity_level)),
+                    boredom=_boredom,
+                    social_stimulus=_social_stimulus,
+                    consecutive_active_minutes=_consecutive_active_minutes,
+                    current_hour=_current_hour,
+                )
+                if _ncs.is_night_hours(_current_hour):
+                    _last_user_msg = float(getattr(self, "_last_user_msg_time", 0.0) or 0.0)
+                    if 0.0 < now - _last_user_msg <= 90.0:
+                        _ncs.record_overnight_activity("peek", min(1.0, 0.35 + _social_stimulus * 0.45))
+                        if now - _last_user_msg <= 18.0:
+                            _ncs.record_overnight_activity("interrupt", min(1.0, 0.45 + _social_stimulus * 0.55))
+                    if _activity_level > 45.0:
+                        _ncs.record_overnight_activity("chat", min(1.0, (_activity_level - 35.0) / 65.0))
+                    if _energy_ratio < 0.75:
+                        _ncs.record_overnight_activity("think", min(1.0, 0.2 + (1.0 - _energy_ratio) * 0.6))
                 _ns = _ncs.state_snapshot
                 _night_behavior = _ncs.night_behavior_summary() if hasattr(_ncs, "night_behavior_summary") else {}
                 _ns_phase = getattr(_ns, "current_phase", None)
@@ -1344,6 +1397,21 @@ class RuntimeIntegrationLifecycleMixin:
                     self._cached_night_summary["monologue_mood_hint"] = str(
                         _night_behavior.get("monologue_mood_hint", "") or ""
                     )
+                    for _key in (
+                        "time_band",
+                        "time_band_label",
+                        "time_band_description",
+                        "current_hour",
+                        "pressure_breakdown",
+                        "sleep_reserve",
+                        "collapse_imminent",
+                        "composite_load",
+                    ):
+                        if _key in _night_behavior:
+                            self._cached_night_summary[_key] = _night_behavior[_key]
+                    self._cached_night_summary["is_night"] = bool(
+                        _night_behavior.get("is_night", self._cached_night_summary.get("is_night", False))
+                    )
                 if not self._cached_night_summary.get("phase_label"):
                     self._cached_night_summary["phase_label"] = str(_ns_phase_val)
                 _is_burnthrough = bool(
@@ -1385,4 +1453,3 @@ class RuntimeIntegrationLifecycleMixin:
             pass
         except Exception as _e:
             logger.debug(f"{self.log_prefix} 认知记录异常: {_e}")
-

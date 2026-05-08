@@ -164,12 +164,51 @@ def _night_phase_label(value: Any) -> str:
         "deep_sleep": "深睡",
         "deep_valley": "深睡沉寂",
         "burnthrough": "熬穿",
-        "dawn_recover": "黎明恢复",
-        "night_active": "夜间活跃",
-        "midnight_reflect": "午夜反思",
-        "social_night": "社交夜",
-        "quiet_contemplate": "安静沉思",
+        "dawn_recover": "清晨恢复",
+        "night_active": "晚上阶段",
+        "midnight_reflect": "凌晨阶段",
+        "social_night": "夜间社交",
+        "quiet_contemplate": "凌晨沉思",
     }.get(phase, "清醒")
+
+
+def _time_band_label(value: Any) -> str:
+    return {
+        "afternoon": "下午",
+        "early_evening": "傍晚",
+        "evening": "晚上",
+        "late_night": "半夜",
+        "midnight": "凌晨",
+        "dawn": "清晨",
+        "morning": "上午",
+        "noon": "中午",
+        "daytime": "白天",
+    }.get(str(value or "").strip().lower(), str(value or "") or "白天")
+
+
+def _resolve_time_band(hour: Optional[int] = None) -> Dict[str, Any]:
+    import time as _time
+
+    h = _time.localtime().tm_hour if hour is None else int(hour) % 24
+    if 13 <= h < 17:
+        key, desc = "afternoon", "午后低谷"
+    elif 17 <= h < 20:
+        key, desc = "early_evening", "傍晚过渡"
+    elif 20 <= h < 23:
+        key, desc = "evening", "晚上阶段"
+    elif 23 <= h or h < 2:
+        key, desc = "late_night", "半夜熬夜"
+    elif 2 <= h < 5:
+        key, desc = "midnight", "凌晨深夜"
+    elif 5 <= h < 7:
+        key, desc = "dawn", "清晨恢复"
+    elif 7 <= h < 11:
+        key, desc = "morning", "上午清醒"
+    elif 11 <= h < 13:
+        key, desc = "noon", "中午平稳"
+    else:
+        key, desc = "daytime", "白天平稳"
+    return {"key": key, "label": _time_band_label(key), "description": desc, "hour": h}
 
 
 def _body_state_label(value: Any) -> str:
@@ -483,6 +522,13 @@ def _extract_circadian_rhythm(
     body_state_tag = str(summary.get("body_state_tag", "") or "")
     mood_hint = str(summary.get("monologue_mood_hint", "") or "")
     expression_style = str(summary.get("expression_style", "normal") or "normal")
+    time_band = str(summary.get("time_band", "") or "")
+    time_band_label = str(summary.get("time_band_label", "") or "")
+    time_band_description = str(summary.get("time_band_description", "") or "")
+    current_hour = _safe_int(summary.get("current_hour", time.localtime().tm_hour), time.localtime().tm_hour)
+    pressure_breakdown = summary.get("pressure_breakdown", {})
+    if not isinstance(pressure_breakdown, dict):
+        pressure_breakdown = {}
     is_burnthrough = bool(summary.get("is_burnthrough", False)) or phase == "burnthrough"
     is_sleeping = bool(summary.get("is_sleeping", subject.get("is_sleeping", False))) or phase in {
         "light_sleep",
@@ -500,6 +546,12 @@ def _extract_circadian_rhythm(
             state = night_cycle.state_snapshot
             phase = _normalize_night_phase(behavior.get("phase", phase))
             phase_label = str(behavior.get("phase_label") or _night_phase_label(phase))
+            time_band = str(behavior.get("time_band", time_band) or time_band)
+            time_band_label = str(behavior.get("time_band_label", time_band_label) or time_band_label)
+            time_band_description = str(
+                behavior.get("time_band_description", time_band_description) or time_band_description
+            )
+            current_hour = _safe_int(behavior.get("current_hour", current_hour), current_hour)
             can_reply = bool(behavior.get("can_reply", can_reply))
             remaining_replies = _safe_int(behavior.get("remaining_replies", remaining_replies))
             sleep_debt = _safe_float(behavior.get("sleep_debt", sleep_debt))
@@ -516,13 +568,26 @@ def _extract_circadian_rhythm(
             dawn_progress = _safe_float(getattr(state, "dawn_recovery_progress", dawn_progress))
             sleep_reply_used = _safe_int(getattr(state, "sleep_reply_used", sleep_reply_used))
             sleep_reply_cap = _safe_int(getattr(state, "night_reply_cap", sleep_reply_cap))
+            behavior_breakdown = behavior.get("pressure_breakdown", {})
+            if isinstance(behavior_breakdown, dict):
+                pressure_breakdown = behavior_breakdown
             try:
                 style = night_cycle.get_expression_deformation()
                 expression_style = str(style.get("active_template", expression_style) or expression_style)
             except Exception:
                 pass
     except Exception as exc:
-        logger.debug(f"昼夜节律导出失败: {exc}")
+        logger.debug(f"夜间状态导出失败: {exc}")
+
+    if not time_band:
+        resolved_band = _resolve_time_band(current_hour)
+        time_band = str(resolved_band["key"])
+        time_band_label = str(resolved_band["label"])
+        time_band_description = str(resolved_band["description"])
+        current_hour = _safe_int(resolved_band["hour"], current_hour)
+    else:
+        time_band_label = time_band_label or _time_band_label(time_band)
+        time_band_description = time_band_description or time_band_label
 
     if sleep_reply_cap <= 0:
         sleep_reply_cap = max(remaining_replies, 0)
@@ -532,6 +597,10 @@ def _extract_circadian_rhythm(
     return {
         "phase": phase,
         "phase_label": phase_label or _night_phase_label(phase),
+        "time_band": time_band,
+        "time_band_label": time_band_label,
+        "time_band_description": time_band_description,
+        "current_hour": current_hour,
         "is_night": is_night,
         "is_sleeping": is_sleeping,
         "is_burnthrough": is_burnthrough,
@@ -546,6 +615,17 @@ def _extract_circadian_rhythm(
         "sleep_reply_cap": sleep_reply_cap,
         "remaining_sleep_replies": remaining_replies,
         "response_suppression": round(response_suppression, 3),
+        "pressure_breakdown": {
+            "total": round(_safe_float(pressure_breakdown.get("total", 0.0)), 4),
+            "chat_minutes": round(_safe_float(pressure_breakdown.get("chat_minutes", 0.0)), 2),
+            "peek_minutes": round(_safe_float(pressure_breakdown.get("peek_minutes", 0.0)), 2),
+            "think_intensity": round(_safe_float(pressure_breakdown.get("think_intensity", 0.0)), 3),
+            "interrupt_count": _safe_int(pressure_breakdown.get("interrupt_count", 0), 0),
+            "chat_component": round(_safe_float(pressure_breakdown.get("chat_component", 0.0)), 4),
+            "peek_component": round(_safe_float(pressure_breakdown.get("peek_component", 0.0)), 4),
+            "think_component": round(_safe_float(pressure_breakdown.get("think_component", 0.0)), 4),
+            "interrupt_component": round(_safe_float(pressure_breakdown.get("interrupt_component", 0.0)), 4),
+        },
         "body_state_tag": body_state_tag,
         "body_state_label": _body_state_label(body_state_tag),
         "mood_hint": mood_hint,

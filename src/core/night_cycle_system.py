@@ -506,13 +506,38 @@ class NightCycleSystem:
     def state_snapshot(self) -> NightCycleState:
         return self._state
 
+    def resolve_time_band(self, hour: Optional[int] = None) -> Dict[str, Any]:
+        """返回前端和心流共用的作息分区。"""
+        h = time.localtime().tm_hour if hour is None else int(hour) % 24
+        if 13 <= h < 17:
+            band = ("afternoon", "下午", "午后低谷")
+        elif 17 <= h < 20:
+            band = ("early_evening", "傍晚", "傍晚过渡")
+        elif 20 <= h < 23:
+            band = ("evening", "晚上", "晚上阶段")
+        elif 23 <= h or h < 2:
+            band = ("late_night", "半夜", "半夜熬夜")
+        elif 2 <= h < 5:
+            band = ("midnight", "凌晨", "凌晨深夜")
+        elif 5 <= h < 7:
+            band = ("dawn", "清晨", "清晨恢复")
+        elif 7 <= h < 11:
+            band = ("morning", "上午", "上午清醒")
+        elif 11 <= h < 13:
+            band = ("noon", "中午", "中午平稳")
+        else:
+            band = ("daytime", "白天", "白天平稳")
+        return {"key": band[0], "label": band[1], "description": band[2], "hour": h}
+
     def update_night_social_energy(
         self, stimulus: float, group_activity: float
     ) -> None:
         """更新夜间社交能量，第三阶段新增"""
+        now = time.time()
+        last_stimulus_at = self._state.last_stimulus_at or now
         decay = (
             self._social_energy_decay
-            * (time.time() - self._state.last_stimulus_at)
+            * (now - last_stimulus_at)
             / 60.0
         )
         self._state.night_social_energy = max(
@@ -525,6 +550,7 @@ class NightCycleSystem:
                 + group_activity * 0.5,
             ),
         )
+        self._state.last_stimulus_at = now
 
     def update_reflection_depth(
         self, quiet_time: float, emotional_intensity: float
@@ -631,13 +657,24 @@ class NightCycleSystem:
 
         三维引擎输出的 composite_load 和 collapse_imminent 会影响阶段转换决策
         """
-        is_night = self.is_night_hours(current_hour)
+        hour = time.localtime().tm_hour if current_hour is None else int(current_hour) % 24
+        clock_is_night = self.is_night_hours(hour)
+        evening_social_window = self._night_social_start <= hour < self._sleep_start_hour
+        is_night = clock_is_night or evening_social_window
         now = time.time()
-        if is_night and not self.should_stay_awake_late():
-            self._state.in_night_mode = True
+        self._state.in_night_mode = is_night
+        if is_night:
+            self.update_night_social_energy(
+                stimulus=max(0.0, min(1.0, social_stimulus)) * 8.0,
+                group_activity=max(0.0, min(1.0, activity_level / 100.0)),
+            )
+            quiet_minutes = max(0.0, 22.0 - social_stimulus * 18.0 - max(0.0, activity_level - 25.0) / 3.5)
+            self.update_reflection_depth(
+                quiet_time=quiet_minutes,
+                emotional_intensity=max(0.0, min(1.0, boredom / 100.0 + social_stimulus * 0.4)),
+            )
         else:
-            is_night = False
-            self._state.in_night_mode = False
+            self.update_reflection_depth(quiet_time=0.0, emotional_intensity=0.0)
         _3d_result = self.tick_3d_engine(
             is_night=is_night,
             energy_ratio=energy_ratio,
@@ -647,6 +684,10 @@ class NightCycleSystem:
             activity_level=activity_level,
             current_hour=current_hour,
         )
+        if clock_is_night and not self.should_stay_awake_late():
+            self._state.sleepiness = max(self._state.sleepiness, self._drowsy_threshold + 2.0)
+            if _3d_result["collapse_imminent"] or self._state.overnight_pressure > self._state.pressure_critical_threshold:
+                self._state.sleepiness = max(self._state.sleepiness, self._light_sleep_threshold + 1.0)
         self._update_sleepiness(
             is_night=is_night,
             energy_ratio=energy_ratio,
@@ -1028,7 +1069,7 @@ class NightCycleSystem:
         now = time.localtime()
         hour = now.tm_hour
         # 第三阶段新增：夜间精细阶段转换
-        if self.is_night_hours(hour):
+        if self.is_night_hours(hour) or hour >= self._night_social_start:
             # 午夜反思阶段 (0-4点)
             if self._midnight_reflect_start <= hour < self._dawn_recover_start:
                 if current == NightPhase.AWAKE and s.reflection_depth > 0.3:
@@ -1345,9 +1386,16 @@ class NightCycleSystem:
             1.0, s.excitement_counter / max(1.0, self._excitement_ceiling)
         )
         _3d_status = self.get_3d_engine_status()
+        pressure_breakdown = self.get_overnight_pressure_breakdown()
+        time_band = self.resolve_time_band()
         return {
             "phase": phase.value,
             "phase_label": phase.label(),
+            "time_band": time_band["key"],
+            "time_band_label": time_band["label"],
+            "time_band_description": time_band["description"],
+            "current_hour": time_band["hour"],
+            "is_night": bool(s.in_night_mode or self.is_night_hours(time_band["hour"])),
             "can_interact": phase.can_interact,
             "can_reply": self.can_reply_tonight(),
             "remaining_replies": self.remaining_night_replies(),
@@ -1381,6 +1429,7 @@ class NightCycleSystem:
             ],
             "body_state_tag": _3d_status["behavior"]["body_tag"],
             "monologue_mood_hint": _3d_status["behavior"]["mood_hint"],
+            "pressure_breakdown": pressure_breakdown,
         }
 
     # ═════════════════════════════════════════
@@ -1396,7 +1445,8 @@ class NightCycleSystem:
         activity_type: "chat" / "peek" / "think" / "interrupt"
         intensity: 0.0~1.0，该次活动的强度
         """
-        if not self.is_night_hours():
+        hour = time.localtime().tm_hour
+        if not (self.is_night_hours(hour) or hour >= self._state.pressure_start_hour):
             return
         s = self._state
         now = time.time()

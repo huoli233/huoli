@@ -1306,6 +1306,32 @@ def _build_circadian_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     sleep_used = int(_safe_float(circadian.get("sleep_reply_used", 0), 0))
     sleep_cap = int(_safe_float(circadian.get("sleep_reply_cap", 0), 0))
     remaining = int(_safe_float(circadian.get("remaining_sleep_replies", 0), 0))
+    current_hour = int(_safe_float(circadian.get("current_hour", time.localtime().tm_hour), time.localtime().tm_hour)) % 24
+    time_band = str(circadian.get("time_band", "") or "")
+    time_band_label = str(circadian.get("time_band_label", "") or "")
+    time_band_description = str(circadian.get("time_band_description", "") or "")
+    if not time_band:
+        if 13 <= current_hour < 17:
+            time_band, time_band_label, time_band_description = "afternoon", "下午", "午后低谷"
+        elif 17 <= current_hour < 20:
+            time_band, time_band_label, time_band_description = "early_evening", "傍晚", "傍晚过渡"
+        elif 20 <= current_hour < 23:
+            time_band, time_band_label, time_band_description = "evening", "晚上", "晚上阶段"
+        elif 23 <= current_hour or current_hour < 2:
+            time_band, time_band_label, time_band_description = "late_night", "半夜", "半夜熬夜"
+        elif 2 <= current_hour < 5:
+            time_band, time_band_label, time_band_description = "midnight", "凌晨", "凌晨深夜"
+        elif 5 <= current_hour < 7:
+            time_band, time_band_label, time_band_description = "dawn", "清晨", "清晨恢复"
+        elif 7 <= current_hour < 11:
+            time_band, time_band_label, time_band_description = "morning", "上午", "上午清醒"
+        elif 11 <= current_hour < 13:
+            time_band, time_band_label, time_band_description = "noon", "中午", "中午平稳"
+        else:
+            time_band, time_band_label, time_band_description = "daytime", "白天", "白天平稳"
+    pressure_breakdown = circadian.get("pressure_breakdown", {})
+    if not isinstance(pressure_breakdown, dict):
+        pressure_breakdown = {}
     phase = str(circadian.get("phase", "awake") or "awake")
     phase_label = str(circadian.get("phase_label", "清醒") or "清醒")
     phase_label = {
@@ -1319,6 +1345,10 @@ def _build_circadian_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "phase": phase,
         "phase_label": phase_label,
+        "time_band": time_band,
+        "time_band_label": time_band_label,
+        "time_band_description": time_band_description,
+        "current_hour": current_hour,
         "is_night": bool(circadian.get("is_night", False)),
         "is_sleeping": bool(circadian.get("is_sleeping", False)),
         "is_burnthrough": bool(circadian.get("is_burnthrough", False)),
@@ -1334,6 +1364,17 @@ def _build_circadian_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
         "remaining_sleep_replies": remaining,
         "reply_quota_label": f"{remaining}/{sleep_cap}" if sleep_cap > 0 else "不限",
         "response_suppression": round(_safe_float(circadian.get("response_suppression", 0.0)), 3),
+        "pressure_breakdown": {
+            "total": round(_safe_float(pressure_breakdown.get("total", 0.0)), 4),
+            "chat_minutes": round(_safe_float(pressure_breakdown.get("chat_minutes", 0.0)), 2),
+            "peek_minutes": round(_safe_float(pressure_breakdown.get("peek_minutes", 0.0)), 2),
+            "think_intensity": round(_safe_float(pressure_breakdown.get("think_intensity", 0.0)), 3),
+            "interrupt_count": int(_safe_float(pressure_breakdown.get("interrupt_count", 0), 0)),
+            "chat_component": round(_safe_float(pressure_breakdown.get("chat_component", 0.0)), 4),
+            "peek_component": round(_safe_float(pressure_breakdown.get("peek_component", 0.0)), 4),
+            "think_component": round(_safe_float(pressure_breakdown.get("think_component", 0.0)), 4),
+            "interrupt_component": round(_safe_float(pressure_breakdown.get("interrupt_component", 0.0)), 4),
+        },
         "body_state_label": str(circadian.get("body_state_label", "正常") or "正常"),
         "mood_hint": str(circadian.get("mood_hint", "") or "状态平稳"),
         "expression_style_label": str(circadian.get("expression_style_label", "正常") or "正常"),
@@ -2012,7 +2053,7 @@ def _build_display_policy() -> Dict[str, list[str]]:
         ],
         "detail": [
             "资源账本的聊天值和思考值",
-            "晚上/凌晨阶段、睡眠债、困意和熬夜压力",
+            "作息分区、晚上/半夜/凌晨阶段、睡眠债、困意和熬夜压力",
             "情绪账本、主动驱动和当前感受",
             "记忆栈、记忆过载、回忆录和知识条目",
             "主动意图、待结算事件和后台随机事件",

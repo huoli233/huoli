@@ -158,6 +158,10 @@ type ResourceDetail = {
 type CircadianDetail = {
   phase: string;
   phase_label: string;
+  time_band?: string;
+  time_band_label?: string;
+  time_band_description?: string;
+  current_hour?: number;
   is_night: boolean;
   is_sleeping: boolean;
   is_burnthrough: boolean;
@@ -173,6 +177,17 @@ type CircadianDetail = {
   remaining_sleep_replies: number;
   reply_quota_label: string;
   response_suppression: number;
+  pressure_breakdown?: {
+    total: number;
+    chat_minutes: number;
+    peek_minutes: number;
+    think_intensity: number;
+    interrupt_count: number;
+    chat_component: number;
+    peek_component: number;
+    think_component: number;
+    interrupt_component: number;
+  };
   body_state_label: string;
   mood_hint: string;
   expression_style_label: string;
@@ -515,7 +530,7 @@ const severityRank: Record<string, number> = {
 const fallbackDisplayPolicy: DisplayPolicy = {
   resident: ["精力储备", "内在心情", "注意状态", "社交姿态", "安全护盾", "流转阶段", "场景热度", "发言预测"],
   active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "情绪低落/好奇心/社交欲显著变化", "浅睡/深睡/熬穿/清晨恢复/睡眠债", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/会话升温"],
-  detail: ["资源账本的聊天值和思考值", "晚上/凌晨阶段、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "会话整体状态", "当前对象状态", "安全护盾细节", "值变化原因", "发言预测的驱动和抑制因素"],
+  detail: ["资源账本的聊天值和思考值", "作息分区、晚上/半夜/凌晨阶段、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "会话整体状态", "当前对象状态", "安全护盾细节", "值变化原因", "发言预测的驱动和抑制因素"],
   hidden: ["内部阈值", "调试原因", "缓存字段", "旧命名残留", "纯计数器原值"],
 };
 
@@ -628,6 +643,40 @@ function countText(value: number | undefined | null, unit: string): string {
   return `${Math.round(Number(value ?? 0))}${unit}`;
 }
 
+function hourText(value: number | undefined | null): string {
+  const hour = Math.max(0, Math.min(23, Math.round(Number(value ?? new Date().getHours()))));
+  return `${String(hour).padStart(2, "0")}:00`;
+}
+
+function resolveTimeBand(value: number | undefined | null): { hour: number; label: string; description: string } {
+  const hour = Math.max(0, Math.min(23, Math.round(Number(value ?? new Date().getHours()))));
+  if (hour >= 13 && hour < 17) {
+    return { hour, label: "下午", description: "午后低谷" };
+  }
+  if (hour >= 17 && hour < 20) {
+    return { hour, label: "傍晚", description: "傍晚过渡" };
+  }
+  if (hour >= 20 && hour < 23) {
+    return { hour, label: "晚上", description: "晚上阶段" };
+  }
+  if (hour >= 23 || hour < 2) {
+    return { hour, label: "半夜", description: "半夜熬夜" };
+  }
+  if (hour >= 2 && hour < 5) {
+    return { hour, label: "凌晨", description: "凌晨深夜" };
+  }
+  if (hour >= 5 && hour < 7) {
+    return { hour, label: "清晨", description: "清晨恢复" };
+  }
+  if (hour >= 7 && hour < 11) {
+    return { hour, label: "上午", description: "上午清醒" };
+  }
+  if (hour >= 11 && hour < 13) {
+    return { hour, label: "中午", description: "中午平稳" };
+  }
+  return { hour, label: "白天", description: "白天平稳" };
+}
+
 function yesNo(value: boolean | undefined | null): string {
   return value ? "是" : "否";
 }
@@ -713,6 +762,7 @@ export function EmotionDashboard() {
   const prediction = packet?.prediction;
   const resourceDetail = packet?.presentation?.resource_detail;
   const circadianDetail = packet?.presentation?.circadian_detail;
+  const fallbackTimeBand = resolveTimeBand(circadianDetail?.current_hour);
   const emotionDetail = packet?.presentation?.emotion_detail;
   const behaviorDetail = packet?.presentation?.behavior_detail;
   const timingGateDetail = packet?.presentation?.timing_gate_detail;
@@ -1163,6 +1213,11 @@ export function EmotionDashboard() {
             <span>{circadianDetail?.phase_label ?? "清醒"}</span>
           </div>
           <div className="metric-wall">
+            <div className="metric-tile">
+              <span>作息分区</span>
+              <strong>{circadianDetail?.time_band_label ?? fallbackTimeBand.label}</strong>
+              <p>{hourText(circadianDetail?.current_hour ?? fallbackTimeBand.hour)} · {circadianDetail?.time_band_description ?? fallbackTimeBand.description}</p>
+            </div>
             <div className={`metric-tile tone-${metricTone((100 - (circadianDetail?.drowsiness_value ?? 0)) / 100)}`}>
               <span>困意值</span>
               <strong>{countText(circadianDetail?.drowsiness_value, "")}</strong>
@@ -1186,12 +1241,38 @@ export function EmotionDashboard() {
             <div className="metric-tile">
               <span>熬夜压力</span>
               <strong>{countText(circadianDetail?.overnight_pressure, "")}</strong>
-              <p>{circadianDetail?.is_burnthrough ? "熬穿已激活" : circadianDetail?.is_sleeping ? "睡眠中" : circadianDetail?.is_night ? "夜间阶段" : "清醒时段"}</p>
+              <p>分项 {fixed(circadianDetail?.pressure_breakdown?.total, 2)} · {circadianDetail?.is_burnthrough ? "熬穿已激活" : circadianDetail?.is_sleeping ? "睡眠中" : circadianDetail?.is_night ? "夜间阶段" : "清醒时段"}</p>
             </div>
             <div className="metric-tile">
               <span>表达风格</span>
               <strong>{circadianDetail?.expression_style_label ?? "正常"}</strong>
               <p>回复抑制 {percent(circadianDetail?.response_suppression)}</p>
+            </div>
+          </div>
+          <div className="detail-grid compact circadian-breakdown">
+            <div className="detail-row">
+              <span>压力分解</span>
+              <strong>{fixed(circadianDetail?.pressure_breakdown?.total, 2)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>聊天累积</span>
+              <strong>{fixed(circadianDetail?.pressure_breakdown?.chat_minutes, 1)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>窥屏累积</span>
+              <strong>{fixed(circadianDetail?.pressure_breakdown?.peek_minutes, 1)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>思考负荷</span>
+              <strong>{fixed(circadianDetail?.pressure_breakdown?.think_intensity, 2)}</strong>
+            </div>
+            <div className="detail-row">
+              <span>打断次数</span>
+              <strong>{circadianDetail?.pressure_breakdown?.interrupt_count ?? 0}</strong>
+            </div>
+            <div className="detail-row">
+              <span>阶段序列</span>
+              <strong>下午 / 傍晚 / 晚上 / 半夜 / 凌晨 / 清晨</strong>
             </div>
           </div>
         </section>

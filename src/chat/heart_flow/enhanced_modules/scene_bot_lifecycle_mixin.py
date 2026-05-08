@@ -115,6 +115,7 @@ class SceneBotLifecycleMixin:
 
             _ncs_f28 = get_night_cycle(self.stream_id)
             if _ncs_f28.is_night_hours():
+                _ncs_f28.record_overnight_activity("chat", 1.0)
                 _ncs_f28.record_night_reply()
                 _ncs_f28.consume_sleep_reply()
             _d6 = EnergyChainDimension.get_instance()
@@ -1372,4 +1373,3 @@ class SceneBotLifecycleMixin:
         except Exception as _ierr:
             logger.debug(f"{self.log_prefix} 印象引擎异常: {_ierr}")
         return _snap
-

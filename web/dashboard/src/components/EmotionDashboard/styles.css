@@ -311,6 +311,10 @@ body {
   color: var(--muted);
 }
 
+.circadian-breakdown {
+  margin-top: 14px;
+}
+
 .tone-high strong {
   color: var(--accent-2);
 }

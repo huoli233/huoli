@@ -101,6 +101,12 @@ class LoopResourceFeedbackMixin:
                 raw_extras = {}
 
             _d6.on_event(_GlanceEvt())
+            try:
+                from src.core.night_cycle_system import get_night_cycle
+
+                get_night_cycle(self.stream_id).record_overnight_activity("peek", 0.45)
+            except Exception as _ncs_exc:
+                logger.debug(f"{self.log_prefix} 夜间窥屏压力记录失败: {_ncs_exc}")
         except Exception as _e:
             logger.debug(f"异常: {_e}")
 
@@ -117,6 +123,14 @@ class LoopResourceFeedbackMixin:
                 raw_extras = {}
 
             _d6.on_event(_ThinkEvt2())
+            try:
+                from src.core.night_cycle_system import get_night_cycle
+
+                get_night_cycle(self.stream_id).record_overnight_activity(
+                    "think", max(0.1, min(1.0, _clamped_complexity / 3.0))
+                )
+            except Exception as _ncs_exc:
+                logger.debug(f"{self.log_prefix} 夜间思考压力记录失败: {_ncs_exc}")
         except Exception as _e:
             logger.debug(f"异常: {_e}")
 
