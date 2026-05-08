@@ -1,13 +1,12 @@
-from src.chat.chat_core_base import ChatCoreBase, ERROR_LOOP_INFO
+from src.chat.chat_core_base import ChatCoreBase
 import asyncio
 import time
 import traceback
 import random
-from typing import List, Optional, Dict, Any, TYPE_CHECKING
+from typing import List, Optional, TYPE_CHECKING
 from src.config.config import global_config
 from src.common.logger import get_logger
 from src.common.data_models.message_data_model import ReplyContentType
-from src.chat.message_receive.chat_stream import ChatStream, get_chat_manager
 from src.plugin_system.apis import send_api, message_api
 from src.memory_system.chat_history_summarizer import ChatHistorySummarizer
 
@@ -145,6 +144,7 @@ class HeartFChatting(ChatCoreBase):
         message_data: Optional["DatabaseMessages"],
         selected_expressions: Optional[List[int]] = None,
         quote_message: Optional[bool] = None,
+        main_segment_only: bool = False,
     ) -> str:
         """发送回复到聊天流，由增强链复用。"""
         if message_data is None:
@@ -179,6 +179,8 @@ class HeartFChatting(ChatCoreBase):
                 continue
             data: str = reply_content.content  # type: ignore
             reply_text += data
+            if main_segment_only:
+                break
         if reply_text.strip():
             await send_api.text_to_stream(
                 text=reply_text,

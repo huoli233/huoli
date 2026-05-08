@@ -102,3 +102,19 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
 - 本轮只应提交 `src/memory_system/memory_retrieval.py`、`scripts/memory_tier_regression.py` 和本进度文件；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`src/webui/routers/heartflow.py`、`scripts/heartflow_state_regression.py`、`.trae/`、`dashboard-status-smoke.png` 不属于本轮。
+
+## 2026-05-08 - Task: 修复多段回复重复发送
+
+### What was done:
+- 为心流发送入口增加 `main_segment_only` 参数，增强链路主回复只发送 `reply_set` 首个文本段。
+- 保留补充段异步调度，后续文本段继续由 `_dispatch_followup_segments()` 延迟发送，避免主回复合并后又重复补发。
+- 清理 `heartFC_chat.py` 中已有未使用导入，保证当前文件 lint 通过。
+
+### Testing:
+- `uv run python -m ruff check src/chat/heart_flow/heartFC_chat.py src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py` 通过。
+- `uv run python -m compileall src/chat/heart_flow/heartFC_chat.py src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py` 通过。
+- `uv run python -m compileall src scripts` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
+- 本轮只应提交 `src/chat/heart_flow/heartFC_chat.py`、`src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py` 和本进度文件；工作区内其他既有差异不属于本轮。

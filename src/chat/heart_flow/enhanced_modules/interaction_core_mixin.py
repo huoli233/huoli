@@ -301,6 +301,7 @@ class EnhancedInteractionCoreMixin:
                 message_data=reply_target,
                 selected_expressions=selected_expressions,
                 quote_message=quote_message,
+                main_segment_only=True,
             )
 
         reply_text = str(reply_text or _guarded_reply_text or "").strip()
