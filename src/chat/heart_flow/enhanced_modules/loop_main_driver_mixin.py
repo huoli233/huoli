@@ -584,30 +584,50 @@ class LoopMainDriverMixin:
             except Exception as _snap_full:
                 logger.debug(f"{self.log_prefix} 完整快照重建失败: {_snap_full}")
 
-        # ── 阶段 2.5：核心系统集成（Group A + Group B 全并行） ──
+        # ── 阶段 2.5：核心系统集成（关键门控快速返回，非关键画像后台降级） ──
         _t25 = time.time()
-        _stage25_timeout = 30.0
+        _is_admin_fastlane = self._is_force_wake_admin(incoming_batch, pinged_msg)
+        _stage25_timeout = _rt_float(
+            "heartfc_stage25_admin_timeout_seconds" if _is_admin_fastlane else "heartfc_stage25_timeout_seconds",
+            3.0 if _is_admin_fastlane else 6.0,
+        )
+        _stage25_tasks = [
+            self._check_identity_context(incoming_batch),
+            self._update_dynamic_context(incoming_batch),
+            self._check_self_reply_risk(incoming_batch),
+            self._track_content_state(incoming_batch),
+            self._store_interaction_memory(incoming_batch),
+            self._update_emotion_tracker_state(incoming_batch),
+            self._update_trauma_system_state(incoming_batch),
+            self._analyze_group_sense(incoming_batch),
+            self._analyze_message_preprocessor(incoming_batch),
+            self._update_user_interaction_styles(incoming_batch),
+            self._sync_memoir_on_message(incoming_batch),
+        ]
+        _stage25_results = [None] * len(_stage25_tasks)
+        _pending_stage25_tasks = [asyncio.create_task(_task) for _task in _stage25_tasks]
         try:
-            _stage25_results = await asyncio.wait_for(
-                asyncio.gather(
-                    self._check_identity_context(incoming_batch),
-                    self._update_dynamic_context(incoming_batch),
-                    self._check_self_reply_risk(incoming_batch),
-                    self._track_content_state(incoming_batch),
-                    self._store_interaction_memory(incoming_batch),
-                    self._update_emotion_tracker_state(incoming_batch),
-                    self._update_trauma_system_state(incoming_batch),
-                    self._analyze_group_sense(incoming_batch),
-                    self._analyze_message_preprocessor(incoming_batch),
-                    self._update_user_interaction_styles(incoming_batch),
-                    self._sync_memoir_on_message(incoming_batch),
-                    return_exceptions=True,
-                ),
+            _done, _pending = await asyncio.wait(
+                _pending_stage25_tasks,
                 timeout=_stage25_timeout,
+                return_when=asyncio.ALL_COMPLETED,
             )
-        except asyncio.TimeoutError:
-            logger.warning(f"{self.log_prefix} ⚠️ 阶段2.5超时({_stage25_timeout:.0f}s)，跳过未完成任务")
-            _stage25_results = [None] * 11
+            if _pending:
+                logger.warning(
+                    f"{self.log_prefix} ⚠️ 阶段2.5超时({_stage25_timeout:.0f}s)，"
+                    f"{len(_pending)}个非关键任务后台放弃，不阻塞回复"
+                )
+                for _task in _pending:
+                    _task.cancel()
+                await asyncio.gather(*_pending, return_exceptions=True)
+            for _idx, _task in enumerate(_pending_stage25_tasks):
+                if _task in _done:
+                    try:
+                        _stage25_results[_idx] = _task.result()
+                    except Exception as _exc:
+                        _stage25_results[_idx] = _exc
+        finally:
+            _pending_stage25_tasks = []
         _identity_default = {
             "identity": "default",
             "response_mode": "normal",
@@ -618,9 +638,13 @@ class LoopMainDriverMixin:
             if isinstance(_stage25_results[0], dict)
             else _identity_default
         )
-        self_reply_risk = _stage25_results[2] if not isinstance(_stage25_results[2], Exception) else {"is_self_reply": False, "similarity": 0.0}
-        group_sense_result = _stage25_results[7] if not isinstance(_stage25_results[7], Exception) else {}
-        preprocessor_signal = _stage25_results[8] if not isinstance(_stage25_results[8], Exception) else {}
+        self_reply_risk = (
+            _stage25_results[2]
+            if isinstance(_stage25_results[2], dict)
+            else {"is_self_reply": False, "similarity": 0.0}
+        )
+        group_sense_result = _stage25_results[7] if isinstance(_stage25_results[7], dict) else {}
+        preprocessor_signal = _stage25_results[8] if isinstance(_stage25_results[8], dict) else {}
         for _idx, _r in enumerate(_stage25_results):
             if isinstance(_r, Exception):
                 logger.debug(f"{self.log_prefix} 阶段2.5任务[{_idx}]异常: {_r}")

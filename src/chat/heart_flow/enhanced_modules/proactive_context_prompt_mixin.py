@@ -1008,6 +1008,12 @@ class ProactiveContextPromptMixin:
                 "response_mode": "normal",
                 "has_conflict": False,
             }
+        if not isinstance(self_reply_risk, dict):
+            self_reply_risk = {"is_self_reply": False, "similarity": 0.0}
+        if not isinstance(relation_result, dict):
+            relation_result = {}
+        if not isinstance(message_salience, dict):
+            message_salience = {}
         merged_group_signal = (
             group_context_signal
             if isinstance(group_context_signal, dict)

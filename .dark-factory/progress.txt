@@ -197,3 +197,24 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
 - 本轮只应提交 `scripts/heartflow_state_regression.py`、`src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py`、`src/chat/heart_flow/enhanced_modules/strategy_action_state_mixin.py`、`src/chat/heart_flow/heartFC_chat_enhanced.py`、`src/chat/heart_flow/heartfc_state_exporter.py`、`src/webui/services/state_monitor.py`、`web/dashboard/src/components/EmotionDashboard/index.tsx`、`web/dashboard/src/components/EmotionDashboard/styles.css`、`web/dashboard/dist/` 和本进度文件；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-08T23:56:00 - Task: 心流自回复空值兜底与状态页实时连接稳定化
+
+### What was done:
+- 为心流阶段 2.5 增加运行时超时预算，管理员快通道和普通通道分别使用短预算，超时任务取消并降级，避免非关键画像/记忆任务阻塞回复主循环。
+- 为自主守卫补齐 `self_reply_risk`、`relation_result`、`message_salience` 的非字典兜底，避免上游返回 `None` 时触发 `.get()` 崩溃。
+- 调整状态页实时同步显示策略：前台固定展示“实时同步”，失焦/短暂断连不再切到“未连接/重连中”，断线后 800ms 静默重连。
+- 将状态监控 WebSocket 断开日志降级为 debug，减少短连接关闭造成的日志噪声。
+- 同步更新 HeartFlow 状态回归与 WebUI 冒烟契约，并重新构建状态页产物。
+
+### Testing:
+- `uv run python -m ruff check scripts/heartflow_state_regression.py scripts/webui_smoke_test.py src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py src/chat/heart_flow/enhanced_modules/proactive_context_prompt_mixin.py src/webui/routers/websocket/state_monitor.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/webui_smoke_test.py` 通过，`state_monitor_activation.always_on_connection=true`、`stable_live_display=true`、`public_state_monitor=true`、`no_auth_gate=true`。
+- `npm run build` 在 `web/dashboard` 通过。
+- `uv run python -m compileall src scripts` 通过。
+- Chrome headless 打开 `http://127.0.0.1:18766/dashboard/` 渲染通过，DOM 中存在“火力状态监控 / 机器人实时状态栏 / 实时同步”，且不存在“未连接 / 连接中 / 重连中 / 连接异常 / 轮询同步失败 / 实时通道暂不可用”。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
+- 本轮只应提交 `.dark-factory/progress.txt`、`scripts/heartflow_state_regression.py`、`scripts/webui_smoke_test.py`、`src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py`、`src/chat/heart_flow/enhanced_modules/proactive_context_prompt_mixin.py`、`src/webui/routers/websocket/state_monitor.py`、`web/dashboard/src/components/EmotionDashboard/index.tsx`、`web/dashboard/dist/index.html`、`web/dashboard/dist/assets/index-DvvvgvGn.js`；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 和旧 dist asset 不属于本轮。

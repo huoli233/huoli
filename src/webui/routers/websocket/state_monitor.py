@@ -73,7 +73,7 @@ async def websocket_state_monitor_endpoint(
             except WebSocketDisconnect:
                 break
     finally:
-        logger.info(f"状态监控 WebSocket 已断开: {session_id}")
+        logger.debug(f"状态监控 WebSocket 已断开: {session_id}")
 
 
 @router.get("/ws/state-monitor/status")

@@ -813,13 +813,18 @@ def check_webui_contract() -> Dict[str, Any]:
     dashboard_source = (ROOT / "web/dashboard/src/components/EmotionDashboard/index.tsx").read_text(encoding="utf-8")
     dashboard_style = (ROOT / "web/dashboard/src/components/EmotionDashboard/styles.css").read_text(encoding="utf-8")
     assert "fallbackPollTimerRef" in dashboard_source
-    assert 'connectionState === "live"' in dashboard_source
     assert "pollMonitorFallback" in dashboard_source
     assert "Promise.allSettled" not in dashboard_source
     assert "void loadMonitorOverview();" in dashboard_source
     assert "void loadConfigScope();" in dashboard_source
+    assert "hasEverConnectedRef" in dashboard_source
+    assert "const shouldSyncRealtime = true;" in dashboard_source
+    assert 'const displayConnectionState = "live";' in dashboard_source
+    assert 'window.addEventListener("blur"' not in dashboard_source
+    assert 'connecting: "实时同步"' in dashboard_source
+    assert 'reconnecting: "实时同步"' in dashboard_source
     assert "实时通道暂不可用，轮询同步失败" not in dashboard_source
-    assert "polling: \"轮询同步\"" in dashboard_source
+    assert 'polling: "实时同步"' in dashboard_source
     assert ".live-pill.is-polling" in dashboard_style
 
     heartflow_router_source = (ROOT / "src/webui/routers/heartflow.py").read_text(encoding="utf-8")

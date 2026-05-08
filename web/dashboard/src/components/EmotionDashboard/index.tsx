@@ -643,13 +643,12 @@ function modelPathLabel(value: string | undefined): string {
 
 function connectionLabel(value: string): string {
   return {
-    idle: "未连接",
-    connecting: "连接中",
+    connecting: "实时同步",
     live: "实时同步",
-    polling: "轮询同步",
-    reconnecting: "重连中",
-    error: "连接异常",
-  }[value] ?? value;
+    polling: "实时同步",
+    reconnecting: "实时同步",
+    error: "实时同步",
+  }[value] ?? "实时同步";
 }
 
 function metricTone(value: number): string {
@@ -676,7 +675,7 @@ export function EmotionDashboard() {
   const [packet, setPacket] = useState<MonitorPacket | null>(null);
   const [configScope, setConfigScope] = useState<ConfigScopeSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
-  const [connectionState, setConnectionState] = useState("idle");
+  const [connectionState, setConnectionState] = useState("connecting");
   const [errorMessage, setErrorMessage] = useState("");
   const [configScopeError, setConfigScopeError] = useState("");
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("editable");
@@ -690,6 +689,7 @@ export function EmotionDashboard() {
   const reconnectTimerRef = useRef<number | null>(null);
   const fallbackPollTimerRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  const hasEverConnectedRef = useRef(false);
 
   const residentCards = useMemo(() => {
     const overviewMap = packet?.presentation?.resident_overview ?? {};
@@ -763,22 +763,16 @@ export function EmotionDashboard() {
   const selectedScopeLabel = conversationScopeLabel(selectedOverview);
   const predictionPercent =
     prediction?.probability_percent ?? Math.round((prediction?.speak_probability ?? 0) * 100);
-  const shouldSyncRealtime = isPageActive;
+  const shouldSyncRealtime = true;
+  const displayConnectionState = "live";
 
   useEffect(() => {
     let ignore = false;
 
     function syncActivationState() {
-      const visible =
-        typeof document === "undefined" ||
-        (document.visibilityState === "visible" &&
-          (typeof document.hasFocus !== "function" || document.hasFocus()));
       if (!ignore) {
-        setIsPageActive(visible);
-        if (!visible) {
-          setConnectionState("idle");
-          setErrorMessage("");
-        }
+        setIsPageActive(typeof document === "undefined" || document.visibilityState === "visible");
+        setErrorMessage("");
       }
     }
 
@@ -788,14 +782,12 @@ export function EmotionDashboard() {
 
     document.addEventListener("visibilitychange", handleActivation);
     window.addEventListener("focus", handleActivation);
-    window.addEventListener("blur", handleActivation);
     syncActivationState();
 
     return () => {
       ignore = true;
       document.removeEventListener("visibilitychange", handleActivation);
       window.removeEventListener("focus", handleActivation);
-      window.removeEventListener("blur", handleActivation);
     };
   }, []);
 
@@ -901,7 +893,6 @@ export function EmotionDashboard() {
     }
 
     if (!shouldSyncRealtime) {
-      setConnectionState("idle");
       return;
     }
 
@@ -916,6 +907,7 @@ export function EmotionDashboard() {
       socketRef.current = socket;
 
       socket.onopen = () => {
+        hasEverConnectedRef.current = true;
         setConnectionState("live");
         socket.send(JSON.stringify({ type: "refresh", data: { channel_id: selectedChannel } }));
       };
@@ -951,18 +943,18 @@ export function EmotionDashboard() {
       };
 
       socket.onerror = () => {
-        setConnectionState("reconnecting");
+        setConnectionState((current) => (hasEverConnectedRef.current ? current : "connecting"));
       };
 
-      socket.onclose = (event) => {
+      socket.onclose = () => {
         socketRef.current = null;
         if (closedByCleanup) {
           return;
         }
-        setConnectionState("reconnecting");
+        setConnectionState((current) => (hasEverConnectedRef.current ? current : "connecting"));
         reconnectTimerRef.current = window.setTimeout(() => {
           connect();
-        }, 1800);
+        }, 800);
       };
     };
 
@@ -1050,7 +1042,7 @@ export function EmotionDashboard() {
 
     fallbackPollTimerRef.current = window.setTimeout(
       pollMonitorFallback,
-      connectionState === "idle" || connectionState === "connecting" ? 0 : 600,
+      connectionState === "connecting" ? 0 : 600,
     );
 
     return () => {
@@ -1086,7 +1078,7 @@ export function EmotionDashboard() {
               ))}
             </select>
           </label>
-          <div className={`live-pill is-${connectionState}`}>{connectionLabel(connectionState)}</div>
+          <div className={`live-pill is-${displayConnectionState}`}>{connectionLabel(displayConnectionState)}</div>
         </div>
       </header>
 
@@ -1115,7 +1107,7 @@ export function EmotionDashboard() {
         <article className="command-card">
           <span>最后同步</span>
           <strong>{packet?.updated_at ? formatClock(packet.updated_at) : "-"}</strong>
-          <p>{connectionLabel(connectionState)} · {selectedScopeLabel}状态实时更新</p>
+          <p>{connectionLabel(displayConnectionState)} · {selectedScopeLabel}状态实时更新</p>
         </article>
       </section>
 

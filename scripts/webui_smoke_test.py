@@ -273,22 +273,23 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     )
 
     required_dashboard_fragments = {
-        "activation_gate": "const shouldSyncRealtime = isPageActive;",
+        "always_on_gate": "const shouldSyncRealtime = true;",
         "visibility_listener": 'document.addEventListener("visibilitychange", handleActivation);',
         "focus_listener": 'window.addEventListener("focus", handleActivation);',
-        "blur_listener": 'window.addEventListener("blur", handleActivation);',
-        "inactive_socket_guard": 'if (!shouldSyncRealtime) {\n      setConnectionState("idle");\n      return;\n    }',
-        "inactive_poll_guard": 'if (!shouldSyncRealtime || connectionState === "live") {',
+        "stable_live_display": 'const displayConnectionState = "live";',
         "immediate_refresh": 'socket.send(JSON.stringify({ type: "refresh", data: { channel_id: selectedChannel } }));',
+        "fast_silent_reconnect": "}, 800);",
     }
     missing_dashboard = [
         name for name, fragment in required_dashboard_fragments.items() if fragment not in dashboard_source
     ]
-    assert not missing_dashboard, f"状态监控前端激活契约缺失: {missing_dashboard}"
+    assert not missing_dashboard, f"状态监控前端常驻连接契约缺失: {missing_dashboard}"
     assert "轮询同步失败" not in dashboard_source, "后台轮询失败不应显示到状态页前台"
     assert "状态页保持实时总览待机" not in dashboard_source, "后台 state_error 不应显示成前台错误"
     assert "authReady" not in dashboard_source, "状态页实时同步不应依赖 WebUI 登录态"
     assert "/api/webui/auth/check" not in dashboard_source, "状态页不应在建立实时连接前检查登录"
+    assert 'window.addEventListener("blur"' not in dashboard_source, "状态页不应因窗口失焦断开实时连接"
+    assert 'setConnectionState("idle")' not in dashboard_source, "状态页不应把临时不可见显示为未连接"
 
     forbidden_backend_fragments = [
         "verify_auth_token_from_cookie_or_header",
@@ -304,6 +305,8 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
 
     return {
         "activation_gate": True,
+        "always_on_connection": True,
+        "stable_live_display": True,
         "public_state_monitor": True,
         "no_auth_gate": True,
     }
