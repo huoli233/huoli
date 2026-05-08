@@ -512,3 +512,27 @@
 - `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
 - 本轮不删除历史 `data/night_cycle_state/*.json`，仅继续沿用上一轮 DB 写入和旧 JSON 只读兼容策略。
 - 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T06:37:14+08:00 - Task: 修复管理员权限污染与核心状态 JSON 写入割裂
+
+### What was done:
+- 修复管理员强制唤醒权限污染人物关系的问题：管理员只作为门控/限制旁路，不再写入 `relationship=管理员`，也不再额外赠送好感或信任。
+- 兼容旧污染数据：读取到历史 `relationship=管理员` / `impression=管理员` 时归一为正常关系和初始印象。
+- 将 `hippo_memorizer` 话题摘要缓存写入迁移到 `data/Huoli.db` 的 `persistence_slot`，旧 JSON 只读恢复后写回数据库。
+- 将聊天概括器的当前话题/批次缓存写入迁移到 `persistence_slot`，旧 `data/hippo_memorizer/<chat_id>.json` 只读迁移。
+- 将社交值存储从 `data/huoli/social/<user>/<channel>.json` 迁移到 `persistence_slot`，旧 JSON 只读迁移。
+- 去掉直接快回生成提示中的“管理员强制快回”字样，避免权限信息进入生成语气。
+
+### Testing:
+- `uv run ruff check src\modules\modcore\dynamic_persona\emotion_tracker.py src\hippo_memorizer\summary_storage.py src\memory_system\chat_history_summarizer.py src\modules\social_value\social_storage.py src\chat\replyer\group_generator.py scripts\heartflow_state_regression.py scripts\model_runtime_audit.py` 通过。
+- `uv run python -` DB 存储与管理员身份 smoke 通过，确认三类状态不再生成对应 JSON。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新增 `admin_identity` 与 `db_backed_json_storage` 契约。
+- `uv run python scripts\model_runtime_audit.py` 通过，确认 night/hippo/social 运行后端均为 `Huoli.db:persistence_slot`。
+- `uv run python scripts\config_profile_regression.py` 通过。
+- `uv run python -m compileall -q src scripts` 通过，使用临时 `PYTHONPYCACHEPREFIX`。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 本轮没有删除历史 JSON 文件，只停止这些核心状态后续新增 JSON，并保留旧 JSON 只读迁移；清理历史文件需要单独按删除分支规则执行。
+- `chat_id` 不是随机 ID，而是 `ChatManager` 使用 `md5(platform + group_id)` 或 `md5(platform + user_id + private)` 生成的稳定流 ID，割裂来自不同子系统各自拿该 ID 写独立 JSON 状态。
+- 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。

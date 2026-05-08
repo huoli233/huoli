@@ -2892,7 +2892,7 @@ class DefaultReplyer:
                 reply_reason,
                 low_info_input=False,
             )
-            fast_behavioral_directive = "管理员强制快回：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
+            fast_behavioral_directive = "直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
             prompt = get_group_responder_prompt(
                 think_level=think_level,
                 expression_habits_block="",

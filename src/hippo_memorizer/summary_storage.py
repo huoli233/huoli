@@ -5,7 +5,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
 from src.common.logger import get_logger
-from src.common.atomic_io import atomic_json_dump
 from src.hippo_memorizer.config_loader import get_max_summaries
 
 logger = get_logger("摘要存储")
@@ -79,40 +78,92 @@ class SummaryStorage:
         self._file_path = (
             _HIPPO_DATA_DIR / f"{self._sanitize_id(chat_id)}_summaries.json"
         )
-        self._load_from_disk()
+        self._slot_key = f"hippo_summary:{self.chat_id}"
+        self._load_from_db_or_legacy_json()
 
     def _sanitize_id(self, chat_id: str) -> str:
         return re.sub(r"[^a-zA-Z0-9_.-]", "_", chat_id)
 
-    def _load_from_disk(self):
+    def _load_from_db_or_legacy_json(self):
+        if self._load_from_db():
+            return
+        if self._load_from_legacy_json():
+            self._save_to_db()
+
+    def _load_from_db(self) -> bool:
+        try:
+            from src.common.database.database import db
+            from src.common.database.database_model import PersistenceSlot
+
+            db.create_tables([PersistenceSlot], safe=True)
+            row = PersistenceSlot.get_or_none(PersistenceSlot.slot_key == self._slot_key)
+            if row is None or not row.slot_value:
+                return False
+            data = json.loads(row.slot_value)
+            self._summaries = [
+                TopicSummary.from_dict(item)
+                for item in data.get("summaries", [])
+                if isinstance(item, dict)
+            ]
+            if self._summaries:
+                logger.info(f"已从数据库加载 {len(self._summaries)} 个话题摘要")
+            return True
+        except Exception as e:
+            logger.error(f"从数据库加载话题摘要失败: {e}")
+            return False
+
+    def _load_from_legacy_json(self) -> bool:
         try:
             if self._file_path.exists():
                 with self._file_path.open("r", encoding="utf-8") as f:
                     data = json.load(f)
-                for item in data.get("summaries", []):
-                    self._summaries.append(TopicSummary.from_dict(item))
-                logger.info(f"已加载 {len(self._summaries)} 个话题摘要")
+                self._summaries = [
+                    TopicSummary.from_dict(item)
+                    for item in data.get("summaries", [])
+                    if isinstance(item, dict)
+                ]
+                logger.info(
+                    f"已从旧JSON加载 {len(self._summaries)} 个话题摘要，后续写入数据库"
+                )
+                return True
         except Exception as e:
-            logger.error(f"加载话题摘要失败: {e}")
+            logger.error(f"加载旧JSON话题摘要失败: {e}")
+        return False
 
-    def _save_to_disk(self):
+    def _save_to_db(self):
         try:
-            _HIPPO_DATA_DIR.mkdir(parents=True, exist_ok=True)
+            from src.common.database.database import db
+            from src.common.database.database_model import PersistenceSlot
+
+            db.create_tables([PersistenceSlot], safe=True)
+            now = time.time()
             data = {
                 "chat_id": self.chat_id,
                 "summaries": [s.to_dict() for s in self._summaries],
             }
-            atomic_json_dump(
-                data, self._file_path, ensure_ascii=False, indent=2
-            )
+            serialized = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+            PersistenceSlot.insert(
+                slot_key=self._slot_key,
+                slot_value=serialized,
+                birth_ts=now,
+                modify_ts=now,
+                ttl_days=180,
+            ).on_conflict(
+                conflict_target=[PersistenceSlot.slot_key],
+                update={
+                    PersistenceSlot.slot_value: serialized,
+                    PersistenceSlot.modify_ts: now,
+                    PersistenceSlot.ttl_days: 180,
+                },
+            ).execute()
         except Exception as e:
-            logger.error(f"保存话题摘要失败: {e}")
+            logger.error(f"保存话题摘要到数据库失败: {e}")
 
     def add_summary(self, summary: TopicSummary):
         self._summaries.append(summary)
         if len(self._summaries) > self._max_summaries:
             self._summaries = self._summaries[-self._max_summaries:]
-        self._save_to_disk()
+        self._save_to_db()
 
     def get_summaries(
         self, limit: int = 10, max_age_hours: Optional[float] = None
@@ -170,7 +221,7 @@ class SummaryStorage:
             s for s in self._summaries if s.created_at >= cutoff
         ]
         if len(self._summaries) < original_count:
-            self._save_to_disk()
+            self._save_to_db()
             logger.info(
                 f"清理了 {original_count - len(self._summaries)} 个过期摘要"
             )

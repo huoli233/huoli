@@ -3,7 +3,7 @@ import json
 import time
 import asyncio
 import threading
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from src.common.logger import get_logger
 from src.modules.social_value.models import SocialValueRecord
 
@@ -11,7 +11,7 @@ logger = get_logger("社交存储")
 
 
 class SocialStorage:
-    """社交值存储 - 内存缓存 + 文件持久化"""
+    """社交值存储 - 内存缓存 + 数据库持久化，旧JSON只读迁移"""
 
     def __init__(self, storage_dir: str = "data/huoli/social"):
         self._storage_dir = storage_dir
@@ -20,7 +20,6 @@ class SocialStorage:
         self._lock: Optional[asyncio.Lock] = None
         self._sync_lock = threading.Lock()
         self._adapter = None
-        os.makedirs(self._storage_dir, exist_ok=True)
 
     def _ensure_lock(self) -> asyncio.Lock:
         if self._lock is None:
@@ -61,7 +60,13 @@ class SocialStorage:
                     return record
             except Exception as e:
                 logger.debug(f"Adapter 获取社交值失败: {e}")
-        record = await self._load_from_disk(user_id, channel_id)
+        record = self._load_from_db(user_id, channel_id)
+        if record is None:
+            record = await self._load_from_legacy_json(user_id, channel_id)
+            if record:
+                self._cache[key] = record
+                await self._persist(key)
+                return record
         if record:
             self._cache[key] = record
         return record
@@ -74,37 +79,16 @@ class SocialStorage:
         with self._sync_lock:
             if key in self._cache:
                 return self._cache[key]
-            filepath = os.path.join(
-                self._storage_dir,
-                self._safe_filename(user_id),
-                self._safe_filename(channel_id) + ".json",
-            )
-            if not os.path.exists(filepath):
-                return None
-            try:
-                with open(filepath, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-                record = SocialValueRecord(
-                    user_id=data.get("user_id", ""),
-                    channel_id=data.get("channel_id", ""),
-                    value=max(-100.0, min(100.0, float(data.get("value", 0.0)))),
-                    positive_dim=float(data.get("positive_dim", 0.0)),
-                    negative_dim=float(data.get("negative_dim", 0.0)),
-                    trust_value=max(
-                        -100.0, min(100.0, float(data.get("trust_value", 0.0)))
-                    ),
-                    annoyance_value=max(
-                        0.0, min(100.0, float(data.get("annoyance_value", 0.0)))
-                    ),
-                    interaction_count=int(data.get("interaction_count", 0)),
-                    last_interaction=float(data.get("last_interaction", 0)),
-                    created_at=float(data.get("created_at", 0)),
-                    updated_at=float(data.get("updated_at", 0)),
-                )
+            record = self._load_from_db(user_id, channel_id)
+            if record:
                 self._cache[key] = record
                 return record
-            except (json.JSONDecodeError, KeyError, TypeError):
-                return None
+            record = self._load_legacy_json_sync(user_id, channel_id)
+            if record:
+                self._cache[key] = record
+                self._persist_sync(key)
+                return record
+            return None
 
     async def set(self, user_id: str, channel_id: str, value: float) -> None:
         """设置社交值（带边界保护）"""
@@ -157,17 +141,29 @@ class SocialStorage:
     async def get_all_for_user(self, user_id: str) -> List[SocialValueRecord]:
         """获取用户在所有频道的社交值"""
         records = []
-        user_dir = os.path.join(
-            self._storage_dir, self._safe_filename(user_id)
-        )
-        if not os.path.exists(user_dir):
-            return records
-        for filename in os.listdir(user_dir):
-            if filename.endswith(".json"):
-                channel_id = filename[:-5]
-                record = await self.get(user_id, channel_id)
+        try:
+            from src.common.database.database import db
+            from src.common.database.database_model import PersistenceSlot
+
+            db.create_tables([PersistenceSlot], safe=True)
+            prefix = f"{self._slot_prefix(user_id)}:"
+            rows = PersistenceSlot.select().where(PersistenceSlot.slot_key.startswith(prefix))
+            for row in rows:
+                record = self._record_from_payload(json.loads(row.slot_value))
                 if record:
                     records.append(record)
+        except Exception as exc:
+            logger.debug(f"数据库读取用户社交值失败: {exc}")
+        if records:
+            return records
+        user_dir = os.path.join(self._storage_dir, self._safe_filename(user_id))
+        if os.path.exists(user_dir):
+            for filename in os.listdir(user_dir):
+                if filename.endswith(".json"):
+                    channel_id = filename[:-5]
+                    record = await self.get(user_id, channel_id)
+                    if record:
+                        records.append(record)
         return records
 
     async def get_all_for_channel(
@@ -175,18 +171,36 @@ class SocialStorage:
     ) -> List[SocialValueRecord]:
         """获取频道内所有用户的社交值"""
         records = []
-        if not os.path.exists(self._storage_dir):
+        try:
+            from src.common.database.database import db
+            from src.common.database.database_model import PersistenceSlot
+
+            db.create_tables([PersistenceSlot], safe=True)
+            suffix = f":{self._safe_filename(channel_id)}"
+            rows = PersistenceSlot.select().where(
+                PersistenceSlot.slot_key.startswith("social_value:")
+            )
+            for row in rows:
+                if not str(row.slot_key).endswith(suffix):
+                    continue
+                record = self._record_from_payload(json.loads(row.slot_value))
+                if record:
+                    records.append(record)
+        except Exception as exc:
+            logger.debug(f"数据库读取频道社交值失败: {exc}")
+        if records:
             return records
-        for user_dir_name in os.listdir(self._storage_dir):
-            user_dir = os.path.join(self._storage_dir, user_dir_name)
-            if os.path.isdir(user_dir):
-                filepath = os.path.join(
-                    user_dir, self._safe_filename(channel_id) + ".json"
-                )
-                if os.path.exists(filepath):
-                    record = await self._load_file(filepath)
-                    if record:
-                        records.append(record)
+        if os.path.exists(self._storage_dir):
+            for user_dir_name in os.listdir(self._storage_dir):
+                user_dir = os.path.join(self._storage_dir, user_dir_name)
+                if os.path.isdir(user_dir):
+                    filepath = os.path.join(
+                        user_dir, self._safe_filename(channel_id) + ".json"
+                    )
+                    if os.path.exists(filepath):
+                        record = await self._load_file(filepath)
+                        if record:
+                            records.append(record)
         return records
 
     async def flush_all(self) -> int:
@@ -269,17 +283,103 @@ class SocialStorage:
 
     async def _persist(self, key: str) -> None:
         """持久化单条记录"""
+        await asyncio.to_thread(self._persist_sync, key)
+
+    async def _load_from_disk(
+        self, user_id: str, channel_id: str
+    ) -> Optional[SocialValueRecord]:
+        """从磁盘加载记录"""
+        return await self._load_from_legacy_json(user_id, channel_id)
+
+    async def _load_from_legacy_json(
+        self, user_id: str, channel_id: str
+    ) -> Optional[SocialValueRecord]:
+        """从旧JSON加载记录，并由调用方迁移入数据库。"""
+        filepath = os.path.join(
+            self._storage_dir,
+            self._safe_filename(user_id),
+            self._safe_filename(channel_id) + ".json",
+        )
+        return await self._load_file(filepath)
+
+    def _load_from_db(self, user_id: str, channel_id: str) -> Optional[SocialValueRecord]:
+        try:
+            from src.common.database.database import db
+            from src.common.database.database_model import PersistenceSlot
+
+            db.create_tables([PersistenceSlot], safe=True)
+            row = PersistenceSlot.get_or_none(
+                PersistenceSlot.slot_key == self._slot_key(user_id, channel_id)
+            )
+            if row is None or not row.slot_value:
+                return None
+            return self._record_from_payload(json.loads(row.slot_value))
+        except Exception as exc:
+            logger.debug(f"数据库读取社交值失败: {exc}")
+            return None
+
+    def _persist_sync(self, key: str) -> None:
         record = self._cache.get(key)
         if record is None:
             return
-        user_dir = os.path.join(
-            self._storage_dir, self._safe_filename(record.user_id)
-        )
-        os.makedirs(user_dir, exist_ok=True)
+        try:
+            from src.common.database.database import db
+            from src.common.database.database_model import PersistenceSlot
+
+            db.create_tables([PersistenceSlot], safe=True)
+            now = time.time()
+            data = self._record_to_payload(record)
+            serialized = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+            PersistenceSlot.insert(
+                slot_key=self._slot_key(record.user_id, record.channel_id),
+                slot_value=serialized,
+                birth_ts=now,
+                modify_ts=now,
+                ttl_days=365,
+            ).on_conflict(
+                conflict_target=[PersistenceSlot.slot_key],
+                update={
+                    PersistenceSlot.slot_value: serialized,
+                    PersistenceSlot.modify_ts: now,
+                    PersistenceSlot.ttl_days: 365,
+                },
+            ).execute()
+            self._dirty.discard(key)
+        except Exception as exc:
+            logger.error(f"保存社交值到数据库失败: {exc}")
+
+    def _load_legacy_json_sync(self, user_id: str, channel_id: str) -> Optional[SocialValueRecord]:
         filepath = os.path.join(
-            user_dir, self._safe_filename(record.channel_id) + ".json"
+            self._storage_dir,
+            self._safe_filename(user_id),
+            self._safe_filename(channel_id) + ".json",
         )
-        data = {
+        if not os.path.exists(filepath):
+            return None
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                return self._record_from_payload(json.load(f))
+        except (json.JSONDecodeError, KeyError, TypeError, OSError, ValueError):
+            return None
+
+    async def _load_file(self, filepath: str) -> Optional[SocialValueRecord]:
+        """从文件加载记录"""
+        if not os.path.exists(filepath):
+            return None
+
+        def _read_json():
+            with open(filepath, "r", encoding="utf-8") as f:
+                return json.load(f)
+
+        try:
+            data = await asyncio.to_thread(_read_json)
+            return self._record_from_payload(data)
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return None
+
+    @staticmethod
+    def _record_to_payload(record: SocialValueRecord) -> Dict[str, Any]:
+        return {
             "user_id": record.user_id,
             "channel_id": record.channel_id,
             "value": record.value,
@@ -293,38 +393,12 @@ class SocialStorage:
             "updated_at": record.updated_at,
         }
 
-        def _write_file():
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-
-        await asyncio.to_thread(_write_file)
-        self._dirty.discard(key)
-
-    async def _load_from_disk(
-        self, user_id: str, channel_id: str
-    ) -> Optional[SocialValueRecord]:
-        """从磁盘加载记录"""
-        filepath = os.path.join(
-            self._storage_dir,
-            self._safe_filename(user_id),
-            self._safe_filename(channel_id) + ".json",
-        )
-        return await self._load_file(filepath)
-
-    async def _load_file(self, filepath: str) -> Optional[SocialValueRecord]:
-        """从文件加载记录"""
-        if not os.path.exists(filepath):
-            return None
-
-        def _read_json():
-            with open(filepath, "r", encoding="utf-8") as f:
-                return json.load(f)
-
+    @staticmethod
+    def _record_from_payload(data: Dict[str, Any]) -> Optional[SocialValueRecord]:
         try:
-            data = await asyncio.to_thread(_read_json)
             return SocialValueRecord(
-                user_id=data.get("user_id", ""),
-                channel_id=data.get("channel_id", ""),
+                user_id=str(data.get("user_id", "") or ""),
+                channel_id=str(data.get("channel_id", "") or ""),
                 value=max(-100.0, min(100.0, float(data.get("value", 0.0)))),
                 positive_dim=float(data.get("positive_dim", 0.0)),
                 negative_dim=float(data.get("negative_dim", 0.0)),
@@ -339,12 +413,20 @@ class SocialStorage:
                 created_at=float(data.get("created_at", 0)),
                 updated_at=float(data.get("updated_at", 0)),
             )
-        except (json.JSONDecodeError, KeyError, TypeError):
+        except (TypeError, ValueError):
             return None
 
     @staticmethod
     def _make_key(user_id: str, channel_id: str) -> str:
         return f"{user_id}:{channel_id}"
+
+    @classmethod
+    def _slot_key(cls, user_id: str, channel_id: str) -> str:
+        return f"{cls._slot_prefix(user_id)}:{cls._safe_filename(channel_id)}"
+
+    @classmethod
+    def _slot_prefix(cls, user_id: str) -> str:
+        return f"social_value:{cls._safe_filename(user_id)}"
 
     @staticmethod
     def _safe_filename(s: str) -> str:

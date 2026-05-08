@@ -76,6 +76,15 @@ def audit_data_json_sources() -> dict[str, Any]:
     assert "_ensure_persistence_slot_table" in night_cycle_source
     assert "Slot.insert(" in night_cycle_source
     assert ".write_text(" not in night_cycle_source
+    hippo_summary_source = (ROOT / "src/hippo_memorizer/summary_storage.py").read_text(encoding="utf-8")
+    hippo_topic_source = (ROOT / "src/memory_system/chat_history_summarizer.py").read_text(encoding="utf-8")
+    social_source = (ROOT / "src/modules/social_value/social_storage.py").read_text(encoding="utf-8")
+    assert "_save_to_db" in hippo_summary_source
+    assert "atomic_json_dump" not in hippo_summary_source
+    assert "_save_topic_cache_payload" in hippo_topic_source
+    assert "json.dump(data" not in hippo_topic_source
+    assert "_persist_sync" in social_source
+    assert "json.dump(data" not in social_source
     return {
         "json_file_count": len(json_files),
         "groups": grouped,
@@ -84,6 +93,10 @@ def audit_data_json_sources() -> dict[str, Any]:
         else 0,
         "night_cycle_state_backend": "Huoli.db:persistence_slot",
         "night_cycle_state_json_write_removed": True,
+        "hippo_summary_backend": "Huoli.db:persistence_slot",
+        "hippo_topic_cache_backend": "Huoli.db:persistence_slot",
+        "social_value_backend": "Huoli.db:persistence_slot",
+        "legacy_json_files_are_read_only_compat": True,
     }
 
 

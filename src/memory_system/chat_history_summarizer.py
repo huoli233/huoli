@@ -176,6 +176,7 @@ class ChatHistorySummarizer:
         self.topic_cache: Dict[str, TopicCacheItem] = {}
         self._safe_chat_id = self._sanitize_chat_id(self.chat_id)
         self._topic_cache_file = HIPPO_CACHE_DIR / f"{self._safe_chat_id}.json"
+        self._topic_cache_slot_key = f"hippo_topic_cache:{self.chat_id}"
         # 注意：批次加载需要异步查询消息，所以在 start() 中调用
 
         # LLM请求器，用于压缩聊天内容
@@ -212,11 +213,9 @@ class ChatHistorySummarizer:
     def _load_topic_cache_from_disk(self):
         """在启动时加载本地话题缓存（同步部分），支持重启后继续"""
         try:
-            if not self._topic_cache_file.exists():
+            data = self._load_topic_cache_payload()
+            if not data:
                 return
-
-            with self._topic_cache_file.open("r", encoding="utf-8") as f:
-                data = json.load(f)
 
             self.last_topic_check_time = data.get(
                 "last_topic_check_time", self.last_topic_check_time
@@ -242,11 +241,9 @@ class ChatHistorySummarizer:
     async def _load_batch_from_disk(self):
         """在启动时加载聊天批次，支持重启后继续"""
         try:
-            if not self._topic_cache_file.exists():
+            data = self._load_topic_cache_payload()
+            if not data:
                 return
-
-            with self._topic_cache_file.open("r", encoding="utf-8") as f:
-                data = json.load(f)
 
             batch_data = data.get("current_batch")
             if not batch_data:
@@ -285,11 +282,9 @@ class ChatHistorySummarizer:
         try:
             # 如果既没有话题缓存也没有批次，删除缓存文件
             if not self.topic_cache and not self.current_batch:
-                if self._topic_cache_file.exists():
-                    self._topic_cache_file.unlink()
+                self._delete_topic_cache_payload()
                 return
 
-            HIPPO_CACHE_DIR.mkdir(parents=True, exist_ok=True)
             data = {
                 "chat_id": self.chat_id,
                 "last_topic_check_time": self.last_topic_check_time,
@@ -310,10 +305,81 @@ class ChatHistorySummarizer:
                     "end_time": self.current_batch.end_time,
                 }
 
-            with self._topic_cache_file.open("w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+            self._save_topic_cache_payload(data)
         except Exception as e:
             logger.error(f"{self.log_prefix} 持久化话题缓存失败: {e}")
+
+    def _load_topic_cache_payload(self) -> Optional[Dict[str, Any]]:
+        data = self._load_topic_cache_from_db()
+        if data:
+            return data
+        data = self._load_topic_cache_from_legacy_json()
+        if data:
+            self._save_topic_cache_payload(data)
+        return data
+
+    def _load_topic_cache_from_db(self) -> Optional[Dict[str, Any]]:
+        try:
+            from src.common.database.database import db
+            from src.common.database.database_model import PersistenceSlot
+
+            db.create_tables([PersistenceSlot], safe=True)
+            row = PersistenceSlot.get_or_none(
+                PersistenceSlot.slot_key == self._topic_cache_slot_key
+            )
+            if row is None or not row.slot_value:
+                return None
+            payload = json.loads(row.slot_value)
+            return payload if isinstance(payload, dict) else None
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 从数据库加载话题缓存失败: {exc}")
+            return None
+
+    def _load_topic_cache_from_legacy_json(self) -> Optional[Dict[str, Any]]:
+        try:
+            if not self._topic_cache_file.exists():
+                return None
+            with self._topic_cache_file.open("r", encoding="utf-8") as f:
+                payload = json.load(f)
+            logger.info(f"{self.log_prefix} 已从旧JSON恢复话题缓存，后续写入数据库")
+            return payload if isinstance(payload, dict) else None
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 加载旧JSON话题缓存失败: {exc}")
+            return None
+
+    def _save_topic_cache_payload(self, data: Dict[str, Any]) -> None:
+        from src.common.database.database import db
+        from src.common.database.database_model import PersistenceSlot
+
+        db.create_tables([PersistenceSlot], safe=True)
+        now = time.time()
+        serialized = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+        PersistenceSlot.insert(
+            slot_key=self._topic_cache_slot_key,
+            slot_value=serialized,
+            birth_ts=now,
+            modify_ts=now,
+            ttl_days=30,
+        ).on_conflict(
+            conflict_target=[PersistenceSlot.slot_key],
+            update={
+                PersistenceSlot.slot_value: serialized,
+                PersistenceSlot.modify_ts: now,
+                PersistenceSlot.ttl_days: 30,
+            },
+        ).execute()
+
+    def _delete_topic_cache_payload(self) -> None:
+        try:
+            from src.common.database.database import db
+            from src.common.database.database_model import PersistenceSlot
+
+            db.create_tables([PersistenceSlot], safe=True)
+            PersistenceSlot.delete().where(
+                PersistenceSlot.slot_key == self._topic_cache_slot_key
+            ).execute()
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 删除数据库话题缓存失败: {exc}")
 
     async def process(self, current_time: Optional[float] = None):
         """

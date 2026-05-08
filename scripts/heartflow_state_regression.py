@@ -1061,6 +1061,112 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
     }
 
 
+def check_admin_identity_not_relationship_contract() -> Dict[str, Any]:
+    from src.modules.modcore.dynamic_persona.emotion_tracker import EmotionTracker
+
+    source = (ROOT / "src/modules/modcore/dynamic_persona/emotion_tracker.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'state.relationship = "管理员"' not in source
+    assert 'state.impression = "管理员"' not in source
+    assert 'return "管理员"' not in source
+    assert "return 100.0" not in source[source.index("def _derive_relationship_score") : source.index("def _derive_relationship_label")]
+    assert "管理员身份，给予信任" not in source
+
+    tracker = EmotionTracker("regression-admin-identity")
+    state = tracker._dict_to_state(
+        {
+            "user_id": "admin-user",
+            "stream_id": "regression-admin-identity",
+            "relationship": "管理员",
+            "last_relationship": "熟人",
+            "impression": "管理员",
+            "trust_score": 88.0,
+        }
+    )
+    assert state.relationship == "熟人"
+    assert state.impression != "管理员"
+    return {
+        "admin_permission_not_relationship": True,
+        "legacy_admin_relationship_normalized": True,
+    }
+
+
+def check_db_backed_json_storage_contract() -> Dict[str, Any]:
+    import asyncio
+    import tempfile
+
+    from src.common.database.database_model import PersistenceSlot
+    from src.hippo_memorizer.summary_storage import SummaryStorage, TopicSummary
+    from src.memory_system.chat_history_summarizer import ChatHistorySummarizer, TopicCacheItem
+    from src.modules.social_value.social_storage import SocialStorage
+
+    hippo_source = (ROOT / "src/hippo_memorizer/summary_storage.py").read_text(encoding="utf-8")
+    summarizer_source = (ROOT / "src/memory_system/chat_history_summarizer.py").read_text(encoding="utf-8")
+    social_source = (ROOT / "src/modules/social_value/social_storage.py").read_text(encoding="utf-8")
+    assert "_save_to_db" in hippo_source
+    assert "atomic_json_dump" not in hippo_source
+    assert "_save_topic_cache_payload" in summarizer_source
+    assert "json.dump(data" not in summarizer_source
+    assert "_persist_sync" in social_source
+    assert "json.dump(data" not in social_source
+    assert "os.makedirs(self._storage_dir" not in social_source
+
+    summary_chat = "regression-hippo-summary"
+    topic_chat = "regression-hippo-topic"
+    social_user = "regression-social-user"
+    social_channel = "regression-social-channel"
+    slot_keys = [
+        f"hippo_summary:{summary_chat}",
+        f"hippo_topic_cache:{topic_chat}",
+        f"social_value:{social_user}:{social_channel}",
+    ]
+    PersistenceSlot.delete().where(PersistenceSlot.slot_key.in_(slot_keys)).execute()
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        storage = SummaryStorage(summary_chat, max_summaries=5)
+        storage._file_path = Path(temp_dir) / f"{summary_chat}_summaries.json"
+        storage.add_summary(
+            TopicSummary(
+                topic="测试话题",
+                summary="测试摘要",
+                keywords=["测试"],
+                key_points=["重点"],
+                participants=["用户"],
+                start_time=1.0,
+                end_time=2.0,
+            )
+        )
+        assert not storage._file_path.exists()
+        assert PersistenceSlot.get_or_none(PersistenceSlot.slot_key == slot_keys[0]) is not None
+
+        summarizer = ChatHistorySummarizer(topic_chat)
+        summarizer._topic_cache_file = Path(temp_dir) / f"{topic_chat}.json"
+        summarizer.topic_cache["测试话题"] = TopicCacheItem(
+            topic="测试话题",
+            messages=["1. 用户: 内容"],
+            participants={"用户"},
+        )
+        summarizer._persist_topic_cache()
+        assert not summarizer._topic_cache_file.exists()
+        assert PersistenceSlot.get_or_none(PersistenceSlot.slot_key == slot_keys[1]) is not None
+
+        social = SocialStorage(storage_dir=str(Path(temp_dir) / "social"))
+        asyncio.run(social.set(social_user, social_channel, 12.5))
+        expected_social_file = Path(temp_dir) / "social" / social_user / f"{social_channel}.json"
+        assert not expected_social_file.exists()
+        social_row = PersistenceSlot.get_or_none(PersistenceSlot.slot_key == slot_keys[2])
+        assert social_row is not None
+        assert '"value":12.5' in social_row.slot_value
+
+    PersistenceSlot.delete().where(PersistenceSlot.slot_key.in_(slot_keys)).execute()
+    return {
+        "hippo_summary_db_slot": True,
+        "hippo_topic_cache_db_slot": True,
+        "social_value_db_slot": True,
+    }
+
+
 def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     msg = type(
         "FakeMessage",
@@ -1189,6 +1295,8 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     assert "if fast_path:" in group_reply_source
     assert "跳过自然化错字和二次改写" in group_reply_source
     assert "跳过补充回复判断" in group_reply_source
+    assert "管理员强制快回" not in group_reply_source
+    assert "直接快回通道" in group_reply_source
     return {
         "local_force_reply_fallback": True,
         "local_force_reply_fallback_varied": True,
@@ -1281,6 +1389,8 @@ def main() -> None:
         "force_guard": check_force_guard_contract(),
         "night_cycle_persistence": check_night_cycle_persistence_contract(),
         "night_soul_prompt": check_night_soul_prompt_contract(),
+        "admin_identity": check_admin_identity_not_relationship_contract(),
+        "db_backed_json_storage": check_db_backed_json_storage_contract(),
         "force_reply_generation_fallback": check_force_reply_generation_fallback_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),

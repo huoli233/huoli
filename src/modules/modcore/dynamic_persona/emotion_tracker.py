@@ -283,12 +283,18 @@ class EmotionTracker:
         trust_value = data.get(
             "trust_value", data.get("trust_score", data.get("trust", 0.0))
         )
+        relationship = str(data.get("relationship", "陌生人") or "陌生人")
+        impression = str(data.get("impression", "初次见面") or "初次见面")
+        if relationship == "管理员":
+            relationship = str(data.get("last_relationship", "") or "").strip() or "陌生人"
+        if impression == "管理员":
+            impression = "初次见面"
         return UserEmotionState(
             user_id=data.get("user_id", ""),
             stream_id=data.get("stream_id", self.stream_id),
             affection=data.get("affection", 0.0),
-            impression=data.get("impression", "初次见面"),
-            relationship=data.get("relationship", "陌生人"),
+            impression=impression,
+            relationship=relationship,
             annoyance=data.get("annoyance", 0.0),
             trust_score=trust_value,
             trauma_score=data.get("trauma_score", 0.0),
@@ -905,8 +911,6 @@ class EmotionTracker:
 
     @staticmethod
     def _derive_relationship_score(state: UserEmotionState) -> float:
-        if state.relationship == "管理员":
-            return 100.0
         score = (
             state.affection * 0.58
             + state.trust_value * 0.32
@@ -919,8 +923,6 @@ class EmotionTracker:
         return max(-100.0, min(100.0, score))
 
     def _derive_relationship_label(self, state: UserEmotionState) -> str:
-        if state.relationship == "管理员":
-            return "管理员"
         score = self._derive_relationship_score(state)
         for threshold, label in _RELATION_THRESHOLDS:
             if score >= threshold:
@@ -928,8 +930,6 @@ class EmotionTracker:
         return _RELATION_THRESHOLDS[-1][1]
 
     def _update_relationship(self, state: UserEmotionState):
-        if state.relationship == "管理员":
-            return
         old_rel = state.relationship
         new_rel = self._derive_relationship_label(state)
         if new_rel != old_rel:
@@ -1829,33 +1829,8 @@ trauma_level 分级：
         now = time.time()
         state = self.get_user_state(user_id, create_if_missing=True)
         self._prepare_state_for_event(user_id, state, now=now, mark_interaction=False)
-        old_affection = state.affection
-        old_trust = state.trust_score
         if is_admin:
-            state.impression = "管理员"
-            state.trust_score = min(100.0, state.trust_score + 5.0)
-            state.trust = state.trust_score
-            state.affection = min(100.0, state.affection + 2.0)
-            state.relationship = "管理员"
-            state.last_interaction = now
-            state.last_state_tick = now
-            state.last_update_time = now
-            self._save_user_state(user_id)
-            return {
-                "annoyance": state.annoyance,
-                "affection": state.affection,
-                "trust": state.trust_value,
-                "trust_value": state.trust_value,
-                "trauma_score": state.trauma_score,
-                "reaction_mode": "normal",
-                "stamina": max(0.0, 100.0 - state.psychological_pressure),
-                "affection_delta": state.affection - old_affection,
-                "trust_delta": state.trust_score - old_trust,
-                "stage": state.training_stage,
-                "sub_level": state.submission_level,
-                "experience_record": "管理员身份，给予信任",
-                "is_test_user": False,
-            }
+            use_llm = False
         if use_llm:
             impact = await self.analyze_cognitive_impact(content, user_id, state)
         else:
