@@ -144,7 +144,6 @@ class HeartFChatting(ChatCoreBase):
         message_data: Optional["DatabaseMessages"],
         selected_expressions: Optional[List[int]] = None,
         quote_message: Optional[bool] = None,
-        main_segment_only: bool = False,
     ) -> str:
         """发送回复到聊天流，由增强链复用。"""
         if message_data is None:
@@ -179,8 +178,6 @@ class HeartFChatting(ChatCoreBase):
                 continue
             data: str = reply_content.content  # type: ignore
             reply_text += data
-            if main_segment_only:
-                break
         if reply_text.strip():
             await send_api.text_to_stream(
                 text=reply_text,

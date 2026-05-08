@@ -118,3 +118,20 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
 - 本轮只应提交 `src/chat/heart_flow/heartFC_chat.py`、`src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py` 和本进度文件；工作区内其他既有差异不属于本轮。
+
+## 2026-05-08 - Task: 多段回复一次性整合发送
+
+### What was done:
+- 将增强心流回复调整为一次性合并 `reply_set` 中的文本段发送，允许多方面内容在同一条回复内自然整合。
+- 取消增强链路收尾阶段对同一批 `reply_set` 后续段的异步补发，避免一条回复被拆成多条连续消息。
+- 移除上轮临时加入的 `main_segment_only` 参数，恢复发送入口的单一职责。
+
+### Testing:
+- `uv run python -m ruff check src/chat/heart_flow/heartFC_chat.py src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py` 通过。
+- `uv run python -m compileall src/chat/heart_flow/heartFC_chat.py src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py` 通过。
+- `uv run python -m compileall src scripts` 通过。
+- `ReadLints` 检查 `src/chat/heart_flow/heartFC_chat.py`、`src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py` 未发现新增问题。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
+- 本轮只应提交 `src/chat/heart_flow/heartFC_chat.py`、`src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py` 和本进度文件；工作区内其他既有差异不属于本轮。

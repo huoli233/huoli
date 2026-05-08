@@ -216,12 +216,7 @@ class EnhancedInteractionCoreMixin:
         acquire_reply_coordinator().remember_bot_utterance(self.stream_id, reply_text)
         self._remember_bot_utterance(reply_text)
         self._record_reply_for_diversity(reply_text)
-        self._spawn(
-            self._dispatch_followup_segments(
-                llm_response=llm_response,
-                target_message=target_message,
-            )
-        )
+        # 增强链路在发送阶段已合并 reply_set 文本段，这里不再异步补发后续段。
         self._register_bot_message_record(
             reply_text=reply_text,
             loop_info=loop_info,
@@ -301,7 +296,6 @@ class EnhancedInteractionCoreMixin:
                 message_data=reply_target,
                 selected_expressions=selected_expressions,
                 quote_message=quote_message,
-                main_segment_only=True,
             )
 
         reply_text = str(reply_text or _guarded_reply_text or "").strip()
