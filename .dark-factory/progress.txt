@@ -135,3 +135,22 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
 - 本轮只应提交 `src/chat/heart_flow/heartFC_chat.py`、`src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py` 和本进度文件；工作区内其他既有差异不属于本轮。
+
+## 2026-05-08T19:14:00 - Task: 状态页实时同步免登录修复
+
+### What was done:
+- 移除状态页前端对 `/api/webui/auth/check` 和 `authReady` 的实时同步门控，恢复页面可见时直接建立实时连接。
+- 将 `/ws/state-monitor` 改为只读公开 WebSocket，保留状态快照、总览、刷新、切换会话和 ping/pong 行为。
+- 同步更新 WebUI smoke 回归契约，明确状态监控 WebSocket 必须支持 public 模式，且前后端不得残留登录门控。
+- 重新构建 `web/dashboard/dist/`，生成最新状态页产物。
+
+### Testing:
+- `uv run python -m ruff check src/webui/routers/websocket/state_monitor.py scripts/webui_smoke_test.py` 通过。
+- `npm run build` 通过，生成最新状态页构建产物。
+- `uv run python scripts/webui_smoke_test.py` 通过，`/ws/state-monitor` public/token/cookie 模式均返回 `state_overview` 并响应 `pong`，`state_monitor_activation.public_state_monitor=true`、`no_auth_gate=true`。
+- `uv run python -m compileall src/webui/routers/websocket/state_monitor.py scripts/webui_smoke_test.py` 通过。
+- 使用临时 WebUI 服务 `http://127.0.0.1:18083/dashboard/` 加无头 Chrome 打开状态页，截图生成成功；服务日志确认免登录建立 `/ws/state-monitor` 连接。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
+- 本轮只应提交 `src/webui/routers/websocket/state_monitor.py`、`scripts/webui_smoke_test.py`、`web/dashboard/src/components/EmotionDashboard/index.tsx`、`web/dashboard/dist/` 和本进度文件；工作区内其他既有差异不属于本轮。

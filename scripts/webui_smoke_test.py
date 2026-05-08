@@ -11,7 +11,6 @@ from typing import Any
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 from starlette.routing import WebSocketRoute
-from starlette.websockets import WebSocketDisconnect
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
@@ -170,14 +169,21 @@ def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
     results = []
     registered = [route.path for route in client.app.routes if isinstance(route, WebSocketRoute)]
 
-    try:
-        with client.websocket_connect("/ws/state-monitor") as websocket:
-            websocket.receive_json()
-        raise AssertionError("State monitor websocket unexpectedly accepted unauthenticated access")
-    except WebSocketDisconnect:
-        pass
-    except Exception:
-        pass
+    with client.websocket_connect("/ws/state-monitor") as websocket:
+        first = websocket.receive_json()
+        if first.get("type") not in {"state_overview", "state_snapshot"}:
+            raise AssertionError(f"Unexpected public state-monitor init message: {first}")
+        payload = first.get("data", {})
+        if first.get("type") == "state_overview":
+            if "updated_at" not in payload or "channels" not in payload:
+                raise AssertionError(f"Unexpected public state-overview shape: {payload}")
+        else:
+            for required_key in ("domains", "presentation", "prediction"):
+                if required_key not in payload:
+                    raise AssertionError(f"Unexpected public state-snapshot shape: missing {required_key}")
+        websocket.send_json({"type": "ping", "data": {}})
+        pong = _expect_message(websocket, "pong")
+        results.append({"path": "/ws/state-monitor", "mode": "public", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
 
     with client.websocket_connect(f"/ws/auth?token={token}") as websocket:
         message = _expect_message(websocket, "auth_success")
@@ -267,15 +273,13 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     )
 
     required_dashboard_fragments = {
-        "activation_gate": "const shouldSyncRealtime = isPageActive && authReady;",
-        "auth_check": 'fetch("/api/webui/auth/check", {',
+        "activation_gate": "const shouldSyncRealtime = isPageActive;",
         "visibility_listener": 'document.addEventListener("visibilitychange", handleActivation);',
         "focus_listener": 'window.addEventListener("focus", handleActivation);',
         "blur_listener": 'window.addEventListener("blur", handleActivation);',
         "inactive_socket_guard": 'if (!shouldSyncRealtime) {\n      setConnectionState("idle");\n      return;\n    }',
         "inactive_poll_guard": 'if (!shouldSyncRealtime || connectionState === "live") {',
         "immediate_refresh": 'socket.send(JSON.stringify({ type: "refresh", data: { channel_id: selectedChannel } }));',
-        "auth_close_silent": 'setErrorMessage("");\n          return;',
     }
     missing_dashboard = [
         name for name, fragment in required_dashboard_fragments.items() if fragment not in dashboard_source
@@ -283,14 +287,25 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     assert not missing_dashboard, f"状态监控前端激活契约缺失: {missing_dashboard}"
     assert "轮询同步失败" not in dashboard_source, "后台轮询失败不应显示到状态页前台"
     assert "状态页保持实时总览待机" not in dashboard_source, "后台 state_error 不应显示成前台错误"
+    assert "authReady" not in dashboard_source, "状态页实时同步不应依赖 WebUI 登录态"
+    assert "/api/webui/auth/check" not in dashboard_source, "状态页不应在建立实时连接前检查登录"
 
-    assert "logger.debug" in state_monitor_source and "已静默关闭" in state_monitor_source, "未认证状态监控 WS 应静默关闭"
-    assert "logger.warning(f\"状态监控 WebSocket 认证失败" not in state_monitor_source, "未认证状态监控 WS 不应打 warning 噪声"
+    forbidden_backend_fragments = [
+        "verify_auth_token_from_cookie_or_header",
+        "get_token_manager",
+        "_authorize_state_monitor_websocket",
+        "Cookie",
+        "Header",
+        "HTTPException",
+    ]
+    remaining_backend_fragments = [fragment for fragment in forbidden_backend_fragments if fragment in state_monitor_source]
+    assert not remaining_backend_fragments, f"状态监控 WebSocket 仍残留认证门控: {remaining_backend_fragments}"
+    assert "await websocket.accept()" in state_monitor_source, "状态监控 WebSocket 应直接接受只读连接"
 
     return {
         "activation_gate": True,
-        "auth_check_before_ws": True,
-        "silent_auth_failure": True,
+        "public_state_monitor": True,
+        "no_auth_gate": True,
     }
 
 

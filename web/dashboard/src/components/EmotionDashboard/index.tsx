@@ -662,7 +662,6 @@ export function EmotionDashboard() {
       (document.visibilityState === "visible" &&
         (typeof document.hasFocus !== "function" || document.hasFocus())),
   );
-  const [authReady, setAuthReady] = useState(false);
   const reconnectTimerRef = useRef<number | null>(null);
   const fallbackPollTimerRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
@@ -738,44 +737,19 @@ export function EmotionDashboard() {
   const selectedScopeLabel = conversationScopeLabel(selectedOverview);
   const predictionPercent =
     prediction?.probability_percent ?? Math.round((prediction?.speak_probability ?? 0) * 100);
-  const shouldSyncRealtime = isPageActive && authReady;
+  const shouldSyncRealtime = isPageActive;
 
   useEffect(() => {
     let ignore = false;
 
-    async function syncActivationState() {
+    function syncActivationState() {
       const visible =
         typeof document === "undefined" ||
         (document.visibilityState === "visible" &&
           (typeof document.hasFocus !== "function" || document.hasFocus()));
       if (!ignore) {
         setIsPageActive(visible);
-      }
-      if (!visible) {
-        if (!ignore) {
-          setAuthReady(false);
-          setConnectionState("idle");
-          setErrorMessage("");
-        }
-        return;
-      }
-
-      try {
-        const response = await fetch("/api/webui/auth/check", {
-          credentials: "same-origin",
-        });
-        const data = response.ok ? await response.json() : null;
-        const authenticated = Boolean(data?.authenticated);
-        if (!ignore) {
-          setAuthReady(authenticated);
-          if (!authenticated) {
-            setConnectionState("idle");
-            setErrorMessage("");
-          }
-        }
-      } catch {
-        if (!ignore) {
-          setAuthReady(false);
+        if (!visible) {
           setConnectionState("idle");
           setErrorMessage("");
         }
@@ -783,13 +757,13 @@ export function EmotionDashboard() {
     }
 
     const handleActivation = () => {
-      void syncActivationState();
+      syncActivationState();
     };
 
     document.addEventListener("visibilitychange", handleActivation);
     window.addEventListener("focus", handleActivation);
     window.addEventListener("blur", handleActivation);
-    void syncActivationState();
+    syncActivationState();
 
     return () => {
       ignore = true;
@@ -957,12 +931,6 @@ export function EmotionDashboard() {
       socket.onclose = (event) => {
         socketRef.current = null;
         if (closedByCleanup) {
-          return;
-        }
-        if (event.code === 4001 || event.code === 4002) {
-          setAuthReady(false);
-          setConnectionState("idle");
-          setErrorMessage("");
           return;
         }
         setConnectionState("reconnecting");
