@@ -90,13 +90,22 @@ def _check_llm_routing_runtime_contract() -> dict[str, object]:
 
     assert openai_params["enable_thinking"] is False
     assert openai_params["chat_template_kwargs"]["enable_thinking"] is False
-    assert openai_params["reasoning_effort"] == "minimal"
+    assert "reasoning_effort" not in openai_params
     assert gemini_params["enable_thinking"] is False
     assert gemini_params["include_thoughts"] is False
     assert gemini_params["thinking_budget"] == 0
     assert explicit_params["enable_thinking"] is True
     assert explicit_params["chat_template_kwargs"]["enable_thinking"] is True
     assert "reasoning_effort" not in explicit_params
+    explicit_effort_model = ModelInfo(
+        name="effort-model",
+        model_identifier="deepseek-ai/DeepSeek-V4-Flash",
+        api_provider="fake-openai",
+        client_type="openai",
+        extra_params={"reasoning_effort": "minimal"},
+    )
+    explicit_effort_params = request._effective_extra_params(explicit_effort_model)
+    assert explicit_effort_params["reasoning_effort"] == "low"
     assert disabled_params["enable_thinking"] is False
     assert disabled_params["chat_template_kwargs"]["enable_thinking"] is False
     assert guarded_messages[0].role == RoleType.System
@@ -110,6 +119,7 @@ def _check_llm_routing_runtime_contract() -> dict[str, object]:
     return {
         "default_no_thinking": True,
         "gemini_thinking_budget": gemini_params["thinking_budget"],
+        "reasoning_effort_minimal_mapped": explicit_effort_params["reasoning_effort"],
         "response_timeout": request._request_timeout_budget(openai_provider, RequestType.RESPONSE),
         "response_retry": request._retry_budget(openai_provider, RequestType.RESPONSE),
     }

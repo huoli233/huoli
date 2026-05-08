@@ -1035,11 +1035,27 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
         "force_reply_generation_timeout",
     )
     assert fallback_response.model == "local_force_reply_fallback"
-    assert fallback_response.content == "看到了，怎么了？"
-    assert fallback_response.processed_output == ["看到了，怎么了？"]
+    assert fallback_response.content != "看到了，怎么了？"
+    assert "刀盾" in fallback_response.content
+    assert fallback_response.processed_output == [fallback_response.content]
     assert fallback_response.reply_set is not None
-    assert fallback_response.reply_set.reply_data[0].content == "看到了，怎么了？"
+    assert fallback_response.reply_set.reply_data[0].content == fallback_response.content
     assert fallback_response.timing["fallback_reason"] == "force_reply_generation_timeout"
+    named_msg = type(
+        "FakeMessage",
+        (),
+        {
+            "processed_plain_text": "爱丽丝",
+            "plain_text": "爱丽丝",
+            "content": "爱丽丝",
+            "user_id": "admin-user",
+        },
+    )()
+    named_fallback = ProactiveReactiveFlowMixin()._build_forced_reply_fallback_response(
+        named_msg,
+        "voice_generation_failed",
+    )
+    assert named_fallback.content in {"在。", "叫我干嘛？", "听着呢，说事。"}
     direct_fallback = ProactiveReactiveFlowMixin()._build_forced_reply_fallback_response(
         msg,
         "direct_fast_reply_generation_timeout",
@@ -1105,6 +1121,7 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     assert "回复后台巡查超时" in interaction_source
     assert "direct_fast_reply_generation_timeout" in flow_source
     assert "强制回复生成失败，已启用本地短兜底" in flow_source
+    assert "看到了，怎么了？" not in flow_source
     assert "_is_direct_reply_fastlane = bool(_is_admin_force_wake or getattr(self, \"_cached_targeted_to_bot\", False))" in loop_source
     assert "if _target_uid and not _is_direct_reply_fastlane" in loop_source
     assert "heartfc_stage25_fast_reply_timeout_seconds" in loop_source
@@ -1132,6 +1149,7 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     assert "跳过补充回复判断" in group_reply_source
     return {
         "local_force_reply_fallback": True,
+        "local_force_reply_fallback_varied": True,
         "admin_model_governor_bypass": True,
         "stale_voice_cache_cleared": True,
         "direct_fast_reply_path": True,

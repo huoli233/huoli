@@ -148,11 +148,44 @@ def audit_registered_tools() -> dict[str, Any]:
     }
 
 
+def audit_reasoning_effort_policy() -> dict[str, Any]:
+    from src.config.api_ada_configs import ModelInfo, TaskConfig
+    from src.llm_models.utils_model import LLMRequest
+
+    request = LLMRequest(TaskConfig(model_list=["siliconflow-deepseek-v4-flash"]), request_type="audit")
+    default_model = ModelInfo(
+        name="siliconflow-deepseek-v4-flash",
+        model_identifier="deepseek-ai/DeepSeek-V4-Flash",
+        api_provider="SiliconFlow",
+        client_type="openai",
+        suppress_reasoning=True,
+    )
+    default_params = request._effective_extra_params(default_model)
+    assert default_params["enable_thinking"] is False
+    assert default_params["chat_template_kwargs"]["enable_thinking"] is False
+    assert "reasoning_effort" not in default_params
+
+    explicit_model = ModelInfo(
+        name="siliconflow-deepseek-v4-flash",
+        model_identifier="deepseek-ai/DeepSeek-V4-Flash",
+        api_provider="SiliconFlow",
+        client_type="openai",
+        extra_params={"reasoning_effort": "minimal"},
+    )
+    explicit_params = request._effective_extra_params(explicit_model)
+    assert explicit_params["reasoning_effort"] == "low"
+    return {
+        "default_suppress_reasoning_uses_prompt_guard": True,
+        "minimal_effort_mapped_to": explicit_params["reasoning_effort"],
+    }
+
+
 def main() -> None:
     result = {
         "model_config": check_runtime_model_config(),
         "data_json_sources": audit_data_json_sources(),
         "registered_tools": audit_registered_tools(),
+        "reasoning_effort_policy": audit_reasoning_effort_policy(),
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

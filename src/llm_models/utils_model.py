@@ -344,6 +344,34 @@ class LLMRequest:
         )
         return any(str(pattern).strip().lower() in haystack for pattern in pattern_list if str(pattern).strip())
 
+    @staticmethod
+    def _normalize_reasoning_effort(model_info: ModelInfo, effort: Any) -> str | None:
+        value = str(effort or "").strip().lower()
+        if not value:
+            return None
+        aliases = {
+            "none": "low",
+            "off": "low",
+            "disabled": "low",
+            "disable": "low",
+            "minimal": "low",
+            "min": "low",
+            "lite": "low",
+            "normal": "medium",
+            "default": "medium",
+            "standard": "medium",
+            "maximal": "max",
+            "maximum": "max",
+            "xhigh": "max",
+        }
+        normalized = aliases.get(value, value)
+        if normalized in {"low", "medium", "high", "max"}:
+            return normalized
+        logger.debug(
+            f"模型 {getattr(model_info, 'name', '')} 的 reasoning_effort={effort!r} 不兼容，已忽略"
+        )
+        return None
+
     def _thinking_explicitly_enabled(self, model_info: ModelInfo) -> bool:
         extra_params = dict(getattr(model_info, "extra_params", {}) or {})
         if bool(extra_params.get("enable_thinking") is True or extra_params.get("thinking_enabled") is True):
@@ -398,8 +426,13 @@ class LLMRequest:
             chat_template_kwargs = dict(extra_params.get("chat_template_kwargs") or {})
             chat_template_kwargs["enable_thinking"] = thinking_enabled
             extra_params["chat_template_kwargs"] = chat_template_kwargs
-            if not thinking_enabled:
-                extra_params["reasoning_effort"] = "minimal"
+            configured_effort = extra_params.get("reasoning_effort")
+            if configured_effort is not None:
+                normalized_effort = self._normalize_reasoning_effort(model_info, configured_effort)
+                if normalized_effort:
+                    extra_params["reasoning_effort"] = normalized_effort
+                else:
+                    extra_params.pop("reasoning_effort", None)
         return extra_params
 
     def _request_timeout_budget(self, api_provider: APIProvider, request_type: RequestType) -> float:

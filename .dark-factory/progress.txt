@@ -469,3 +469,25 @@
 - `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
 - 本轮不删除历史 `data/night_cycle_state/*.json` 和其他历史 JSON 文件，只停止夜间状态后续新增 JSON；结构性清理历史文件需单独确认并遵守删除分支规则。
 - 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T06:02:38+08:00 - Task: 修复 V4 Flash reasoning_effort 400 与强制回复兜底复读
+
+### What was done:
+- 修复 OpenAI 兼容模型请求参数：默认 `suppress_reasoning=true` 不再自动下发 `reasoning_effort=minimal`，避免 SiliconFlow/SGLang 返回 400。
+- 增加 `reasoning_effort` 显式配置兼容映射，将 `minimal/min/none/off` 等别名规整到 OpenAI 兼容的 `low`，非法值直接忽略。
+- 保留无思考系统提示和 `enable_thinking=false/chat_template_kwargs.enable_thinking=false`，继续控制不输出推理内容。
+- 修复强制回复本地短兜底固定返回“看到了，怎么了？”的问题，改为按目标消息内容选择短句；“我的刀盾”等重复短句会返回包含刀盾语义的变化兜底。
+- 更新配置回归、模型运行审计和 HeartFlow 回归契约，锁定 `reasoning_effort` 兼容策略和本地兜底去复读。
+
+### Testing:
+- `uv run ruff check src\llm_models\utils_model.py src\chat\heart_flow\enhanced_modules\proactive_reactive_flow_mixin.py scripts\config_profile_regression.py scripts\heartflow_state_regression.py scripts\model_runtime_audit.py` 通过。
+- `uv run python -` 针对性 smoke 通过，确认 V4 Flash 默认请求不含 `reasoning_effort`，显式 `minimal` 映射为 `low`，刀盾兜底不再是“看到了，怎么了？”。
+- `uv run python scripts\model_runtime_audit.py` 通过，输出 `reasoning_effort_policy.default_suppress_reasoning_uses_prompt_guard=true`、`minimal_effort_mapped_to=low`。
+- `uv run python scripts\config_profile_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，输出 `local_force_reply_fallback_varied=true`。
+- `uv run python -m compileall -q src scripts` 通过，使用临时 `PYTHONPYCACHEPREFIX`。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 本轮根因是回复已进入强制生成，但 V4 Flash 请求携带 `reasoning_effort=minimal` 被接口拒绝，生成失败后才触发固定本地短兜底。
+- 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。

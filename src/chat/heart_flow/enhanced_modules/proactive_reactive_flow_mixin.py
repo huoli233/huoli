@@ -62,7 +62,45 @@ class ProactiveReactiveFlowMixin:
         text = re.sub(r"\s+", " ", str(raw_text or "")).strip()
         if not text:
             return "看到了。"
-        return "看到了，怎么了？"
+        lowered = text.lower()
+        if "刀盾" in text:
+            candidates = (
+                "刀盾又到了，你想让我接哪句？",
+                "还在刀盾，换个说法我才好接。",
+                "刀盾我看见了，别只丢这四个字。",
+            )
+        elif "爱丽丝" in text:
+            candidates = (
+                "在。",
+                "叫我干嘛？",
+                "听着呢，说事。",
+            )
+        elif any(marker in text for marker in ("?", "？", "什么", "怎么", "为啥", "为什么")):
+            candidates = (
+                "你这句问得太短了，补半句。",
+                "我看见问题了，你具体指哪块？",
+                "说清楚点，我再接。",
+            )
+        elif lowered in {"hi", "hello", "hey"} or text in {"你好", "在吗", "在不在"}:
+            candidates = (
+                "在。",
+                "嗯，在听。",
+                "说吧。",
+            )
+        elif len(text) <= 6:
+            candidates = (
+                f"{text}，然后呢？",
+                "就这几个字？补一句。",
+                "看到了，你想让我怎么接？",
+            )
+        else:
+            candidates = (
+                "看到了，你继续说。",
+                "收到，这句我先记着。",
+                "嗯，我看见了。",
+            )
+        index = sum(ord(ch) for ch in text) % len(candidates)
+        return candidates[index]
 
     def _build_forced_reply_fallback_response(self, target_message: Any, failure_reason: str) -> Any:
         from src.common.data_models.llm_data_model import LLMGenerationDataModel
