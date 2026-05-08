@@ -59,6 +59,15 @@ price_out = 3.0
 [models.extra_params] # 可选的额外参数配置
 enable_thinking = false # 不启用思考
 
+[[models]]
+model_identifier = "deepseek-ai/DeepSeek-V4-Flash"
+name = "siliconflow-deepseek-v4-flash"
+api_provider = "SiliconFlow"
+price_in = 0
+price_out = 0
+[models.extra_params] # 可选的额外参数配置
+enable_thinking = false # 不启用思考
+
 
 [[models]]
 model_identifier = "deepseek-ai/DeepSeek-V3.2-Exp"
@@ -150,7 +159,7 @@ slow_threshold = 10.0
 selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
 [model_task_config.replyer] # 首要回复模型，还用于表达方式学习
-model_list = ["siliconflow-deepseek-v3.2","siliconflow-deepseek-v3.2-think","siliconflow-glm-4.6","siliconflow-glm-4.6-think"]
+model_list = ["siliconflow-deepseek-v4-flash"]
 temperature = 0.3                        # 模型温度，新V3建议0.1-0.3
 max_tokens = 2048
 slow_threshold = 25.0

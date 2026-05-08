@@ -361,3 +361,23 @@
 - `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
 - 本轮只应提交 `.dark-factory/progress.txt`、配置/模板、HeartFlow 回归脚本、配置回归脚本、`interaction_core_mixin.py`、`runtime_integration_lifecycle_mixin.py`、`heartfc_state_exporter.py`、`night_cycle_system.py`。
 - 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T03:36:00+08:00 - Task: 回复构建模型切换为硅基流动 DeepSeek V4 Flash
+
+### What was done:
+- 在本地运行配置 `config/model_config.toml` 新增 `siliconflow-deepseek-v4-flash`，绑定 `deepseek-ai/DeepSeek-V4-Flash` 与 `SiliconFlow` provider。
+- 将实际运行入口 `[model_task_config.replyer]` 从本地 `qwen3.6-35b-a3b-apex` 切换为 `siliconflow-deepseek-v4-flash`，避免回复构建继续走本地 35B 模型超时。
+- 同步更新本地备用配置 `config/model_config_optimized.toml` 的 replyer 指向，避免后续切配置时回退到 Gemini replyer。
+- 更新无密钥模板 `template/model_config_template.toml`，保留新模型别名和 replyer 默认指向；真实 API key 只留在被 `.gitignore` 忽略的本地配置中，不提交进仓库。
+
+### Testing:
+- `.venv\Scripts\python.exe -` 解析 `config/model_config.toml`、`config/model_config_optimized.toml`、`template/model_config_template.toml` 通过，确认 replyer 均为 `siliconflow-deepseek-v4-flash`，模型标识均为 `deepseek-ai/DeepSeek-V4-Flash`，provider 均为 `SiliconFlow`。
+- `.venv\Scripts\python.exe -` 通过 `src.config.config.model_config` 实际加载配置，确认运行时 replyer、模型标识和 SiliconFlow base_url 正确。
+- `.venv\Scripts\ruff.exe check src\config\config.py src\llm_models\utils_model.py` 通过。
+- `.venv\Scripts\python.exe scripts\config_profile_regression.py` 通过。
+- `.venv\Scripts\python.exe -m compileall src\config src\llm_models` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- `config/model_config.toml` 和 `config/model_config_optimized.toml` 是 `.gitignore` 中的本地密钥配置文件，本轮只提交模板和进度记录，不把真实 API key 加入 Git。
+- 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
