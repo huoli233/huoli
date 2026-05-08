@@ -1473,11 +1473,22 @@ class EnhancedInteractionCoreMixin:
         verdict = ModelGovernorVerdict()
         reason_codes: List[str] = []
         batch = list(incoming_batch or [])
+        admin_force = bool(getattr(self, "_is_admin_forced", False))
+        if not admin_force:
+            try:
+                admin_force = bool(self._is_force_wake_admin(batch, pinged_msg))
+            except Exception as exc:
+                logger.debug(f"{self.log_prefix} 模型Governor管理员识别失败: {exc}")
+                admin_force = False
         targeted = bool(
             pinged_msg is not None
             or self._has_targeted_bot_message(batch)
             or bool(getattr(self, "_cached_targeted_to_bot", False))
+            or admin_force
         )
+        if admin_force and desired_level <= 0:
+            desired_level = 1
+            reason_codes.append("admin_force_model_bypass")
 
         if behavior_verdict is not None and str(getattr(behavior_verdict, "model_tier", "") or "").strip() == "skip" and not targeted:
             verdict.tier = "skip"

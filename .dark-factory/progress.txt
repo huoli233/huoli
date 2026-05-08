@@ -218,3 +218,21 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
 - 本轮只应提交 `.dark-factory/progress.txt`、`scripts/heartflow_state_regression.py`、`scripts/webui_smoke_test.py`、`src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py`、`src/chat/heart_flow/enhanced_modules/proactive_context_prompt_mixin.py`、`src/webui/routers/websocket/state_monitor.py`、`web/dashboard/src/components/EmotionDashboard/index.tsx`、`web/dashboard/dist/index.html`、`web/dashboard/dist/assets/index-DvvvgvGn.js`；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 和旧 dist asset 不属于本轮。
+
+## 2026-05-09T00:34:34+08:00 - Task: 管理员强制回复模型失败兜底
+
+### What was done:
+- 修复管理员极速通道跳过独白后仍可能沿用上一轮 `_cached_voice` 的问题，管理员消息本轮显式清空独白结论，避免旧的 rest/lurk/skip 意图影响强制回复。
+- 修复模型 Governor 在管理员强制消息上被 `behavior_model_skip` 降成 skip 的问题，管理员强制消息会按 targeted 信号处理，并在动态阈值为 0 时提升到 small。
+- 为 `voice_driven_reply` 的 force_reply/admin 路径增加 35 秒可配置生成超时和本地短回复兜底，模型 500/超时/空回复时不再整轮 no_reply。
+- 增加 Heartflow 回归契约，覆盖管理员模型 Governor bypass、强制回复本地兜底和管理员不复用旧独白缓存。
+
+### Testing:
+- `uv run python -m ruff check scripts/heartflow_state_regression.py src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `force_reply_generation_fallback` 契约返回 true。
+- `uv run python -m compileall src scripts` 通过。
+- 本轮不涉及 UI 修改，未执行浏览器验证。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
+- 本轮只应提交 `.dark-factory/progress.txt`、`scripts/heartflow_state_regression.py`、`src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py`、`src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py`、`src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py`；工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。

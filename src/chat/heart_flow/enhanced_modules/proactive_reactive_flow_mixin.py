@@ -51,6 +51,35 @@ if TYPE_CHECKING:
     from src.chat.proactive.proactive_decider import ProactiveDecision
 
 class ProactiveReactiveFlowMixin:
+    @staticmethod
+    def _build_forced_reply_fallback_text(target_message: Any) -> str:
+        raw_text = (
+            getattr(target_message, "processed_plain_text", "")
+            or getattr(target_message, "plain_text", "")
+            or getattr(target_message, "content", "")
+            or ""
+        )
+        text = re.sub(r"\s+", " ", str(raw_text or "")).strip()
+        if not text:
+            return "看到了。"
+        return "看到了，怎么了？"
+
+    def _build_forced_reply_fallback_response(self, target_message: Any, failure_reason: str) -> Any:
+        from src.common.data_models.llm_data_model import LLMGenerationDataModel
+        from src.common.data_models.message_data_model import ReplySetModel
+
+        fallback_text = self._build_forced_reply_fallback_text(target_message)
+        reply_set = ReplySetModel()
+        reply_set.add_text_content(fallback_text)
+        return LLMGenerationDataModel(
+            content=fallback_text,
+            model="local_force_reply_fallback",
+            selected_expressions=[],
+            reply_set=reply_set,
+            processed_output=[fallback_text],
+            timing={"fallback_reason": str(failure_reason or "forced_reply_generation_failed")},
+        )
+
     async def _execute_voice_driven_reply(
         self,
         voice_conclusion: Any,
@@ -225,7 +254,9 @@ class ProactiveReactiveFlowMixin:
 
             from src.chat.heart_flow.reply_coordinator import acquire_reply_coordinator
 
-            success, llm_response = await acquire_reply_coordinator().generate_reply(
+            force_generation_fallback = bool(force_bypass or getattr(self, "_is_admin_forced", False))
+            generation_failure_reason = "voice_generation_failed"
+            reply_generation = acquire_reply_coordinator().generate_reply(
                 channel_id=self.stream_id,
                 chat_stream=self.chat_stream,
                 action_modifier=self.action_modifier,
@@ -236,12 +267,32 @@ class ProactiveReactiveFlowMixin:
                 request_type="voice_driven_reply",
                 think_level=1,
             )
+            if force_generation_fallback:
+                try:
+                    success, llm_response = await asyncio.wait_for(
+                        reply_generation,
+                        timeout=_rt_float("heartfc_force_reply_generation_timeout_seconds", 35.0),
+                    )
+                except asyncio.TimeoutError:
+                    success = False
+                    llm_response = None
+                    generation_failure_reason = "force_reply_generation_timeout"
+                    logger.warning(f"{self.log_prefix} 💭 强制回复生成超时，启用本地短兜底")
+            else:
+                success, llm_response = await reply_generation
 
             if not success or not llm_response or not llm_response.reply_set:
-                self._last_flow_blocker = "voice回复生成失败"
-                self._mark_message_content_deferred(target_message, "voice_generation_failed")
-                logger.warning(f"{self.log_prefix} 💭 回复生成失败")
-                return False
+                if force_generation_fallback:
+                    llm_response = self._build_forced_reply_fallback_response(target_message, generation_failure_reason)
+                    success = True
+                    logger.warning(
+                        f"{self.log_prefix} 💭 强制回复生成失败，已启用本地短兜底: {generation_failure_reason}"
+                    )
+                else:
+                    self._last_flow_blocker = "voice回复生成失败"
+                    self._mark_message_content_deferred(target_message, "voice_generation_failed")
+                    logger.warning(f"{self.log_prefix} 💭 回复生成失败")
+                    return False
 
             response_set = llm_response.reply_set
             selected_expressions = llm_response.selected_expressions

@@ -969,12 +969,14 @@ class LoopMainDriverMixin:
         # ── 阶段 3+4+4.5：感知、内心独白、关系度 —— 并行 ──
         _t345 = time.time()
         ambient_info = self._sample_channel_ambient()
-        run_perception = self._should_run_perception(now)
-        run_voice = self._should_run_voice(now, incoming_batch, pinged_msg)
+        _is_admin_msg = self._is_force_wake_admin(incoming_batch, pinged_msg)
+        run_perception = False if _is_admin_msg else self._should_run_perception(now)
+        run_voice = False if _is_admin_msg else self._should_run_voice(now, incoming_batch, pinged_msg)
         # 窥屏态升级复用：如果窥屏态 LLM 已决定 reply/followup 且缓存有效，跳过重复独白
         _peek_voice_reuse = False
         if (
-            self._peek_mode_active
+            not _is_admin_msg
+            and self._peek_mode_active
             and
             self._cached_voice is not None
             and getattr(self._cached_voice, "is_valid", False)
@@ -986,10 +988,7 @@ class LoopMainDriverMixin:
             f"{self.log_prefix} 🔄 阶段3+4启动 感知={run_perception} 独白={run_voice}"
             + (" (窥屏态verdict复用)" if _peek_voice_reuse else "")
         )
-        _is_admin_msg = self._is_force_wake_admin(incoming_batch, pinged_msg)
         if _is_admin_msg:
-            run_perception = False
-            run_voice = False
             logger.info(f"{self.log_prefix} 👑 管理员极速通道: 跳过观察+独白")
 
         # 组装并行任务列表
@@ -1045,7 +1044,7 @@ class LoopMainDriverMixin:
             awareness_snapshot = {"perception_missing": True}
 
         # 拆包内心独白结果
-        voice_conclusion = self._cached_voice
+        voice_conclusion = None if _is_admin_msg else self._cached_voice
         if run_voice:
             _vval = _result_map.get("voice")
             if isinstance(_vval, BaseException):

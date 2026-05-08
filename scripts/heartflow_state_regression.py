@@ -16,8 +16,11 @@ from src.chat.heart_flow.heartfc_state_exporter import (
     list_heartfc_chats,
 )
 from src.chat.heart_flow.enhanced_modules.proactive_context_prompt_mixin import ProactiveContextPromptMixin
+from src.chat.heart_flow.enhanced_modules.proactive_reactive_flow_mixin import ProactiveReactiveFlowMixin
 from src.chat.heart_flow.enhanced_modules.scene_context_analysis_mixin import SceneContextAnalysisMixin
 from src.chat.heart_flow.enhanced_modules.strategy_relation_style_mixin import StrategyRelationStyleMixin
+from src.chat.heart_flow.enhanced_modules.interaction_core_mixin import EnhancedInteractionCoreMixin
+from src.chat.heart_flow.enhanced_modules.shared_runtime import BehaviorGovernorVerdict
 from src.chat.heart_flow.speak_prediction_engine import SpeakPredictionEngine
 from src.chat.proactive.perception_engine import _RelationGauge
 from src.core.content_state_tracker import (
@@ -796,6 +799,7 @@ def check_force_guard_contract() -> Dict[str, Any]:
     assert "管理员强制唤醒受硬保护限制" in loop_source
     assert "_action in (\"deep_sleep\", \"hard_block\")" in loop_source
     assert "_action == \"sleep_resist\" and not self._is_force_wake_admin" in loop_source
+    assert "voice_conclusion = None if _is_admin_msg else self._cached_voice" in loop_source
 
     hard_block_idx = lifecycle_source.index("if not _ncs_cap.evaluate_sleep_reply_budget()")
     deep_sleep_idx = lifecycle_source.index("if _composite >= _collapse * 1.1")
@@ -806,6 +810,76 @@ def check_force_guard_contract() -> Dict[str, Any]:
         "admin_content_hard_guard": True,
         "admin_soft_guard_bypass": True,
         "night_hard_block_before_admin": True,
+    }
+
+
+def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
+    msg = type(
+        "FakeMessage",
+        (),
+        {
+            "processed_plain_text": "我的刀盾",
+            "plain_text": "我的刀盾",
+            "content": "我的刀盾",
+            "user_id": "admin-user",
+        },
+    )()
+    fallback_response = ProactiveReactiveFlowMixin()._build_forced_reply_fallback_response(
+        msg,
+        "force_reply_generation_timeout",
+    )
+    assert fallback_response.model == "local_force_reply_fallback"
+    assert fallback_response.content == "看到了，怎么了？"
+    assert fallback_response.processed_output == ["看到了，怎么了？"]
+    assert fallback_response.reply_set is not None
+    assert fallback_response.reply_set.reply_data[0].content == "看到了，怎么了？"
+    assert fallback_response.timing["fallback_reason"] == "force_reply_generation_timeout"
+
+    probe = type(
+        "ModelGovernorProbe",
+        (EnhancedInteractionCoreMixin,),
+        {
+            "stream_id": "force-reply-governor-regression",
+            "log_prefix": "[regression]",
+            "_is_admin_forced": True,
+            "_has_targeted_bot_message": lambda self, messages: False,
+            "_is_force_wake_admin": lambda self, incoming_batch, pinged_msg=None: True,
+            "_current_hourly_proactive_reply_count": lambda self, now=None: 0,
+            "_has_recent_human_activity": lambda self, window_sec=180.0: True,
+        },
+    )()
+    probe._unanswered_bot_turns = 0
+    probe._chatterbox_penalty = 0.0
+    probe._consecutive_speaks = 0.0
+    probe._model_large_hour_window_start = 0.0
+    probe._model_large_last_ts = 0.0
+    probe._model_large_proactive_hour_calls = 0
+    verdict = probe._evaluate_model_governor(
+        now=123.0,
+        desired_level=0,
+        incoming_batch=[msg],
+        pinged_msg=None,
+        is_proactive=False,
+        source="reactive_decision",
+        behavior_verdict=BehaviorGovernorVerdict(
+            reply_mode="observe",
+            allow_generation=False,
+            model_tier="skip",
+        ),
+    )
+    assert verdict.tier == "small"
+    assert "admin_force_model_bypass" in verdict.upgrade_reason_codes
+    assert "behavior_model_skip" not in verdict.upgrade_reason_codes
+
+    flow_source = (ROOT / "src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    assert "heartfc_force_reply_generation_timeout_seconds" in flow_source
+    assert "强制回复生成失败，已启用本地短兜底" in flow_source
+    return {
+        "local_force_reply_fallback": True,
+        "admin_model_governor_bypass": True,
+        "stale_voice_cache_cleared": True,
     }
 
 
@@ -877,6 +951,7 @@ def main() -> None:
         "dynamic_personal_impression": check_dynamic_personal_impression_contract(),
         "content_state_scope": check_content_state_scope_contract(),
         "force_guard": check_force_guard_contract(),
+        "force_reply_generation_fallback": check_force_reply_generation_fallback_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),
         "webui": check_webui_contract(),
