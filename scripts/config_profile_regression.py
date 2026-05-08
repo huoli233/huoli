@@ -11,6 +11,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from src.config.core_config_engine import CoreSettingsHub
+from src.config.api_ada_configs import APIProvider, ModelInfo, TaskConfig
+from src.llm_models.payload_content.message import Message, RoleType
+from src.llm_models.utils_model import LLMRequest, RequestType
 
 
 def _write(path: Path, content: str) -> None:
@@ -34,6 +37,82 @@ flirt = {flirt_multiplier}
 category = "hostile"
 bonus = {existence_threat_bonus}
 """.strip()
+
+
+def _check_llm_routing_runtime_contract() -> dict[str, object]:
+    request = LLMRequest(
+        TaskConfig(model_list=["fast-openai"]),
+        request_type="replyer",
+    )
+    openai_provider = APIProvider(
+        name="fake-openai",
+        base_url="http://127.0.0.1/v1",
+        api_key="test-key",
+        max_retry=3,
+        timeout=120,
+        retry_interval=9,
+    )
+    openai_model = ModelInfo(
+        name="fast-openai",
+        model_identifier="fast-openai",
+        api_provider="fake-openai",
+        client_type="openai",
+    )
+    gemini_model = ModelInfo(
+        name="fast-gemini",
+        model_identifier="gemini-2.5-flash",
+        api_provider="fake-gemini",
+        client_type="gemini",
+    )
+    explicit_thinking_model = ModelInfo(
+        name="deep-openai",
+        model_identifier="deep-openai",
+        api_provider="fake-openai",
+        client_type="openai",
+        extra_params={"enable_thinking": True},
+    )
+    disabled_by_pattern_model = ModelInfo(
+        name="qwen-deep",
+        model_identifier="qwen-deep",
+        api_provider="fake-openai",
+        client_type="openai",
+        extra_params={"enable_thinking": True},
+    )
+
+    openai_params = request._effective_extra_params(openai_model)
+    gemini_params = request._effective_extra_params(gemini_model)
+    explicit_params = request._effective_extra_params(explicit_thinking_model)
+    disabled_params = request._effective_extra_params(disabled_by_pattern_model)
+    guarded_messages = request._with_no_thinking_guard(
+        [Message(RoleType.User, "hello")],
+        openai_model,
+    )
+
+    assert openai_params["enable_thinking"] is False
+    assert openai_params["chat_template_kwargs"]["enable_thinking"] is False
+    assert openai_params["reasoning_effort"] == "minimal"
+    assert gemini_params["enable_thinking"] is False
+    assert gemini_params["include_thoughts"] is False
+    assert gemini_params["thinking_budget"] == 0
+    assert explicit_params["enable_thinking"] is True
+    assert explicit_params["chat_template_kwargs"]["enable_thinking"] is True
+    assert "reasoning_effort" not in explicit_params
+    assert disabled_params["enable_thinking"] is False
+    assert disabled_params["chat_template_kwargs"]["enable_thinking"] is False
+    assert guarded_messages[0].role == RoleType.System
+    assert "常规快速推理" in str(guarded_messages[0].content)
+    assert request._request_timeout_budget(openai_provider, RequestType.RESPONSE) == 17.0
+    assert request._request_timeout_budget(openai_provider, RequestType.EMBEDDING) == 9.0
+    assert request._request_timeout_budget(openai_provider, RequestType.AUDIO) == 11.0
+    assert request._retry_budget(openai_provider, RequestType.RESPONSE) == 1
+    assert request._retry_budget(openai_provider, RequestType.EMBEDDING) == 2
+    assert request._retry_sleep_seconds(openai_provider, RequestType.RESPONSE) == 1.25
+    return {
+        "default_no_thinking": True,
+        "gemini_thinking_budget": gemini_params["thinking_budget"],
+        "response_timeout": request._request_timeout_budget(openai_provider, RequestType.RESPONSE),
+        "response_retry": request._retry_budget(openai_provider, RequestType.RESPONSE),
+    }
 
 
 def _config(value: float) -> str:
@@ -77,6 +156,13 @@ extra_info_max_tokens = 72
 model_cooldown_seconds = 77.0
 model_fail_threshold = 4
 disable_thinking_for = ["qwen"]
+response_request_timeout_seconds = 17.0
+response_request_timeout_floor_seconds = 4.0
+embedding_request_timeout_seconds = 9.0
+audio_request_timeout_seconds = 11.0
+response_max_retry = 1
+background_max_retry = 2
+response_retry_interval_cap_seconds = 1.25
 
 [profile_mapping.semantic_domains.schedule]
 proactive_reply_cooldown_seconds = 45.0
@@ -766,8 +852,15 @@ def main() -> None:
         assert hub.assemble_scheduler_config()["task_cancel_timeout_sec"] == 7.0
         model_routing = hub.resolve_module_view("model_routing")
         assert model_routing.values["model_fail_threshold"] == 4
+        assert model_routing.values["response_request_timeout_seconds"] == 17.0
+        assert model_routing.values["embedding_request_timeout_seconds"] == 9.0
+        assert model_routing.values["audio_request_timeout_seconds"] == 11.0
+        assert model_routing.values["response_max_retry"] == 1
+        assert model_routing.values["background_max_retry"] == 2
+        assert model_routing.values["response_retry_interval_cap_seconds"] == 1.25
         assert model_routing.edit_scope == "mixed"
         assert model_routing.user_editable_keys == ("complexity_threshold", "skip_low_value_threshold", "high_risk_threshold")
+        llm_runtime = _check_llm_routing_runtime_contract()
         runtime_tuning = hub.resolve_module_view("runtime_tuning")
         assert runtime_tuning.values["autosave_interval_seconds"] == 321.0
         assert runtime_tuning.edit_scope == "mixed"
@@ -941,6 +1034,9 @@ def main() -> None:
             "schedule_edit_scope": schedule.edit_scope,
             "schedule_cooldown_sec": hub.assemble_scheduler_config()["cooldown_sec"],
             "model_fail_threshold": model_routing.values["model_fail_threshold"],
+            "llm_default_no_thinking": llm_runtime["default_no_thinking"],
+            "llm_response_timeout": llm_runtime["response_timeout"],
+            "llm_response_retry": llm_runtime["response_retry"],
             "model_routing_scope": model_routing.edit_scope,
             "runtime_tuning_scope": runtime_tuning.edit_scope,
             "context_reply_tokens": hub.resolve_module_view("context").values["reply_context_max_tokens"],

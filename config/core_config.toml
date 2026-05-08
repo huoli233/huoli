@@ -404,6 +404,13 @@ large_model_path = "large"
 model_cooldown_seconds = 120.0
 model_fail_threshold = 3
 tool_incompat_cooldown_seconds = 600.0
+response_request_timeout_seconds = 18.0
+response_request_timeout_floor_seconds = 5.0
+embedding_request_timeout_seconds = 12.0
+audio_request_timeout_seconds = 20.0
+response_max_retry = 1
+background_max_retry = 2
+response_retry_interval_cap_seconds = 2.0
 
 [profile_mapping.semantic_domains.schedule]
 backend_event_cooldown_seconds = 60.0

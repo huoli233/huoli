@@ -47,3 +47,21 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
 - 本轮只应提交 `scripts/heartflow_state_regression.py`、`src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py`、`src/chat/heart_flow/enhanced_modules/proactive_context_prompt_mixin.py`、`src/chat/heart_flow/enhanced_modules/scene_bot_lifecycle_mixin.py` 和本进度文件；工作区内已有文档删除、`.gitmessage-cn.txt` 删除和 `.trae/` 不属于本轮。
+
+## 2026-05-08T09:21:00 - Task: 模型响应时间与默认非思考模式收口
+
+### What was done:
+- 在模型路由配置中新增响应、嵌入、音频请求超时上限，以及响应/后台任务重试上限和响应重试间隔上限。
+- 将常规模型请求默认收口为非思考模式：OpenAI 兼容请求注入 `enable_thinking=false`、`chat_template_kwargs.enable_thinking=false`、`reasoning_effort=minimal`，Gemini 请求注入 `include_thoughts=false`、`thinking_budget=0`。
+- 只有模型显式配置 `enable_thinking=true` / `thinking_enabled=true` 或命中 `model_routing.enable_thinking_for` 时才允许思考；`disable_thinking_for` 和 `suppress_reasoning` 会强制覆盖显式启用。
+- 关闭 OpenAI SDK 内部自动重试，统一由外层请求预算控制，避免响应耗时不可控。
+- 同步更新 `template/core_config_template.toml`，保证新环境从模板生成配置时也具备相同默认值。
+
+### Testing:
+- `uv run python -m ruff check src/llm_models/utils_model.py src/llm_models/model_client/openai_client.py src/llm_models/model_client/gemini_client.py scripts/config_profile_regression.py` 通过。
+- `uv run python scripts/config_profile_regression.py` 通过，新增 `llm_default_no_thinking=true`、`llm_response_timeout=17.0`、`llm_response_retry=1` 运行时断言。
+- `uv run python -m compileall src/llm_models scripts/config_profile_regression.py` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，无法执行 `passes`/`completedAt` 状态更新；未创建伪任务文件。
+- 本轮只应提交 `config/core_config.toml`、`template/core_config_template.toml`、`scripts/config_profile_regression.py`、`src/llm_models/utils_model.py`、`src/llm_models/model_client/openai_client.py`、`src/llm_models/model_client/gemini_client.py` 和本进度文件；工作区内已有前端构建、文档删除、`.gitmessage-cn.txt` 删除和 `.trae/` 不属于本轮。

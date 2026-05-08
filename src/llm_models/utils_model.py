@@ -13,7 +13,7 @@ from src.common.logger import get_logger
 from src.common.task_utils import safe_create_task
 from src.config.config import model_config
 from src.config.api_ada_configs import APIProvider, ModelInfo, TaskConfig
-from .payload_content.message import MessageBuilder, Message
+from .payload_content.message import MessageBuilder, Message, RoleType
 from .payload_content.resp_format import RespFormat
 from .payload_content.tool_option import (
     ToolOption,
@@ -36,6 +36,13 @@ from .exceptions import (
 install(extra_lines=3)
 
 logger = get_logger("模型工具")
+
+_DEFAULT_NO_THINKING_SYSTEM_PROMPT = (
+    "运行模式：常规快速推理。不要进入或输出思考模式，不要生成 <think>...</think>、"
+    "Thinking Process、reasoning_content 或任何推理过程；只输出最终答复。"
+    "只有模型配置显式 enable_thinking=true / thinking_enabled=true，或 model_routing.enable_thinking_for 命中时，才允许使用思考模式。"
+)
+_NO_THINKING_GUARD_MARKER = "运行模式：常规快速推理"
 
 # 全局模型可用性追踪器：记录各模型的失败计数和冷却截止时间
 _model_health_ledger: Dict[str, Dict[str, Any]] = {}
@@ -337,18 +344,105 @@ class LLMRequest:
         )
         return any(str(pattern).strip().lower() in haystack for pattern in pattern_list if str(pattern).strip())
 
-    def _should_suppress_reasoning(self, model_info: ModelInfo) -> bool:
+    def _thinking_explicitly_enabled(self, model_info: ModelInfo) -> bool:
+        extra_params = dict(getattr(model_info, "extra_params", {}) or {})
+        if bool(extra_params.get("enable_thinking") is True or extra_params.get("thinking_enabled") is True):
+            return True
         routing = self._model_routing_values()
-        return bool(getattr(model_info, "suppress_reasoning", False)) or self._model_matches(
-            model_info,
-            routing.get("disable_thinking_for", []),
-        )
+        return self._model_matches(model_info, routing.get("enable_thinking_for", []))
+
+    def _thinking_enabled_for_request(self, model_info: ModelInfo) -> bool:
+        if bool(getattr(model_info, "suppress_reasoning", False)):
+            return False
+        routing = self._model_routing_values()
+        if self._model_matches(model_info, routing.get("disable_thinking_for", [])):
+            return False
+        return self._thinking_explicitly_enabled(model_info)
+
+    def _should_suppress_reasoning(self, model_info: ModelInfo) -> bool:
+        return not self._thinking_enabled_for_request(model_info)
+
+    def _with_no_thinking_guard(self, messages: List[Message], model_info: ModelInfo) -> List[Message]:
+        if not self._should_suppress_reasoning(model_info):
+            return messages
+        for index, item in enumerate(messages):
+            if item.role == RoleType.System and isinstance(item.content, str):
+                if _NO_THINKING_GUARD_MARKER in item.content:
+                    return messages
+                guarded_system = Message(
+                    RoleType.System,
+                    f"{_DEFAULT_NO_THINKING_SYSTEM_PROMPT}\n\n{item.content}",
+                )
+                return [*messages[:index], guarded_system, *messages[index + 1 :]]
+        return [
+            Message(RoleType.System, _DEFAULT_NO_THINKING_SYSTEM_PROMPT),
+            *messages,
+        ]
 
     def _effective_extra_params(self, model_info: ModelInfo) -> Dict[str, Any]:
         extra_params = dict(model_info.extra_params or {})
-        if self._should_suppress_reasoning(model_info):
-            extra_params.setdefault("enable_thinking", False)
+        thinking_enabled = self._thinking_enabled_for_request(model_info)
+        try:
+            provider = model_config.get_provider(model_info.api_provider)
+            client_type = _resolve_model_client_type(model_info, provider)
+        except Exception:
+            client_type = str(getattr(model_info, "client_type", "") or "openai").lower()
+
+        if client_type == "gemini":
+            extra_params["enable_thinking"] = thinking_enabled
+            if not thinking_enabled:
+                extra_params["include_thoughts"] = False
+                extra_params["thinking_budget"] = 0
+        else:
+            extra_params["enable_thinking"] = thinking_enabled
+            chat_template_kwargs = dict(extra_params.get("chat_template_kwargs") or {})
+            chat_template_kwargs["enable_thinking"] = thinking_enabled
+            extra_params["chat_template_kwargs"] = chat_template_kwargs
+            if not thinking_enabled:
+                extra_params["reasoning_effort"] = "minimal"
         return extra_params
+
+    def _request_timeout_budget(self, api_provider: APIProvider, request_type: RequestType) -> float:
+        routing = self._model_routing_values()
+        try:
+            configured_timeout = max(1.0, float(api_provider.timeout or 1.0))
+        except Exception:
+            configured_timeout = 30.0
+
+        if request_type == RequestType.EMBEDDING:
+            cap = float(routing.get("embedding_request_timeout_seconds", 12.0) or 12.0)
+            return max(3.0, min(configured_timeout, cap))
+        if request_type == RequestType.AUDIO:
+            cap = float(routing.get("audio_request_timeout_seconds", 20.0) or 20.0)
+            return max(5.0, min(configured_timeout, cap))
+
+        cap = float(routing.get("response_request_timeout_seconds", 18.0) or 18.0)
+        floor = float(routing.get("response_request_timeout_floor_seconds", 5.0) or 5.0)
+        return max(floor, min(configured_timeout, cap))
+
+    def _retry_budget(self, api_provider: APIProvider, request_type: RequestType) -> int:
+        try:
+            configured_retry = int(api_provider.max_retry or 1)
+        except Exception:
+            configured_retry = 1
+
+        routing = self._model_routing_values()
+        if request_type == RequestType.RESPONSE:
+            cap = int(routing.get("response_max_retry", 1) or 1)
+        else:
+            cap = int(routing.get("background_max_retry", 2) or 2)
+        return max(1, min(configured_retry, cap))
+
+    def _retry_sleep_seconds(self, api_provider: APIProvider, request_type: RequestType) -> float:
+        routing = self._model_routing_values()
+        if request_type == RequestType.RESPONSE:
+            cap = float(routing.get("response_retry_interval_cap_seconds", 2.0) or 2.0)
+        else:
+            cap = 5.0
+        try:
+            return max(0.0, min(float(api_provider.retry_interval or 0.0), cap))
+        except Exception:
+            return cap
 
     def _finalize_response_content(self, content: str | None, reasoning_content: str | None, model_info: ModelInfo) -> Tuple[str, str]:
         text = content or ""
@@ -706,17 +800,12 @@ class LLMRequest:
         在单个模型上执行请求，包含针对临时错误的重试逻辑。
         如果成功，返回APIResponse。如果失败（重试耗尽或硬错误），则抛出ModelAttemptFailed异常。
         """
-        retry_remain = api_provider.max_retry
+        retry_remain = self._retry_budget(api_provider, request_type)
         compressed_messages: Optional[List[Message]] = None
         # 标记是否已尝试过降级（去掉response_format/tool_options）
         _format_degraded = False
-        # 超时上限：使用 api_provider 配置值，最低 30 秒
-        # embedding 请求通常很快，使用更低的超时下限（10秒）
-        _configured_timeout = float(api_provider.timeout)
-        if request_type == RequestType.EMBEDDING:
-            _call_timeout = max(10.0, _configured_timeout)
-        else:
-            _call_timeout = max(30.0, _configured_timeout)
+        _call_timeout = self._request_timeout_budget(api_provider, request_type)
+        _retry_sleep = self._retry_sleep_seconds(api_provider, request_type)
 
         while retry_remain > 0:
             try:
@@ -746,7 +835,10 @@ class LLMRequest:
                     return await asyncio.wait_for(
                         client.get_response(
                             model_info=model_info,
-                            message_list=(compressed_messages or message_list),
+                            message_list=self._with_no_thinking_guard(
+                                compressed_messages or message_list,
+                                model_info,
+                            ),
                             tool_options=_active_tool_options,
                             max_tokens=effective_max_tokens,
                             temperature=effective_temperature,
@@ -795,7 +887,7 @@ class LLMRequest:
                         retry_remain
                     }"
                 )
-                await asyncio.sleep(min(api_provider.retry_interval, 5))
+                await asyncio.sleep(_retry_sleep)
 
             except EmptyResponseException as e:
                 # 空回复：通常为临时问题，单独记录并重试
@@ -818,7 +910,7 @@ class LLMRequest:
                         original_error_info
                     }。剩余重试次数: {retry_remain}"
                 )
-                await asyncio.sleep(api_provider.retry_interval)
+                await asyncio.sleep(_retry_sleep)
 
             except NetworkConnectionError as e:
                 # 网络错误：单独记录并重试
@@ -843,7 +935,7 @@ class LLMRequest:
                     f"  其它可能原因: 网络波动、DNS 故障、连接超时、防火墙限制或代理问题\n"
                     f"  剩余重试次数: {retry_remain}"
                 )
-                await asyncio.sleep(api_provider.retry_interval)
+                await asyncio.sleep(_retry_sleep)
 
             except RespNotOkException as e:
                 original_error_info = self._get_original_error_info(e)
@@ -902,7 +994,11 @@ class LLMRequest:
 
                 # 频率限制（429）：提取 Retry-After 头并等待
                 if e.status_code == 429:
-                    retry_after = getattr(e, "retry_after", 0.0) or api_provider.retry_interval
+                    raw_retry_after = getattr(e, "retry_after", 0.0) or _retry_sleep
+                    try:
+                        retry_after = min(float(raw_retry_after), _retry_sleep)
+                    except Exception:
+                        retry_after = _retry_sleep
                     retry_remain -= 1
                     if retry_remain <= 0:
                         logger.error(
@@ -951,7 +1047,7 @@ class LLMRequest:
                         f"任务 '{task_display}' 的模型 '{model_info.name}' 遇到服务端错误({e.status_code})。"
                         f"剩余重试: {retry_remain}"
                     )
-                    await asyncio.sleep(api_provider.retry_interval)
+                    await asyncio.sleep(_retry_sleep)
                     continue
 
                 # 特殊处理413，尝试压缩

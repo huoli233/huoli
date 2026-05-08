@@ -659,7 +659,7 @@ class OpenaiClient(BaseClient):
         self.client: AsyncOpenAI = AsyncOpenAI(
             base_url=api_provider.base_url,
             api_key=api_provider.api_key,
-            max_retries=2,
+            max_retries=0,
             timeout=None,
         )
 

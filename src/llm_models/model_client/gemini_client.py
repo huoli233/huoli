@@ -663,6 +663,8 @@ class GeminiClient(BaseClient):
         tools = _convert_tool_options(tool_options) if tool_options else None
         # 解析并裁剪 thinking_budget
         tb = self.clamp_thinking_budget(extra_params, model_info.model_identifier)
+        enable_thinking = bool((extra_params or {}).get("enable_thinking", False))
+        include_thoughts = bool((extra_params or {}).get("include_thoughts", enable_thinking))
         # 检测是否为带 -search 的模型
         enable_google_search = False
         model_identifier = model_info.model_identifier
@@ -679,7 +681,7 @@ class GeminiClient(BaseClient):
             "temperature": temperature,
             "response_modalities": ["TEXT"],
             "thinking_config": ThinkingConfig(
-                include_thoughts=True,
+                include_thoughts=include_thoughts,
                 thinking_budget=tb,
             ),
             "safety_settings": gemini_safe_settings,  # 防止空回复问题
@@ -834,6 +836,8 @@ class GeminiClient(BaseClient):
         """
         # 解析并裁剪 thinking_budget
         tb = self.clamp_thinking_budget(extra_params, model_info.model_identifier)
+        enable_thinking = bool((extra_params or {}).get("enable_thinking", False))
+        include_thoughts = bool((extra_params or {}).get("include_thoughts", enable_thinking))
 
         # 构造 prompt + 音频输入
         prompt = "Generate a transcript of the speech. The language of the transcript should **match the language of the speech**."
@@ -854,7 +858,7 @@ class GeminiClient(BaseClient):
             "max_output_tokens": max_tokens,
             "response_modalities": ["TEXT"],
             "thinking_config": ThinkingConfig(
-                include_thoughts=True,
+                include_thoughts=include_thoughts,
                 thinking_budget=tb,
             ),
             "safety_settings": gemini_safe_settings,
