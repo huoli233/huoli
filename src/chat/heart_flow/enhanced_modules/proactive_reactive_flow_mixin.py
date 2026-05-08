@@ -368,9 +368,11 @@ class ProactiveReactiveFlowMixin:
           - 深度评估（含LLM调用）：仅在评估通过后触发
           - 冷却期：主动发言后30-60秒内不再主动触发
         """
-        _base_interval = 18.0
-        _min_interval = 10.0
-        _max_interval = 45.0
+        _base_interval = _rt_float("heartfc_background_proactive_base_interval_seconds", 12.0)
+        _min_interval = _rt_float("heartfc_background_proactive_min_interval_seconds", 6.0)
+        _max_interval = _rt_float("heartfc_background_proactive_max_interval_seconds", 30.0)
+        _cooldown_min = _rt_float("heartfc_background_proactive_success_cooldown_min_seconds", 90.0)
+        _cooldown_max = _rt_float("heartfc_background_proactive_success_cooldown_max_seconds", 180.0)
         _cooldown_until = 0.0
         _consecutive_fails = 0
         _loop_count = 0
@@ -393,7 +395,7 @@ class ProactiveReactiveFlowMixin:
                         _energy_mod = 0.7
                         _base_interval = max(_min_interval, _base_interval - 0.5)
                 else:
-                    _base_interval = 18.0
+                    _base_interval = _rt_float("heartfc_background_proactive_base_interval_seconds", 12.0)
                 _interval = max(
                     _min_interval,
                     min(_max_interval, _base_interval * _energy_mod),
@@ -445,8 +447,11 @@ class ProactiveReactiveFlowMixin:
                         silence_sec=_silence,
                     )
                     if _acted:
-                        # 主动发言成功后冷却2-4分钟，避免连续自言自语
-                        _cooldown_until = time.time() + random.uniform(240.0, 480.0)
+                        # 主动发言成功后短冷却，避免连续自言自语，同时保留主动感。
+                        _cooldown_until = time.time() + random.uniform(
+                            min(_cooldown_min, _cooldown_max),
+                            max(_cooldown_min, _cooldown_max),
+                        )
                         _consecutive_fails = 0
                         _base_interval = max(_min_interval, _base_interval - 1.0)
                     else:
@@ -486,10 +491,14 @@ class ProactiveReactiveFlowMixin:
             startup_guard_until = float(getattr(self, "_proactive_startup_grace_until", 0.0) or 0.0)
             if now < startup_guard_until:
                 return False, "启动保护期"
-            if silence_sec < 120.0:
-                return False, f"静默不足({silence_sec:.0f}s/120s)"
-        # 后台通道冷却提升到90s，避免频繁触发主动发言
-        _cooldown = self._IDLE_PROACTIVE_COOLDOWN_SEC if not is_background else 180.0
+            _min_silence = _rt_float("heartfc_background_proactive_min_silence_seconds", 45.0)
+            if silence_sec < _min_silence:
+                return False, f"静默不足({silence_sec:.0f}s/{_min_silence:.0f}s)"
+        _cooldown = (
+            self._IDLE_PROACTIVE_COOLDOWN_SEC
+            if not is_background
+            else _rt_float("heartfc_background_proactive_cooldown_seconds", 90.0)
+        )
         if (now - self._last_idle_proactive_ts) < _cooldown:
             return False, "冷却中"
         if is_background:

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 from src.common.logger import get_logger
 
-logger = get_logger("昼夜节律")
+logger = get_logger("夜间状态")
 
 _night_system_instances: Dict[str, "NightCycleSystem"] = {}
 
@@ -94,11 +94,11 @@ class NightPhase(Enum):
             NightPhase.DEEP_SLEEP: "深睡",
             NightPhase.EXCITED: "亢奋",
             NightPhase.BURNED_OUT: "熬穿",
-            NightPhase.NIGHT_ACTIVE: "夜间活跃",
-            NightPhase.MIDNIGHT_REFLECT: "午夜反思",
-            NightPhase.DAWN_RECOVER: "黎明恢复",
-            NightPhase.SOCIAL_NIGHT: "社交夜",
-            NightPhase.QUIET_CONTEMPLATE: "安静沉思",
+            NightPhase.NIGHT_ACTIVE: "晚上阶段",
+            NightPhase.MIDNIGHT_REFLECT: "凌晨阶段",
+            NightPhase.DAWN_RECOVER: "清晨恢复",
+            NightPhase.SOCIAL_NIGHT: "夜间社交",
+            NightPhase.QUIET_CONTEMPLATE: "凌晨沉思",
         }
         return labels.get(self, self.value)
 
@@ -1196,7 +1196,7 @@ class NightCycleSystem:
         amount = base * mult
         old_val = s.daily_fatigue
         s.daily_fatigue = min(s.daily_fatigue_limit, s.daily_fatigue + amount)
-        reserve_cost = self.consume_reserve_for_reply()
+        self.consume_reserve_for_reply()
         return s.daily_fatigue - old_val
 
     def recover_fatigue(self, hours: float) -> float:
@@ -1887,7 +1887,6 @@ class NightCycleSystem:
         effective_rate = base_rate + circadian_mod * 0.15 + noise
         effective_rate = max(0.01, effective_rate)
         delta = effective_rate * tick_count
-        old_val = s.drowsiness_value
         s.drowsiness_value = max(0.0, min(100.0, s.drowsiness_value + delta))
         s.drowsiness_pending_delta = 0.0
 
@@ -1972,7 +1971,6 @@ class NightCycleSystem:
             + activity_bonus
         )
         pressure_delta = effective_rate * (dt / 60.0)
-        old_pressure = s.overnight_pressure
         s.overnight_pressure = min(
             100.0, s.overnight_pressure + pressure_delta
         )
@@ -3230,7 +3228,6 @@ class NightCycleSystem:
         """
         s = self._state
         prev_composite = 0.0
-        prev_score_modifier = 1.0
         verdict_composite = 0.0
         for pass_num in range(1, self.MAX_ITERATION_PASSES + 1):
             convergence_damp = 1.0 / (1.0 + pass_num * 0.35)

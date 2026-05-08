@@ -40,6 +40,7 @@ from src.core.world_snapshot import (
 )
 from src.webui.app import create_app
 from src.webui.services.state_monitor import (
+    _build_circadian_detail,
     _build_current_user_detail,
     _build_participant_impacts,
     _build_safety_detail,
@@ -673,6 +674,32 @@ def check_monitor_overview_contract() -> Dict[str, Any]:
     return {"hidden_internal_count": True, "public_channel_naming": True}
 
 
+def check_night_status_label_contract() -> Dict[str, Any]:
+    state_monitor_source = (ROOT / "src/webui/services/state_monitor.py").read_text(encoding="utf-8")
+    night_source = (ROOT / "src/core/night_cycle_system.py").read_text(encoding="utf-8")
+    assert '"circadian": "夜间"' in state_monitor_source
+    assert '"circadian_rhythm": "夜间状态"' in state_monitor_source
+    assert "晚上/凌晨阶段、睡眠债、困意和熬夜压力" in state_monitor_source
+    assert '"昼夜节律"' not in state_monitor_source
+    assert 'get_logger("夜间状态")' in night_source
+    assert 'NightPhase.NIGHT_ACTIVE: "晚上阶段"' in night_source
+    assert 'NightPhase.MIDNIGHT_REFLECT: "凌晨阶段"' in night_source
+
+    detail = _build_circadian_detail(
+        {
+            "circadian_rhythm": {
+                "phase": "midnight_reflect",
+                "phase_label": "午夜反思",
+                "sleep_reply_cap": 2,
+                "remaining_sleep_replies": 1,
+            }
+        }
+    )
+    assert detail["phase_label"] == "凌晨阶段"
+    assert detail["reply_quota_label"] == "1/2"
+    return {"night_labels": True, "midnight_phase_label": detail["phase_label"]}
+
+
 
 def check_content_state_scope_contract() -> Dict[str, Any]:
     tracker = get_content_state_tracker()
@@ -892,7 +919,14 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     assert "跳过阶段2.5b深度集成" in loop_source
     assert "跳过记忆预取" in loop_source
     assert "直接快回链路" in loop_source
+    assert "_refresh_direct_fastlane_inner_state" in loop_source
+    assert "heartfc_direct_fastlane_background_voice_timeout_seconds" in loop_source
+    assert "direct_fastlane_background" in loop_source
+    assert "get_intention_pool().ingest_voice_verdict" in loop_source
     assert "src=admin_force" in loop_source
+    assert "heartfc_background_proactive_min_silence_seconds" in flow_source
+    assert "heartfc_background_proactive_cooldown_seconds" in flow_source
+    assert "heartfc_background_proactive_success_cooldown_min_seconds" in flow_source
     assert "if gw_ctx.admin_force" in scene_source
     assert "跳过被动策略规划" in scene_source
     assert "fast_path=force_generation_fallback" in flow_source
@@ -916,6 +950,10 @@ def check_webui_contract() -> Dict[str, Any]:
     dashboard_style = (ROOT / "web/dashboard/src/components/EmotionDashboard/styles.css").read_text(encoding="utf-8")
     assert "fallbackPollTimerRef" in dashboard_source
     assert "pollMonitorFallback" in dashboard_source
+    assert "夜间状态" in dashboard_source
+    assert "晚上/凌晨阶段、睡眠债、困意和熬夜压力" in dashboard_source
+    assert "夜间影响" in dashboard_source
+    assert "昼夜节律" not in dashboard_source
     assert "Promise.allSettled" not in dashboard_source
     assert "void loadMonitorOverview();" in dashboard_source
     assert "void loadConfigScope();" in dashboard_source
@@ -982,6 +1020,7 @@ def main() -> None:
         "force_reply_generation_fallback": check_force_reply_generation_fallback_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),
+        "night_status_labels": check_night_status_label_contract(),
         "webui": check_webui_contract(),
     }
     print(json.dumps(results, ensure_ascii=False, indent=2))

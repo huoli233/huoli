@@ -514,8 +514,8 @@ const severityRank: Record<string, number> = {
 
 const fallbackDisplayPolicy: DisplayPolicy = {
   resident: ["精力储备", "内在心情", "注意状态", "社交姿态", "安全护盾", "流转阶段", "场景热度", "发言预测"],
-  active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "情绪低落/好奇心/社交欲显著变化", "浅睡/深睡/熬穿/黎明恢复/睡眠债", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/会话升温"],
-  detail: ["资源账本的聊天值和思考值", "昼夜节律、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "会话整体状态", "当前对象状态", "安全护盾细节", "值变化原因", "发言预测的驱动和抑制因素"],
+  active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "情绪低落/好奇心/社交欲显著变化", "浅睡/深睡/熬穿/清晨恢复/睡眠债", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/会话升温"],
+  detail: ["资源账本的聊天值和思考值", "晚上/凌晨阶段、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "会话整体状态", "当前对象状态", "安全护盾细节", "值变化原因", "发言预测的驱动和抑制因素"],
   hidden: ["内部阈值", "调试原因", "缓存字段", "旧命名残留", "纯计数器原值"],
 };
 
@@ -1159,7 +1159,7 @@ export function EmotionDashboard() {
 
         <section className="panel">
           <div className="panel-header">
-            <h2>昼夜节律</h2>
+            <h2>夜间状态</h2>
             <span>{circadianDetail?.phase_label ?? "清醒"}</span>
           </div>
           <div className="metric-wall">
@@ -1176,7 +1176,7 @@ export function EmotionDashboard() {
             <div className={`metric-tile tone-${metricTone((circadianDetail?.sleep_reserve ?? 100) / 100)}`}>
               <span>睡眠储备</span>
               <strong>{countText(circadianDetail?.sleep_reserve, "")}</strong>
-              <p>黎明恢复 {percent(circadianDetail?.dawn_recovery_progress)}</p>
+              <p>清晨恢复 {percent(circadianDetail?.dawn_recovery_progress)}</p>
             </div>
             <div className="metric-tile">
               <span>夜间回复</span>
@@ -1186,7 +1186,7 @@ export function EmotionDashboard() {
             <div className="metric-tile">
               <span>熬夜压力</span>
               <strong>{countText(circadianDetail?.overnight_pressure, "")}</strong>
-              <p>{circadianDetail?.is_burnthrough ? "熬穿已激活" : circadianDetail?.is_sleeping ? "睡眠中" : circadianDetail?.is_night ? "夜间节律" : "清醒时段"}</p>
+              <p>{circadianDetail?.is_burnthrough ? "熬穿已激活" : circadianDetail?.is_sleeping ? "睡眠中" : circadianDetail?.is_night ? "夜间阶段" : "清醒时段"}</p>
             </div>
             <div className="metric-tile">
               <span>表达风格</span>
@@ -1856,7 +1856,7 @@ export function EmotionDashboard() {
               <strong>{fixed(prediction?.scene_influence, 2)}</strong>
             </div>
             <div>
-              <span>昼夜影响</span>
+              <span>夜间影响</span>
               <strong>{fixed(prediction?.circadian_influence, 2)}</strong>
             </div>
           </div>

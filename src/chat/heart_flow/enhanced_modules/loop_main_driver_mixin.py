@@ -56,6 +56,90 @@ if TYPE_CHECKING:
     from src.chat.proactive.proactive_decider import ProactiveDecision
 
 class LoopMainDriverMixin:
+    async def _refresh_direct_fastlane_inner_state(
+        self,
+        decision_messages: List[Any],
+        ambient_info: Optional[Dict[str, Any]],
+        now: float,
+    ) -> None:
+        """直接快回后补跑感知/独白，维护下一轮主动意图，不阻塞当前回复。"""
+        messages = list(decision_messages or [])
+        if not messages:
+            return
+
+        run_perception = self._should_run_perception(now)
+        latest_human = self._get_latest_human_message(messages)
+        run_voice = self._should_run_voice(
+            now,
+            messages,
+            latest_human,
+            source="direct_fastlane_background",
+        )
+        # 快回本轮已经省掉了同步独白；后台补偿至少跑一次小模型，避免主动意图链断掉。
+        if not run_voice and latest_human is not None:
+            run_voice = True
+        if not run_perception and not run_voice:
+            return
+
+        jobs: list = []
+        keys: list[str] = []
+        if run_perception:
+            jobs.append(self._invoke_perception(messages, now))
+            keys.append("perception")
+        if run_voice:
+            jobs.append(
+                self._invoke_inner_voice(
+                    messages,
+                    self._cached_awareness,
+                    ambient_info,
+                    now,
+                )
+            )
+            keys.append("voice")
+
+        try:
+            timeout = _rt_float("heartfc_direct_fastlane_background_voice_timeout_seconds", 8.0)
+            results = await asyncio.wait_for(
+                asyncio.gather(*jobs, return_exceptions=True),
+                timeout=max(1.0, timeout),
+            )
+        except asyncio.TimeoutError:
+            logger.debug(f"{self.log_prefix} ⚡ 直接快回后台补感知/独白超时，保留当前缓存")
+            return
+
+        result_map = dict(zip(keys, results, strict=True))
+        pval = result_map.get("perception")
+        if isinstance(pval, BaseException):
+            logger.debug(f"{self.log_prefix} ⚡ 直接快回后台感知异常: {pval}")
+        elif pval is not None:
+            self._cached_awareness = pval
+            self._last_perception_ts = now
+
+        vval = result_map.get("voice")
+        if isinstance(vval, BaseException):
+            logger.debug(f"{self.log_prefix} ⚡ 直接快回后台独白异常: {vval}")
+            return
+        if vval is None:
+            return
+
+        self._cached_voice = vval
+        self._last_voice_ts = now
+        self._align_states_with_inner_voice(vval, source="direct_fastlane_background")
+        try:
+            from src.chat.proactive.intention_pool import get_intention_pool
+
+            speaker_id = ""
+            if latest_human is not None:
+                speaker_id = str(getattr(latest_human, "user_id", "") or "").strip()
+            get_intention_pool().ingest_voice_verdict(
+                channel_id=self.stream_id,
+                verdict=vval,
+                speaker_id=speaker_id,
+            )
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 直接快回后台意图池写入失败: {exc}")
+        logger.debug(f"{self.log_prefix} ⚡ 直接快回后台补感知/独白完成")
+
     async def _loopbody(self):
         """七阶段增强循环体，完全替代基础版"""
         self._tick_world_snapshot = None
@@ -1016,6 +1100,12 @@ class LoopMainDriverMixin:
             logger.info(f"{self.log_prefix} 👑 管理员极速通道: 跳过观察+独白")
         elif _is_direct_reply_fastlane:
             logger.info(f"{self.log_prefix} ⚡ 直接快回链路: 跳过观察+独白")
+        if _is_direct_reply_fastlane:
+            self._spawn(
+                self._refresh_direct_fastlane_inner_state(decision_messages, ambient_info, now),
+                name=f"heartfc_direct_fastlane_refresh_{self.stream_id}",
+            )
+            logger.debug(f"{self.log_prefix} ⚡ 直接快回链路: 后台补感知/独白已排队")
 
         # 组装并行任务列表
         _parallel_tasks: list = []

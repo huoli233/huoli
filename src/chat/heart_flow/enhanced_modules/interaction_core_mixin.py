@@ -1855,7 +1855,10 @@ class EnhancedInteractionCoreMixin:
         logger.info(f"{self.log_prefix} 独立自主代理已停用，统一由增强主循环负责主动判断")
         self._pipeline_ready = True
         self._proactive_start_ts = time.time()
-        self._proactive_startup_grace_until = self._proactive_start_ts + 60.0
+        self._proactive_startup_grace_until = self._proactive_start_ts + _rt_float(
+            "heartfc_proactive_startup_grace_seconds",
+            30.0,
+        )
         self._proactive_task: Optional[asyncio.Task] = None
         self._proactive_running: bool = True
         await super().start()

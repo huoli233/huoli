@@ -190,7 +190,7 @@ def _label_family(value: Any) -> str:
         "conditioning": "调教",
         "runtime": "运行",
         "scene": "会话氛围",
-        "circadian": "昼夜",
+        "circadian": "夜间",
     }.get(str(value or "").strip().lower(), str(value or "") or "状态")
 
 
@@ -220,7 +220,7 @@ def _label_source(value: Any) -> str:
         "tempo": "节奏控制",
         "group_climate": "会话氛围",
         "pending_response": "待回应状态",
-        "circadian_rhythm": "昼夜节律",
+        "circadian_rhythm": "夜间状态",
         "memory_stack": "记忆栈",
         "autonomy_runtime": "自主运行",
         "context_awareness": "上下文感知",
@@ -1306,9 +1306,19 @@ def _build_circadian_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     sleep_used = int(_safe_float(circadian.get("sleep_reply_used", 0), 0))
     sleep_cap = int(_safe_float(circadian.get("sleep_reply_cap", 0), 0))
     remaining = int(_safe_float(circadian.get("remaining_sleep_replies", 0), 0))
+    phase = str(circadian.get("phase", "awake") or "awake")
+    phase_label = str(circadian.get("phase_label", "清醒") or "清醒")
+    phase_label = {
+        "night_active": "晚上阶段",
+        "midnight_reflect": "凌晨阶段",
+        "quiet_contemplate": "凌晨沉思",
+        "social_night": "夜间社交",
+        "dawn_recover": "清晨恢复",
+        "burned_out": "熬穿",
+    }.get(phase, phase_label)
     return {
-        "phase": str(circadian.get("phase", "awake") or "awake"),
-        "phase_label": str(circadian.get("phase_label", "清醒") or "清醒"),
+        "phase": phase,
+        "phase_label": phase_label,
         "is_night": bool(circadian.get("is_night", False)),
         "is_sleeping": bool(circadian.get("is_sleeping", False)),
         "is_burnthrough": bool(circadian.get("is_burnthrough", False)),
@@ -1995,14 +2005,14 @@ def _build_display_policy() -> Dict[str, list[str]]:
         "active": [
             "无聊/孤独/环境疲劳/撤离/主动意愿",
             "情绪低落/好奇心/社交欲显著变化",
-            "浅睡/深睡/熬穿/黎明恢复/睡眠债",
+            "浅睡/深睡/熬穿/清晨恢复/睡眠债",
             "烦躁/压力/创伤/混乱/伪装",
             "关系好感/信任显著偏高或偏低",
             "冷却窗口/等待时长/重新接入/会话升温",
         ],
         "detail": [
             "资源账本的聊天值和思考值",
-            "昼夜节律、睡眠债、困意和熬夜压力",
+            "晚上/凌晨阶段、睡眠债、困意和熬夜压力",
             "情绪账本、主动驱动和当前感受",
             "记忆栈、记忆过载、回忆录和知识条目",
             "主动意图、待结算事件和后台随机事件",

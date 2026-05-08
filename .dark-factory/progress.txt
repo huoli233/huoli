@@ -272,3 +272,24 @@
 ### Notes:
 - `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
 - 本轮提交只应包含快回语义拆分相关文件；工作区内既有无关删除/修改/未跟踪文件仍需排除。
+
+## 2026-05-09T01:36:00+08:00 - Task: 主动触发链路与夜间状态命名修复
+
+### What was done:
+- 修复直接快回链路只被用户消息被动触发后会跳过观察/独白维护的问题：直接快回仍不等待感知/独白，但会在后台补跑感知和内心独白，并把独白结果写回意图池。
+- 将主动后台通道的启动保护、静默阈值、后台冷却、循环间隔和成功后冷却改为运行时可配置，默认缩短等待，避免后台主动触发长期被 60s/120s/180s 硬阈值压住。
+- 修复状态页和夜间系统展示命名，把“昼夜节律”改为“夜间状态”，并将阶段标签归一为“晚上阶段 / 凌晨阶段 / 清晨恢复”等更直观语义。
+- 清理 `night_cycle_system.py` 内同文件 lint 暴露的未用局部变量，不改变算法分支。
+- 更新 HeartFlow 回归脚本，锁定直接快回后台补独白、主动后台阈值配置和夜间状态展示文案。
+
+### Testing:
+- `uv run python -m ruff check src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py src/webui/services/state_monitor.py src/core/night_cycle_system.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `night_status_labels` 合同，直接快回合同也验证后台补独白和意图池写入。
+- `uv run python -m compileall src scripts` 通过。
+- `npm run build` 在 `web/dashboard` 通过。
+- Chrome headless 打开真实 FastAPI WebUI `http://127.0.0.1:4188/dashboard` 渲染通过，DOM 中存在“夜间状态 / 夜间影响”，且不存在旧文案“昼夜节律”。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 本轮只应提交 `.dark-factory/progress.txt`、`scripts/heartflow_state_regression.py`、`src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py`、`src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py`、`src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py`、`src/core/night_cycle_system.py`、`src/webui/services/state_monitor.py`、`web/dashboard/src/components/EmotionDashboard/index.tsx`、`web/dashboard/dist/index.html`、`web/dashboard/dist/assets/index-BXvGMUDG.js`。
+- 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
