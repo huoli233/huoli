@@ -963,6 +963,12 @@ def check_force_guard_contract() -> Dict[str, Any]:
     assert "_action in (\"deep_sleep\", \"hard_block\")" in loop_source
     assert "_action == \"sleep_resist\" and not self._is_force_wake_admin" in loop_source
     assert "voice_conclusion = None if _is_admin_msg else self._cached_voice" in loop_source
+    assert "管理员强制唤醒-无视仪表盘硬阻断" in loop_source
+    assert "管理员强制唤醒-无视低信息重复抑制" in loop_source
+    assert "force_reply_message = pinged_msg or self._get_latest_human_message(decision_messages)" in loop_source
+    assert "低信息重复施压" not in (ROOT / "src/chat/heart_flow/enhanced_modules/runtime_state_trace_mixin.py").read_text(
+        encoding="utf-8"
+    )
 
     assert "_apply_night_cycle_modulation(_now_hr, incoming_batch, pinged_msg)" in loop_source
     assert "深睡阶段禁止普通夜间回复" in lifecycle_source
@@ -975,6 +981,41 @@ def check_force_guard_contract() -> Dict[str, Any]:
         "admin_content_hard_guard": True,
         "admin_soft_guard_bypass": True,
         "admin_night_gate_preempts_sleep_block": True,
+        "admin_dashboard_hard_block_bypass": True,
+        "admin_low_info_repeat_bypass": True,
+    }
+
+
+def check_night_cycle_persistence_contract() -> Dict[str, Any]:
+    from src.common.database.database_model import PersistenceSlot
+    from src.core.night_cycle_system import _ensure_persistence_slot_table, _night_state_slot_key, _safe_state_filename
+
+    channel_id = "regression-night-db-only"
+    slot_key = _night_state_slot_key(channel_id)
+    legacy_path = ROOT / "data" / "night_cycle_state" / _safe_state_filename(channel_id)
+    if legacy_path.exists():
+        legacy_path.unlink()
+    _ensure_persistence_slot_table()
+    PersistenceSlot.delete().where(PersistenceSlot.slot_key == slot_key).execute()
+    remove_night_cycle(channel_id)
+
+    system = NightCycleSystem(channel_id)
+    system.persist_state(force=True)
+    row = PersistenceSlot.get_or_none(PersistenceSlot.slot_key == slot_key)
+    assert row is not None
+    assert row.slot_value
+    assert not legacy_path.exists()
+    remove_night_cycle(channel_id)
+    PersistenceSlot.delete().where(PersistenceSlot.slot_key == slot_key).execute()
+
+    source = (ROOT / "src/core/night_cycle_system.py").read_text(encoding="utf-8")
+    assert "_night_state_slot_key" in source
+    assert "_ensure_persistence_slot_table" in source
+    assert "Slot.insert(" in source
+    assert ".write_text(" not in source
+    return {
+        "night_cycle_state_db_slot": True,
+        "night_cycle_no_new_json_file": True,
     }
 
 
@@ -1178,6 +1219,7 @@ def main() -> None:
         "dynamic_personal_impression": check_dynamic_personal_impression_contract(),
         "content_state_scope": check_content_state_scope_contract(),
         "force_guard": check_force_guard_contract(),
+        "night_cycle_persistence": check_night_cycle_persistence_contract(),
         "force_reply_generation_fallback": check_force_reply_generation_fallback_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),

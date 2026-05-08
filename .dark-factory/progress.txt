@@ -447,3 +447,25 @@
 - 独立审计进程中的 `plugin_tool_count=0` 是因为当前内置插件没有注册 BaseTool 组件；本轮通过记忆检索工具桥接让回复器工具调用不再空转。
 - 本轮不执行结构性删除，也不迁移 data 下历史 JSON；JSON/数据库存储合并需要单独数据迁移方案和删除分支规则。
 - 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T05:38:03+08:00 - Task: 修复管理员强制回复穿透与夜间状态 JSON 新增
+
+### What was done:
+- 修复管理员强制唤醒被统一状态仪表盘 `should_process=false` 提前返回的问题，管理员消息现在会记录穿透日志并继续进入完整回复管线。
+- 修复管理员重复发送短句时被“低信息重复”降级/安全锁压掉的问题，管理员强制消息会锁定最近真人消息作为强制回复目标。
+- 调整管理员强制安全锁：低信息重复不再作为管理员硬阻断理由，骚扰、强敌意、情绪拒绝等安全保护仍保留。
+- 将夜间节律状态从 `data/night_cycle_state/*.json` 新增写入迁移到 `data/Huoli.db` 的 `persistence_slot` 表，slot key 为 `night_cycle_state:<channel_id>`。
+- 保留旧 JSON 只读兼容：DB 无记录时读取旧 JSON 并写回数据库，后续不再创建新的夜间状态 JSON 文件。
+- 补充运行时审计和 HeartFlow 回归契约，锁定管理员仪表盘穿透、低信息重复穿透和夜间状态 DB 写入行为。
+
+### Testing:
+- `uv run ruff check src\chat\heart_flow\enhanced_modules\loop_main_driver_mixin.py src\chat\heart_flow\enhanced_modules\runtime_state_trace_mixin.py src\core\night_cycle_system.py scripts\heartflow_state_regression.py scripts\model_runtime_audit.py` 通过。
+- `uv run python scripts\model_runtime_audit.py` 通过，确认 `night_cycle_state_backend=Huoli.db:persistence_slot`，`night_cycle_state_json_write_removed=true`，ToolExecutor 实际可用记忆工具 7 个。
+- `uv run python scripts\config_profile_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新增 `admin_dashboard_hard_block_bypass=true`、`admin_low_info_repeat_bypass=true`、`night_cycle_no_new_json_file=true`。
+- `uv run python -m compileall -q src scripts` 通过，使用临时 `PYTHONPYCACHEPREFIX`，未在仓库内留下本轮编译缓存。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 本轮不删除历史 `data/night_cycle_state/*.json` 和其他历史 JSON 文件，只停止夜间状态后续新增 JSON；结构性清理历史文件需单独确认并遵守删除分支规则。
+- 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。

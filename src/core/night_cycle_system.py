@@ -13,11 +13,35 @@ logger = get_logger("夜间状态")
 _night_system_instances: Dict[str, "NightCycleSystem"] = {}
 _PERSIST_DIR = Path("data/night_cycle_state")
 _PERSIST_VERSION = 1
+_PERSIST_SLOT_PREFIX = "night_cycle_state"
+_PERSIST_SLOT_TTL_DAYS = 3650
+_PERSIST_DB_READY = False
 
 
 def _safe_state_filename(channel_id: str) -> str:
     safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in str(channel_id or "default"))
     return f"{safe[:96] or 'default'}.json"
+
+
+def _safe_slot_suffix(channel_id: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in str(channel_id or "default"))
+    return safe[:96] or "default"
+
+
+def _night_state_slot_key(channel_id: str) -> str:
+    return f"{_PERSIST_SLOT_PREFIX}:{_safe_slot_suffix(channel_id)}"
+
+
+def _ensure_persistence_slot_table():
+    global _PERSIST_DB_READY
+    from src.common.database.database import db
+    from src.common.database.database_model import PersistenceSlot
+
+    if not _PERSIST_DB_READY:
+        db.connect(reuse_if_open=True)
+        db.create_tables([PersistenceSlot], safe=True)
+        _PERSIST_DB_READY = True
+    return PersistenceSlot
 
 # ──────────────────────────────────────────────
 #  ACFN级数学工具库（数值稳定/有界输出）
@@ -509,6 +533,7 @@ class NightCycleSystem:
         self._reflection_build_rate = 0.1
         self._social_energy_decay = 0.05
         self._persist_path = _PERSIST_DIR / _safe_state_filename(channel_id)
+        self._persist_slot_key = _night_state_slot_key(channel_id)
         self._last_persist_at = 0.0
         self._load_persisted_state()
 
@@ -525,78 +550,126 @@ class NightCycleSystem:
         payload["current_phase"] = self._state.current_phase.value
         return payload
 
-    def _load_persisted_state(self) -> None:
-        try:
-            if not self._persist_path.exists():
-                return
-            raw = json.loads(self._persist_path.read_text(encoding="utf-8"))
-            if not isinstance(raw, dict):
-                return
-            if int(raw.get("version", 0) or 0) != _PERSIST_VERSION:
-                return
-            state_payload = raw.get("state", {})
-            if not isinstance(state_payload, dict):
-                return
-            valid_names = {item.name for item in fields(NightCycleState)}
-            restored = NightCycleState()
-            for key, value in state_payload.items():
-                if key not in valid_names:
-                    continue
-                if key == "current_phase":
+    def _restore_state_from_payload(self, raw: Dict[str, Any]) -> bool:
+        if not isinstance(raw, dict):
+            return False
+        if int(raw.get("version", 0) or 0) != _PERSIST_VERSION:
+            return False
+        state_payload = raw.get("state", {})
+        if not isinstance(state_payload, dict):
+            return False
+        valid_names = {item.name for item in fields(NightCycleState)}
+        restored = NightCycleState()
+        for key, value in state_payload.items():
+            if key not in valid_names:
+                continue
+            if key == "current_phase":
+                try:
+                    value = NightPhase(str(value or NightPhase.AWAKE.value))
+                except ValueError:
+                    value = NightPhase.AWAKE
+            elif key in {"pressure_history", "cost_history", "recovery_history"} and isinstance(value, dict):
+                restored_history: Dict[float, float] = {}
+                for raw_key, raw_value in value.items():
                     try:
-                        value = NightPhase(str(value or NightPhase.AWAKE.value))
-                    except ValueError:
-                        value = NightPhase.AWAKE
-                elif key in {"pressure_history", "cost_history", "recovery_history"} and isinstance(value, dict):
-                    restored_history: Dict[float, float] = {}
-                    for raw_key, raw_value in value.items():
-                        try:
-                            restored_history[float(raw_key)] = float(raw_value)
-                        except (TypeError, ValueError):
-                            continue
-                    value = restored_history
-                elif key == "active_buffs" and isinstance(value, dict):
-                    value = {
-                        str(buff_key): dict(buff_value)
-                        for buff_key, buff_value in value.items()
-                        if isinstance(buff_value, dict)
-                    }
-                elif key == "sensitive_topic_tags" and isinstance(value, dict):
-                    restored_tags: Dict[str, int] = {}
-                    for raw_key, raw_value in value.items():
-                        try:
-                            restored_tags[str(raw_key)] = int(raw_value)
-                        except (TypeError, ValueError):
-                            continue
-                    value = restored_tags
-                setattr(restored, key, value)
-            if restored.system_started_at <= 0:
-                restored.system_started_at = time.time()
-            self._state = restored
-            self._last_persist_at = time.time()
-            logger.debug(f"[夜间节律] {self._channel_id} 已恢复持久化状态")
+                        restored_history[float(raw_key)] = float(raw_value)
+                    except (TypeError, ValueError):
+                        continue
+                value = restored_history
+            elif key == "active_buffs" and isinstance(value, dict):
+                value = {
+                    str(buff_key): dict(buff_value)
+                    for buff_key, buff_value in value.items()
+                    if isinstance(buff_value, dict)
+                }
+            elif key == "sensitive_topic_tags" and isinstance(value, dict):
+                restored_tags: Dict[str, int] = {}
+                for raw_key, raw_value in value.items():
+                    try:
+                        restored_tags[str(raw_key)] = int(raw_value)
+                    except (TypeError, ValueError):
+                        continue
+                value = restored_tags
+            setattr(restored, key, value)
+        if restored.system_started_at <= 0:
+            restored.system_started_at = time.time()
+        self._state = restored
+        self._last_persist_at = time.time()
+        return True
+
+    def _load_state_from_db(self) -> bool:
+        Slot = _ensure_persistence_slot_table()
+        row = Slot.get_or_none(Slot.slot_key == self._persist_slot_key)
+        if row is None or not row.slot_value:
+            return False
+        raw = json.loads(row.slot_value)
+        if self._restore_state_from_payload(raw):
+            logger.debug(f"[夜间节律] {self._channel_id} 已从数据库恢复持久化状态")
+            return True
+        return False
+
+    def _load_state_from_legacy_json(self) -> bool:
+        if not self._persist_path.exists():
+            return False
+        raw = json.loads(self._persist_path.read_text(encoding="utf-8"))
+        if self._restore_state_from_payload(raw):
+            logger.info(f"[夜间节律] {self._channel_id} 已从旧JSON恢复状态，后续写入数据库")
+            self.persist_state(force=True)
+            return True
+        return False
+
+    def _load_persisted_state(self) -> None:
+        db_loaded = False
+        try:
+            db_loaded = self._load_state_from_db()
         except Exception as exc:
-            logger.debug(f"[夜间节律] {self._channel_id} 恢复持久化状态失败: {exc}")
+            logger.debug(f"[夜间节律] {self._channel_id} 数据库状态恢复失败: {exc}")
+        if db_loaded:
+            return
+        try:
+            self._load_state_from_legacy_json()
+        except Exception as exc:
+            logger.debug(f"[夜间节律] {self._channel_id} 旧JSON状态恢复失败: {exc}")
 
     def persist_state(self, *, force: bool = False) -> None:
         now = time.time()
         if not force and now - self._last_persist_at < 5.0:
             return
         try:
-            self._persist_path.parent.mkdir(parents=True, exist_ok=True)
             payload = {
                 "version": _PERSIST_VERSION,
                 "channel_id": self._channel_id,
                 "saved_at": now,
                 "state": self._serialize_state(),
             }
-            self._persist_path.write_text(
-                json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-                encoding="utf-8",
-            )
+            Slot = _ensure_persistence_slot_table()
+            serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+            Slot.insert(
+                slot_key=self._persist_slot_key,
+                slot_value=serialized,
+                birth_ts=now,
+                modify_ts=now,
+                ttl_days=_PERSIST_SLOT_TTL_DAYS,
+            ).on_conflict(
+                conflict_target=[Slot.slot_key],
+                update={
+                    Slot.slot_value: serialized,
+                    Slot.modify_ts: now,
+                    Slot.ttl_days: _PERSIST_SLOT_TTL_DAYS,
+                },
+            ).execute()
             self._last_persist_at = now
         except Exception as exc:
-            logger.debug(f"[夜间节律] {self._channel_id} 持久化状态失败: {exc}")
+            logger.debug(f"[夜间节律] {self._channel_id} 数据库持久化失败: {exc}")
+            try:
+                if self._persist_path.exists():
+                    logger.debug(
+                        f"[夜间节律] {self._channel_id} 保留旧JSON兼容，不在数据库异常时新建状态文件"
+                    )
+            except Exception as _legacy_exc:
+                logger.debug(
+                    f"[夜间节律] {self._channel_id} 检查旧JSON状态失败: {_legacy_exc}"
+            )
 
     def evaluate_current(
         self,

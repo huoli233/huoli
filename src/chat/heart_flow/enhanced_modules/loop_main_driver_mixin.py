@@ -968,22 +968,29 @@ class LoopMainDriverMixin:
             _dash_urgency = str(_dash_verdict.get("reply_urgency", "") or "")
             # 硬阻断检查：精力耗尽/深睡/安全封锁 → 直接跳过
             if _dash_verdict.get("should_process") is False:
-                logger.info(
-                    f"{self.log_prefix} 🛑 仪表盘硬阻断: {_dash_verdict.get('decision_reason', '未知')} urgency={_dash_urgency}"
-                )
-                self._last_flow_blocker = str(_dash_verdict.get("decision_reason", "") or "仪表盘硬阻断")
-                self._store_gate_runtime(
-                    now=now,
-                    stage="dashboard_hard_block",
-                    reason=f"仪表盘硬阻断：{self._last_flow_blocker}",
-                    source="dashboard_gate",
-                    final_action="observe",
-                    next_action="observe",
-                    blocker=self._last_flow_blocker,
-                    extra_votes={"dashboard_urgency": _dash_urgency},
-                )
-                await asyncio.sleep(_TICK_FLOOR_SEC * 2)
-                return True
+                if _is_admin_force_wake:
+                    logger.info(
+                        f"{self.log_prefix} 👑 管理员强制唤醒-无视仪表盘硬阻断: "
+                        f"{_dash_verdict.get('decision_reason', '未知')} urgency={_dash_urgency}"
+                    )
+                else:
+                    logger.info(
+                        f"{self.log_prefix} 🛑 仪表盘硬阻断: "
+                        f"{_dash_verdict.get('decision_reason', '未知')} urgency={_dash_urgency}"
+                    )
+                    self._last_flow_blocker = str(_dash_verdict.get("decision_reason", "") or "仪表盘硬阻断")
+                    self._store_gate_runtime(
+                        now=now,
+                        stage="dashboard_hard_block",
+                        reason=f"仪表盘硬阻断：{self._last_flow_blocker}",
+                        source="dashboard_gate",
+                        final_action="observe",
+                        next_action="observe",
+                        blocker=self._last_flow_blocker,
+                        extra_votes={"dashboard_urgency": _dash_urgency},
+                    )
+                    await asyncio.sleep(_TICK_FLOOR_SEC * 2)
+                    return True
 
         self._store_gate_runtime(
             now=now,
@@ -1052,8 +1059,12 @@ class LoopMainDriverMixin:
             and repetition_signal.get("low_info_cluster")
         ):
             # 低信息重复内容（如反复发同一短句）应被忽略，不设置强制回复
-            _low_info_repeat_block = True
-            logger.info(f"{self.log_prefix} 🔕 低信息重复检测: 抑制所有强制回复旁路")
+            if _is_admin_force_wake:
+                force_reply_message = pinged_msg or self._get_latest_human_message(decision_messages)
+                logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-无视低信息重复抑制")
+            else:
+                _low_info_repeat_block = True
+                logger.info(f"{self.log_prefix} 🔕 低信息重复检测: 抑制所有强制回复旁路")
         elif pinged_msg is not None:
             # 被@时优先锁定回复目标，避免后续落到错误的最新消息
             force_reply_message = pinged_msg

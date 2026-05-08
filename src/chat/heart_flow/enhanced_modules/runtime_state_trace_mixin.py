@@ -293,10 +293,6 @@ class RuntimeStateTraceMixin:
         _behavior_view = dict((relation_result or {}).get("behavior_signal") or {})
         _behavior_category = str(_behavior_view.get("category", "") or "")
         _behavior_severity = float(_behavior_view.get("severity", 0.0) or 0.0)
-        if bool((repetition_signal or {}).get("detected", False)) and bool(
-            (repetition_signal or {}).get("low_info_cluster", False)
-        ):
-            return str((repetition_signal or {}).get("reason", "") or "低信息重复施压")
         if bool((harassment_signal or {}).get("detected", False)):
             return str((harassment_signal or {}).get("reason", "") or "骚扰输入")
         if _behavior_category == "harassing":
@@ -313,4 +309,3 @@ class RuntimeStateTraceMixin:
         """管理员强制唤醒时保留 force_reply 语义，其他门控统一放行为 allow。"""
         gate = str(original_gate or "allow")
         return "force_reply" if gate == "force_reply" else "allow"
-

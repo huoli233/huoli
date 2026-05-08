@@ -71,12 +71,19 @@ def audit_data_json_sources() -> dict[str, Any]:
         except ValueError:
             key = str(path.parent)
         grouped[key] = grouped.get(key, 0) + 1
+    night_cycle_source = (ROOT / "src/core/night_cycle_system.py").read_text(encoding="utf-8")
+    assert "_night_state_slot_key" in night_cycle_source
+    assert "_ensure_persistence_slot_table" in night_cycle_source
+    assert "Slot.insert(" in night_cycle_source
+    assert ".write_text(" not in night_cycle_source
     return {
         "json_file_count": len(json_files),
         "groups": grouped,
         "replyer_action_json_count": len(list((data_dir / "temp").glob("replyer_action_*.json")))
         if (data_dir / "temp").exists()
         else 0,
+        "night_cycle_state_backend": "Huoli.db:persistence_slot",
+        "night_cycle_state_json_write_removed": True,
     }
 
 
