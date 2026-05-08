@@ -492,15 +492,11 @@ class LLMRequest:
                     f"任务 '{self.request_type or '未知任务'}' 跳过疑似不兼容工具调用的模型: {', '.join(skipped_models)}"
                 )
             return compatible_models
-        request_name = (self.request_type or "").lower()
-        if request_name.startswith("memory.react"):
-            logger.warning(
-                f"任务 '{self.request_type or '未知任务'}' 未找到明确兼容工具调用的模型，"
-                "memory.react 将直接进入无工具兜底，不再回退原始工具模型列表。"
-            )
-            return []
-        logger.warning(f"任务 '{self.request_type or '未知任务'}' 未找到明确兼容工具调用的模型，回退使用原始模型列表")
-        return model_names
+        logger.warning(
+            f"任务 '{self.request_type or '未知任务'}' 未找到明确兼容工具调用的模型，"
+            "将进入无工具兜底，不再回退原始工具模型列表。"
+        )
+        return []
 
     def _check_slow_request(self, time_cost: float, model_name: str) -> None:
         """检查请求是否过慢并输出警告日志

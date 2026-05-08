@@ -87,6 +87,7 @@ name = "qwen3-next-80b"
 api_provider = "SiliconFlow"    
 price_in = 1.0
 price_out = 4.0
+supports_tool_calling = true
 
 [[models]]
 model_identifier = "zai-org/GLM-4.6"
@@ -120,6 +121,7 @@ name = "qwen3-30b"
 api_provider = "SiliconFlow"
 price_in = 0.7
 price_out = 2.8
+supports_tool_calling = true
 
 [[models]]
 model_identifier = "Qwen/Qwen3-VL-30B-A3B-Instruct"

@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 TARGET_MODEL = "siliconflow-deepseek-v4-flash"
+TOOL_MODELS = ("qwen3-30b", "qwen3-next-80b")
 NON_TOOL_TASKS = (
     "utils",
     "model_monitor",
@@ -47,6 +48,14 @@ def check_runtime_model_config() -> dict[str, Any]:
         tool_models = list(tasks.get("tool_use", {}).get("model_list", []))
         if tool_models:
             assert tool_models != [TARGET_MODEL], f"{rel}:tool_use 不能只配置不支持工具调用的 {TARGET_MODEL}"
+            assert tool_models == list(TOOL_MODELS), f"{rel}:tool_use 应使用远端工具模型 {TOOL_MODELS}: {tool_models}"
+            models_by_name = {item.get("name"): item for item in data.get("models", []) if isinstance(item, dict)}
+            for model_name in tool_models:
+                model_info = models_by_name.get(model_name)
+                assert model_info, f"{rel}:tool_use 引用了未定义模型 {model_name}"
+                assert model_info.get("supports_tool_calling") is True, (
+                    f"{rel}:tool_use 模型 {model_name} 未声明 supports_tool_calling=true"
+                )
             route_map["tool_use"] = tool_models
         checked[rel] = route_map
     return checked
@@ -71,10 +80,72 @@ def audit_data_json_sources() -> dict[str, Any]:
     }
 
 
+def _tool_names_from_definitions(definitions: list[dict[str, Any]]) -> list[str]:
+    return sorted(str(item.get("name", "")) for item in definitions if item.get("name"))
+
+
+def audit_registered_tools() -> dict[str, Any]:
+    try:
+        from src.plugin_system.apis.tool_api import get_llm_available_tool_definitions
+        from src.plugin_system.core.component_registry import component_registry
+    except Exception as exc:
+        return {"available": False, "error": str(exc)}
+
+    plugin_tools = get_llm_available_tool_definitions()
+    plugin_names = [str(name) for name, _definition in plugin_tools]
+
+    memory_names: list[str] = []
+    memory_error = ""
+    try:
+        from src.memory_system.retrieval_tools.tool_loader import init_all_tools
+        from src.memory_system.retrieval_tools.tool_registry import get_tool_registry
+
+        init_all_tools()
+        memory_names = sorted(
+            name
+            for name in get_tool_registry().get_all_tools()
+            if name != "return_information"
+        )
+    except Exception as exc:
+        memory_error = str(exc)
+
+    effective_names: list[str] = []
+    executor_error = ""
+    try:
+        from src.plugin_system.core.tool_use import ToolExecutor
+
+        executor = ToolExecutor(chat_id="audit")
+        effective_names = _tool_names_from_definitions(executor._get_tool_definitions())
+    except Exception as exc:
+        executor_error = str(exc)
+
+    all_names = [*plugin_names, *memory_names]
+    duplicates = sorted({name for name in all_names if all_names.count(name) > 1})
+    stats = component_registry.get_registry_stats()
+    return {
+        "available": True,
+        "plugin_tool_count": len(plugin_names),
+        "plugin_tool_names": sorted(plugin_names),
+        "memory_tool_count": len(memory_names),
+        "memory_tool_names": memory_names,
+        "memory_tool_error": memory_error,
+        "tool_executor_effective_count": len(effective_names),
+        "tool_executor_effective_names": effective_names,
+        "tool_executor_error": executor_error,
+        "duplicates": duplicates,
+        "component_registry": {
+            "tool_components": stats.get("tool_components", 0),
+            "total_components": stats.get("total_components", 0),
+            "total_plugins": stats.get("total_plugins", 0),
+        },
+    }
+
+
 def main() -> None:
     result = {
         "model_config": check_runtime_model_config(),
         "data_json_sources": audit_data_json_sources(),
+        "registered_tools": audit_registered_tools(),
     }
     print(json.dumps(result, ensure_ascii=False, indent=2))
 

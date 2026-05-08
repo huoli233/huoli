@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import inspect
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -42,6 +43,14 @@ except ImportError as e:
 
 logger = get_logger("工具使用")
 
+_MEMORY_TOOL_EXCLUDED_FROM_REPLY = {"return_information"}
+_TOOL_ARG_ALIASES = {
+    "record_ids": ("memory_ids", "ids", "id"),
+    "query": ("keyword", "question", "content"),
+    "words": ("word", "query", "keyword"),
+    "person_name": ("name", "nickname", "user_name"),
+}
+
 
 class ToolExecutor:
     """独立的工具执行器组件"""
@@ -75,7 +84,7 @@ class ToolExecutor:
             return cached_result, used_tools, ""
         tools = self._get_tool_definitions()
         if not tools:
-            logger.debug(f"{self.log_prefix} 没有可用工具")
+            logger.warning(f"{self.log_prefix} 没有可用工具，跳过工具调用分析")
             if return_details:
                 return [], [], ""
             return [], [], ""
@@ -90,7 +99,7 @@ class ToolExecutor:
         )
         logger.debug(f"{self.log_prefix} 开始LLM工具调用分析")
         try:
-            response, (reasoning_content, model_name, tool_calls) = await asyncio.wait_for(
+            _response, (_reasoning_content, _model_name, tool_calls) = await asyncio.wait_for(
                 self.llm_model.generate_response_async(
                     prompt=prompt,
                     tools=tools,
@@ -101,7 +110,6 @@ class ToolExecutor:
         except asyncio.TimeoutError:
             logger.warning(f"{self.log_prefix} LLM工具调用超时(30s)")
             tool_calls = []
-            response = None
         tool_results, used_tools = await self.execute_tool_calls(tool_calls)
         if tool_results:
             self._set_cache(cache_key, tool_results)
@@ -113,19 +121,92 @@ class ToolExecutor:
 
     def _get_tool_definitions(self) -> List[Dict[str, Any]]:
         """获取可用工具定义"""
-        all_tools = get_llm_available_tool_definitions()
+        plugin_tools = self._get_plugin_tool_definitions()
+        memory_tools = self._get_memory_tool_definitions()
+        all_tools = [*plugin_tools, *memory_tools]
+        if not all_tools:
+            self._log_empty_tool_registry(plugin_count=0, memory_count=0, disabled_count=0)
+            return []
         try:
             from src.plugin_system.core.global_announcement_manager import (
                 global_announcement_manager,
             )
 
-            return [
-                definition
-                for name, definition in all_tools
-                if not global_announcement_manager.is_tool_disabled(self.chat_id, name)
+            disabled_names = [
+                name for name, _definition in all_tools if global_announcement_manager.is_tool_disabled(self.chat_id, name)
             ]
-        except Exception:
-            return [definition for name, definition in all_tools]
+            visible_tools = [
+                (name, definition)
+                for name, definition in all_tools
+                if name not in disabled_names
+            ]
+            if not visible_tools:
+                self._log_empty_tool_registry(
+                    plugin_count=len(plugin_tools),
+                    memory_count=len(memory_tools),
+                    disabled_count=len(disabled_names),
+                )
+            return self._dedupe_tool_definitions(visible_tools)
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 工具禁用状态读取失败，使用全量工具: {exc}")
+            return self._dedupe_tool_definitions(all_tools)
+
+    def _get_plugin_tool_definitions(self) -> List[Tuple[str, Dict[str, Any]]]:
+        """获取插件系统注册的工具定义。"""
+        try:
+            return get_llm_available_tool_definitions()
+        except Exception as exc:
+            logger.warning(f"{self.log_prefix} 插件工具注册表读取失败: {exc}")
+            return []
+
+    def _get_memory_tool_definitions(self) -> List[Tuple[str, Dict[str, Any]]]:
+        """将记忆检索工具桥接到回复器工具执行器。"""
+        try:
+            from src.memory_system.retrieval_tools.tool_loader import init_all_tools
+            from src.memory_system.retrieval_tools.tool_registry import get_tool_registry
+
+            init_all_tools()
+            registry = get_tool_registry()
+            tools = registry.get_all_tools()
+            definitions: List[Tuple[str, Dict[str, Any]]] = []
+            for name, tool in tools.items():
+                if name in _MEMORY_TOOL_EXCLUDED_FROM_REPLY:
+                    continue
+                definitions.append((name, tool.get_tool_definition()))
+            return definitions
+        except Exception as exc:
+            logger.warning(f"{self.log_prefix} 记忆检索工具注册表读取失败: {exc}")
+            return []
+
+    def _dedupe_tool_definitions(self, tools: List[Tuple[str, Dict[str, Any]]]) -> List[Dict[str, Any]]:
+        """按工具名去重，插件工具优先，避免重复 function name 让模型混乱。"""
+        deduped: Dict[str, Dict[str, Any]] = {}
+        duplicate_names: List[str] = []
+        for name, definition in tools:
+            if name in deduped:
+                duplicate_names.append(name)
+                continue
+            deduped[name] = definition
+        if duplicate_names:
+            logger.warning(f"{self.log_prefix} 检测到重复工具名，已保留首个定义: {sorted(set(duplicate_names))}")
+        return list(deduped.values())
+
+    def _log_empty_tool_registry(self, plugin_count: int, memory_count: int, disabled_count: int) -> None:
+        """输出工具为空时的明确诊断，区分没注册、被禁用和桥接失败。"""
+        try:
+            from src.plugin_system.core.component_registry import component_registry
+            from src.plugin_system.core.plugin_manager import plugin_manager
+
+            stats = component_registry.get_registry_stats()
+            logger.warning(
+                f"{self.log_prefix} 工具注册诊断: 可用插件工具={plugin_count}, "
+                f"可用记忆工具={memory_count}, 当前聊天禁用={disabled_count}, "
+                f"已加载插件={len(plugin_manager.loaded_plugins)}, "
+                f"注册组件={stats.get('total_components', 0)}, "
+                f"Tool组件={stats.get('tool_components', 0)}"
+            )
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 工具注册诊断采集失败: {exc}")
 
     async def execute_tool_calls(
         self,
@@ -137,11 +218,11 @@ class ToolExecutor:
         if not tool_calls:
             logger.debug(f"{self.log_prefix} 无需执行工具")
             return [], []
-        func_names = [call.func_name for call in tool_calls if call.func_name]
+        func_names = [call.func_name for call in tool_calls if getattr(call, "func_name", None)]
         logger.info(f"{self.log_prefix} 开始执行工具调用: {func_names}")
         for tool_call in tool_calls:
+            tool_name = getattr(tool_call, "func_name", "") or "unknown"
             try:
-                tool_name = tool_call.func_name
                 logger.debug(f"{self.log_prefix} 执行工具: {tool_name}")
                 result = await self.execute_tool_call(tool_call)
                 if result:
@@ -182,9 +263,11 @@ class ToolExecutor:
     ) -> Optional[Dict[str, Any]]:
         """执行单个工具调用"""
         try:
-            function_name = tool_call.func_name
-            function_args = tool_call.args or {}
-            function_args["llm_called"] = True
+            function_name = getattr(tool_call, "func_name", "") or ""
+            if not function_name:
+                logger.warning(f"{self.log_prefix} 工具调用缺少函数名，已跳过")
+                return None
+            function_args = dict(getattr(tool_call, "args", None) or {})
             try:
                 from src.plugin_system.core.global_announcement_manager import (
                     global_announcement_manager,
@@ -196,22 +279,76 @@ class ToolExecutor:
             except Exception:
                 pass
             tool_instance = tool_instance or get_tool_instance(function_name, None)
-            if not tool_instance:
-                logger.warning(f"未知工具名称: {function_name}")
+            if tool_instance:
+                function_args["llm_called"] = True
+                result = await tool_instance.execute(function_args)
+                if result:
+                    return {
+                        "tool_call_id": tool_call.call_id,
+                        "role": "tool",
+                        "name": function_name,
+                        "type": "function",
+                        "content": result.get("content", ""),
+                    }
                 return None
-            result = await tool_instance.execute(function_args)
-            if result:
+
+            memory_result = await self._execute_memory_tool(function_name, function_args)
+            if memory_result is not None:
                 return {
                     "tool_call_id": tool_call.call_id,
                     "role": "tool",
                     "name": function_name,
                     "type": "function",
-                    "content": result.get("content", ""),
+                    "content": memory_result,
                 }
+
+            logger.warning(f"{self.log_prefix} 未知工具名称: {function_name}")
             return None
         except Exception as e:
             logger.error(f"执行工具调用时发生错误: {str(e)}")
             raise e
+
+    async def _execute_memory_tool(self, function_name: str, function_args: Dict[str, Any]) -> Optional[str]:
+        """执行记忆检索工具，并按函数签名注入当前聊天流上下文。"""
+        try:
+            from src.memory_system.retrieval_tools.tool_loader import init_all_tools
+            from src.memory_system.retrieval_tools.tool_registry import get_tool_registry
+
+            init_all_tools()
+            memory_tool = get_tool_registry().get_tool(function_name)
+            if memory_tool is None or function_name in _MEMORY_TOOL_EXCLUDED_FROM_REPLY:
+                return None
+            prepared_args = self._prepare_memory_tool_args(memory_tool, function_args)
+            result = await memory_tool.execute(**prepared_args)
+            if result:
+                return str(result)
+            return None
+        except Exception as exc:
+            logger.error(f"{self.log_prefix} 记忆工具 {function_name} 执行失败: {exc}")
+            raise
+
+    def _prepare_memory_tool_args(self, memory_tool: Any, raw_args: Dict[str, Any]) -> Dict[str, Any]:
+        """按原始执行函数签名整理参数，避免把系统注入字段传给不接收的函数。"""
+        params = dict(raw_args)
+        signature = inspect.signature(memory_tool.execute_func)
+        parameters = signature.parameters
+
+        for target_name, aliases in _TOOL_ARG_ALIASES.items():
+            if target_name in parameters and target_name not in params:
+                for alias in aliases:
+                    if alias in params:
+                        params[target_name] = params[alias]
+                        break
+
+        if "chat_id" in parameters and not params.get("chat_id"):
+            params["chat_id"] = self.chat_id
+        if "stream_id" in parameters and not params.get("stream_id"):
+            params["stream_id"] = self.chat_id
+
+        accepts_var_kwargs = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in parameters.values())
+        if accepts_var_kwargs:
+            return params
+        return {key: value for key, value in params.items() if key in parameters}
 
     def _generate_cache_key(self, target_message: str, chat_history: str, sender: str) -> str:
         """生成缓存键"""

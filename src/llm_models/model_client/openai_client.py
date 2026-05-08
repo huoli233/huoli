@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import io
 import json
+import os
 import re
 import base64
 from collections.abc import Iterable
@@ -77,6 +78,22 @@ except ImportError as e:
     ) from e  # noqa: E402
 
 logger = get_logger("LLM模型")
+
+_PROXY_ENV_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY")
+
+
+def _sanitize_proxy_env() -> None:
+    """清理被复制成中文/智能引号的代理环境变量，避免 httpx 解析失败。"""
+    quote_chars = "\"'“”‘’"
+    for key in _PROXY_ENV_KEYS:
+        for env_key in (key, key.lower()):
+            raw = os.environ.get(env_key)
+            if raw is None:
+                continue
+            cleaned = raw.strip().strip(quote_chars).strip()
+            if cleaned != raw:
+                os.environ[env_key] = cleaned
+                logger.warning(f"代理环境变量 {env_key} 包含异常引号，已自动清理")
 
 def _convert_messages(
     messages: list[Message],
@@ -655,6 +672,7 @@ def _default_normal_response_parser(
 class OpenaiClient(BaseClient):
     def __init__(self, api_provider: APIProvider):
         super().__init__(api_provider)
+        _sanitize_proxy_env()
         # 客户端超时设为 None，完全依赖 asyncio.wait_for 控制超时
         # 避免 OpenAI 内部 httpx 超时与 asyncio 超时冲突
         self.client: AsyncOpenAI = AsyncOpenAI(

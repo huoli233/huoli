@@ -422,3 +422,28 @@
 - `tool_use` 未统一切到 V4 Flash，因为当前 V4 Flash 配置 `supports_tool_calling=false`，而工具执行器、知识检索 ReAct、表达学习等链路依赖 function calling；强切会破坏工具链。
 - 本轮不删除历史 `data/temp/replyer_action_*.json`，只停止后续新增；如需清理历史运行数据，应单独确认清理策略。
 - 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
+
+## 2026-05-09T04:24:48+08:00 - Task: 优化工具调用链路并桥接记忆检索工具
+
+### What was done:
+- 将运行态和优化配置中的 `tool_use` 模型池调整为 `qwen3-30b` 与 `qwen3-next-80b`，非工具任务继续使用 `siliconflow-deepseek-v4-flash`，避免不支持 function calling 的模型承接工具任务。
+- 在模板中为 `qwen3-30b`、`qwen3-next-80b` 标记 `supports_tool_calling=true`，并让工具模型过滤在没有明确兼容模型时直接进入无工具兜底，不再回退到原始模型列表硬撞 400。
+- 修复 OpenAI/httpx 初始化时代理环境变量带中文/智能引号导致客户端创建失败的问题，启动时会自动清理 `HTTP_PROXY/HTTPS_PROXY/ALL_PROXY/NO_PROXY` 的异常外层引号。
+- 将 `ToolExecutor` 同时接入插件工具注册表和记忆检索工具注册表；当前内置插件没有 Tool 组件时，回复器仍能看到 `query_direct_memory/search_chat_history/search_memory_by_embedding/search_knowledge/query_person_info/query_words/get_chat_history_detail` 等 7 个记忆工具。
+- 工具执行阶段会按目标函数签名注入当前 `chat_id/stream_id`，并兼容 `memory_ids -> record_ids`、`keyword -> query`、`word -> words` 等常见参数别名。
+- 增强 `scripts/model_runtime_audit.py`，分别输出插件工具、记忆工具、ToolExecutor 实际可用工具和重复工具名，便于定位“工具数为 0”的真实来源。
+
+### Testing:
+- `.venv\Scripts\ruff.exe check src\plugin_system\core\tool_use.py src\llm_models\model_client\openai_client.py src\llm_models\utils_model.py scripts\model_runtime_audit.py` 通过。
+- `.venv\Scripts\python.exe scripts\model_runtime_audit.py` 通过，确认非工具任务均为 `siliconflow-deepseek-v4-flash`，`tool_use=["qwen3-30b","qwen3-next-80b"]`，记忆工具 7 个，ToolExecutor 实际可用工具 7 个。
+- `.venv\Scripts\python.exe -` 工具桥接 smoke 通过，确认工具定义数为 7，且 `query_direct_memory/query_words/get_chat_history_detail` 可正确补齐或转换参数。
+- `.venv\Scripts\python.exe scripts\config_profile_regression.py` 通过。
+- `.venv\Scripts\python.exe scripts\heartflow_state_regression.py` 通过。
+- `.venv\Scripts\python.exe -m compileall src scripts` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- `config/model_config.toml` 与 `config/model_config_optimized.toml` 是 `.gitignore` 忽略的本地运行配置，本轮已修改本机运行态但不会提交真实密钥配置。
+- 独立审计进程中的 `plugin_tool_count=0` 是因为当前内置插件没有注册 BaseTool 组件；本轮通过记忆检索工具桥接让回复器工具调用不再空转。
+- 本轮不执行结构性删除，也不迁移 data 下历史 JSON；JSON/数据库存储合并需要单独数据迁移方案和删除分支规则。
+- 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
