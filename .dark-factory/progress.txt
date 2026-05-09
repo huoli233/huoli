@@ -692,3 +692,28 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 删除前保留分支：`preserve/full-modules-状态页假实时轮询移除`；实际删除分支：`delete/状态页假实时轮询移除`。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt`、多个 `docs/*.md`、`.trae/`、若干心流/感知模型文件改动，本轮提交必须继续精确暂存，避免带入。
+
+## 2026-05-09T09:04:55+08:00 - Task: 心流独白来源标记与上下文日志去重
+
+### What was done:
+- 排查重复日志来源：`AwarenessEngine.gather_awareness()` 每次规则/LLM 判定都会 info 输出，同一 tick 或短时间重复快照会连续出现 `[觉察] ... 规则判定`。
+- 排查上下文重复来源：回复生成前的 `extra_info` 会合并维度、灵魂、独白、执行上下文；已有灵魂数据存在时原逻辑直接返回 payload，未对重复行做归并。
+- 排查“心里所想像模板”的来源：`inner_voice` 对中文 `思考/欲望/行动` 字段、`6, 思考=...` 这种输出格式解析不足，容易把模型字段文本混入 thought，或走 `_fabricate_reflection()` 本地兜底模板。
+- 为 `VoiceVerdict` 增加 `thinking_source`，区分 `llm_json`、`llm_field`、`llm_plain`、`llm_text`、`local_fallback` 和 `+low_info_guard`，日志中直接显示独白来源。
+- 中文 JSON/字段格式解析补齐：支持 `思考/想法/内心想法`、`欲望/回复欲望`、`情绪`、`行动/动作`，并支持前置数字欲望格式。
+- 压缩独白时将 `.../……` 当停顿保留，不再把模型真实后半句误截断。
+- 觉察日志增加连续重复合并：同一频道同一判定签名只输出一次 info，连续重复改为 debug 合并计数。
+- 灵魂数据摘要从多行日志改为单行摘要，并对 extra_info 行做去重；去重键会忽略日志时间戳前缀。
+- 新增 `scripts/heartflow_voice_context_regression.py`，覆盖独白解析来源、VoiceVerdict 序列化、灵魂上下文去重、觉察日志去重。
+
+### Testing:
+- `uv run ruff check src/common/data_models/heartflow_models.py src/chat/proactive/perception_engine.py src/chat/heart_flow/inner_voice.py src/chat/heart_flow/enhanced_modules/scene_planner_bridge_mixin.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py scripts/heartflow_voice_context_regression.py` 通过。
+- `uv run python scripts/heartflow_voice_context_regression.py` 通过，确认 `llm_field/json/local_fallback` 来源可区分，灵魂数据重复行合并，重复觉察只保留 1 条 info。
+- `uv run python scripts/config_profile_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check -- ...` 针对本轮文件通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前分支仍为 `delete/状态页假实时轮询移除`；本轮不是删除类改动，仅在现有脏工作区上精确暂存心流日志/独白相关文件。
+- 工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt`、多个 `docs/*.md`、`.trae/`、WebUI 状态页相关文件和 dist 资产，提交时必须继续避免暂存。

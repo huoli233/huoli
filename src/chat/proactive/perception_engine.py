@@ -455,6 +455,43 @@ class AwarenessEngine:
             "llm_evaluations": 0,
             "rule_evaluations": 0,
         }
+        self._last_log_signature: Tuple[str, ...] = ()
+        self._last_log_ts: float = 0.0
+        self._last_log_repeat_count: int = 0
+
+    def _log_awareness_verdict(
+        self,
+        channel_id: str,
+        source: str,
+        verdict: AwarenessVerdict,
+        crowd_vibe: CrowdVibe,
+    ) -> None:
+        signature = (
+            str(channel_id),
+            str(source),
+            str(verdict.alert_grade.name),
+            f"{float(verdict.engagement_pull or 0.0):.2f}",
+            str(crowd_vibe.value),
+            str(verdict.inference_source or ""),
+        )
+        now = time.time()
+        if signature == self._last_log_signature:
+            self._last_log_repeat_count += 1
+            if self._last_log_repeat_count == 1 or now - self._last_log_ts >= 30.0:
+                logger.debug(
+                    f"[觉察] {channel_id[:8]} | {source}重复快照已合并"
+                    f"({self._last_log_repeat_count}) | "
+                    f"等级={verdict.alert_grade.label()} 参与={verdict.engagement_pull:.2f} 氛围={crowd_vibe.value}"
+                )
+                self._last_log_ts = now
+            return
+        self._last_log_signature = signature
+        self._last_log_ts = now
+        self._last_log_repeat_count = 0
+        logger.info(
+            f"[觉察] {channel_id[:8]} | {source} | "
+            f"等级={verdict.alert_grade.label()} 参与={verdict.engagement_pull:.2f} 氛围={crowd_vibe.value}"
+        )
 
     def _refresh_conf(self) -> None:
         now = time.time()
@@ -556,11 +593,7 @@ class AwarenessEngine:
             verdict.timing_tag = time_tag
             verdict.body_narration = narration
             self._counters["llm_evaluations"] += 1
-            logger.info(
-                f"[觉察] {channel_id[:8]} | LLM判定 | "
-                f"等级={verdict.alert_grade.label()} 参与={verdict.engagement_pull:.2f} "
-                f"氛围={crowd_vibe.value}"
-            )
+            self._log_awareness_verdict(channel_id, "LLM判定", verdict, crowd_vibe)
             return verdict
         # 规则兜底
         self._counters["rule_evaluations"] += 1
@@ -574,10 +607,7 @@ class AwarenessEngine:
             descriptor_atoms=atom_weights,
             timing_tag=time_tag,
         )
-        logger.info(
-            f"[觉察] {channel_id[:8]} | 规则判定 | "
-            f"等级={alert_grade.label()} 参与={interest_score:.2f} 氛围={crowd_vibe.value}"
-        )
+        self._log_awareness_verdict(channel_id, "规则判定", verdict, crowd_vibe)
         return verdict
 
     # ---- 感官采集 ----

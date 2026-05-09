@@ -409,7 +409,8 @@ class SelfDialogueEngine:
             # 更新跨轮持久状态
             self._update_persistent_state(verdict, speaker_id)
             if verdict.thinking:
-                logger.info(f"{self._tag} 心里想: {verdict.thinking[:80]}")
+                _thinking_source = str(getattr(verdict, "thinking_source", "") or "unknown")
+                logger.info(f"{self._tag} 心里想({_thinking_source}): {verdict.thinking[:80]}")
             primary = verdict.intents[0] if verdict.intents else None
             dom_tag = (
                 dominant_intent_data["kind"]
@@ -418,6 +419,7 @@ class SelfDialogueEngine:
             )
             logger.info(
                 f"{self._tag} 完成 | 想法='{verdict.thinking[:40] if verdict.thinking else '无'}' "
+                f"| source={str(getattr(verdict, 'thinking_source', '') or 'unknown')} "
                 f"| intents={len(verdict.intents)} "
                 f"| primary={primary.intent_type if primary else 'none'}"
                 f"| dominant_intent={dom_tag}"
@@ -722,8 +724,8 @@ class SelfDialogueEngine:
                 desire = 4
                 logger.info(f"{self._tag} [短句复读护栏] {old}->{desire}")
             if thought_text and len(thought_text) <= 6:
-                verdict.thinking = f"{
-                    thought_text.rstrip('。！？!?')}，像在重复一句没说清楚的话。"
+                verdict.thinking = f"{thought_text.rstrip('。！？!?')}，像在重复一句没说清楚的话。"
+                verdict.thinking_source = f"{verdict.thinking_source or 'unknown'}+low_info_guard"
                 if not verdict.current_mood or verdict.current_mood == "疑惑":
                     verdict.current_mood = "无聊"
         # 当 LLM 直接给出行为决策时，跳过基于文本分析的一致性修正
@@ -836,14 +838,17 @@ class SelfDialogueEngine:
         annoyance = float(ctx.annoyance_value or 0.0)
         if annoyance >= 35 or has_repeated_segment:
             verdict.thinking = "无不无聊啊，发这么多遍"
+            verdict.thinking_source = f"{verdict.thinking_source or 'unknown'}+low_info_guard"
             if not verdict.current_mood or verdict.current_mood == "疑惑":
                 verdict.current_mood = "心烦"
         elif annoyance >= 20:
             verdict.thinking = "还是这句，没说清楚，像在等我接前情。"
+            verdict.thinking_source = f"{verdict.thinking_source or 'unknown'}+low_info_guard"
             if not verdict.current_mood or verdict.current_mood == "疑惑":
                 verdict.current_mood = "无奈"
         else:
             verdict.thinking = "这句信息太少了，像在重复，我先看看再说。"
+            verdict.thinking_source = f"{verdict.thinking_source or 'unknown'}+low_info_guard"
             if not verdict.current_mood or verdict.current_mood == "疑惑":
                 verdict.current_mood = "无聊"
         verdict.thinking = self._compress_thought(verdict.thinking)
@@ -1202,6 +1207,8 @@ class SelfDialogueEngine:
             text = think_hit.group(1).strip()
         # 尝试提取 JSON 块（支持嵌套花括号）
         json_hit = re.search(r'\{.*?"thought".*?\}', text, re.DOTALL)
+        if not json_hit:
+            json_hit = re.search(r'\{.*?"(?:思考|想法|内心想法)".*?\}', text, re.DOTALL)
         if json_hit:
             candidate = json_hit.group(0)
             brace_depth = 0
@@ -1218,12 +1225,25 @@ class SelfDialogueEngine:
                 candidate = candidate[:end_pos]
             try:
                 data = json.loads(candidate)
-                thought = data.get("thought", "").strip()
-                desire_raw = data.get("desire", data.get("reply_desire", 5))
+                thought = str(
+                    data.get("thought")
+                    or data.get("thinking")
+                    or data.get("思考")
+                    or data.get("想法")
+                    or data.get("内心想法")
+                    or ""
+                ).strip()
+                desire_raw = (
+                    data.get("desire")
+                    or data.get("reply_desire")
+                    or data.get("欲望")
+                    or data.get("回复欲望")
+                    or 5
+                )
                 desire_val = max(1, min(10, int(desire_raw)))
-                mood = data.get("mood", "")
+                mood = data.get("mood", data.get("情绪", ""))
                 # 解析 LLM 直接给出的行为决策
-                next_action_raw = str(data.get("next_action", "")).strip().lower()
+                next_action_raw = str(data.get("next_action") or data.get("行动") or data.get("动作") or "").strip().lower()
                 _valid_actions = {"reply", "followup", "observe", "wait", "lurk", "rest", "disengage"}
                 next_action_val = next_action_raw if next_action_raw in _valid_actions else ""
                 # 由 next_action 推导 should_reply
@@ -1254,22 +1274,30 @@ class SelfDialogueEngine:
                             current_mood=mood,
                             comprehension_confidence=comprehension_confidence,
                             needs_upgrade=needs_upgrade,
+                            thinking_source="llm_json",
                         )
             except (json.JSONDecodeError, ValueError, TypeError):
                 pass
         # 正则提取字段
-        num_hit = re.search(r'"?desire"?\s*[:=]\s*(\d+)', text)
-        thought_hit = re.search(r'"?thought"?\s*[:=]\s*"([^"]+)"', text)
+        num_hit = re.search(r'"?(?:desire|reply_desire|欲望|回复欲望)"?\s*[:=：]\s*(\d+)', text)
+        thought_hit = re.search(
+            r'"?(?:thought|thinking|思考|想法|内心想法)"?\s*[:=：]\s*["“]?(.+?)(?=["”]?\s*(?:[,，]|\n|\r|\s{2,})?\s*"?(?:desire|reply_desire|欲望|回复欲望|mood|情绪|next_action|行动)"?\s*[:=：]|$)',
+            text,
+            re.DOTALL,
+        )
         # 尝试从非JSON文本中提取 next_action 关键词
         _text_action = ""
         _action_hit = re.search(
-            r'"?next_action"?\s*[:=]\s*"?(reply|followup|observe|wait|lurk|rest|disengage)"?',
-            text, re.IGNORECASE
+            r'"?(?:next_action|行动|动作)"?\s*[:=：]\s*"?(reply|followup|observe|wait|lurk|rest|disengage)"?',
+            text,
+            re.IGNORECASE,
         )
         if _action_hit:
             _text_action = _action_hit.group(1).lower()
-        if thought_hit and num_hit:
-            desire_val = max(1, min(10, int(num_hit.group(1))))
+        leading_num_hit = re.match(r"\s*(\d+)\s*[,，;；:：]?", text)
+        field_desire_hit = num_hit or leading_num_hit
+        if thought_hit and field_desire_hit:
+            desire_val = max(1, min(10, int(field_desire_hit.group(1))))
             thought = thought_hit.group(1).strip()
             if thought and len(thought) >= 4:
                 _compressed = self._compress_thought(thought)
@@ -1278,6 +1306,7 @@ class SelfDialogueEngine:
                         thinking=_compressed,
                         reply_desire_level=desire_val,
                         next_action=_text_action,
+                        thinking_source="llm_field",
                     )
         # 数字开头 + 余文
         plain_hit = re.match(r"(\d+)\s*(.*)", text, re.DOTALL)
@@ -1291,6 +1320,7 @@ class SelfDialogueEngine:
                         thinking=_compressed,
                         reply_desire_level=desire_val,
                         next_action=_text_action,
+                        thinking_source="llm_plain",
                     )
             return VoiceVerdict(
                 thinking=self._fabricate_reflection(
@@ -1298,6 +1328,7 @@ class SelfDialogueEngine:
                 ),
                 reply_desire_level=desire_val,
                 next_action=_text_action,
+                thinking_source="local_fallback",
             )
         # 任意数字
         any_num = re.search(r"(\d+)", text)
@@ -1334,6 +1365,7 @@ class SelfDialogueEngine:
                 return VoiceVerdict(
                     thinking=_compressed, reply_desire_level=desire_val,
                     next_action=_text_action,
+                    thinking_source="llm_text",
                 )
         return VoiceVerdict(
             thinking=self._fabricate_reflection(
@@ -1341,6 +1373,7 @@ class SelfDialogueEngine:
             ),
             reply_desire_level=desire_val,
             next_action=_text_action,
+            thinking_source="local_fallback",
         )
 
     @staticmethod
@@ -1350,10 +1383,11 @@ class SelfDialogueEngine:
         if not text:
             return ""
         text = re.sub(r"\s+", " ", text)
+        text = re.sub(r"\.{2,}|…{2,}", "…", text)
         text = re.sub(r"([。！？!?；;…]){2,}", r"\1", text)
         first_cut = None
         for idx, ch in enumerate(text):
-            if ch in "。！？!?；;…":
+            if ch in "。！？!?；;":
                 first_cut = idx
                 break
         if first_cut is not None:

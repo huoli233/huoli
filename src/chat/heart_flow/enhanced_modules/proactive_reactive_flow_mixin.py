@@ -373,13 +373,9 @@ class ProactiveReactiveFlowMixin:
                 recent_reply_guard="",
             )
             extra_info = self._ensure_soul_data_in_extra_info(extra_info)
-            _key_lines = [
-                line
-                for line in (extra_info or "").split("\n")
-                if self._contains_soul_data(line)
-            ]
+            _key_lines = self._summarize_soul_data_lines(extra_info)
             if _key_lines:
-                logger.info(f"{self.log_prefix} 🧠 传入LLM的灵魂数据:\n" + "\n".join(_key_lines[:8]))
+                logger.info(f"{self.log_prefix} 🧠 传入LLM的灵魂数据摘要: {' | '.join(_key_lines)}")
             else:
                 logger.warning(
                     f"{self.log_prefix} ⚠️ 传入LLM的extra_info中没有灵魂数据！extra_info长度={len(extra_info or '')}"

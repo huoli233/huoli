@@ -628,6 +628,35 @@ class ScenePlannerBridgeMixin:
         return any(keyword in payload for keyword in self._soul_prompt_keywords())
 
     @staticmethod
+    def _dedupe_prompt_lines(lines: List[str]) -> List[str]:
+        unique_lines: List[str] = []
+        seen: set[str] = set()
+        for line in lines:
+            normalized = re.sub(r"\s+", " ", str(line or "").strip())
+            normalized_key = re.sub(r"^\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+", "", normalized)
+            if not normalized:
+                continue
+            if normalized_key in seen:
+                continue
+            seen.add(normalized_key)
+            unique_lines.append(normalized)
+        return unique_lines
+
+    def _dedupe_extra_info_block(self, extra_info: str) -> str:
+        lines = str(extra_info or "").splitlines()
+        if not lines:
+            return ""
+        return "\n".join(self._dedupe_prompt_lines(lines))
+
+    def _summarize_soul_data_lines(self, extra_info: str, limit: int = 6) -> List[str]:
+        lines = [
+            line
+            for line in str(extra_info or "").splitlines()
+            if self._contains_soul_data(line)
+        ]
+        return self._dedupe_prompt_lines(lines)[: max(1, int(limit or 1))]
+
+    @staticmethod
     def _contains_night_soul_data(text: str) -> bool:
         payload = str(text or "")
         if not payload:
@@ -650,7 +679,7 @@ class ScenePlannerBridgeMixin:
         if not self._contains_night_soul_data(payload):
             self._inject_night_soul_state(fallback_parts)
         if self._contains_soul_data(payload) and not fallback_parts:
-            return payload
+            return self._dedupe_extra_info_block(payload)
         if not self._contains_soul_data(payload):
             self._inject_fallback_soul_state(fallback_parts)
         fallback_lines = [str(line).strip() for line in fallback_parts if str(line).strip()]
@@ -661,8 +690,9 @@ class ScenePlannerBridgeMixin:
             ]
         fallback_block = "\n".join(fallback_lines[:6]).strip()
         if not fallback_block:
-            return payload
-        return f"{payload}\n{fallback_block}" if payload else fallback_block
+            return self._dedupe_extra_info_block(payload)
+        merged = f"{payload}\n{fallback_block}" if payload else fallback_block
+        return self._dedupe_extra_info_block(merged)
 
     async def _update_emotion_tracker_state(self, messages: List) -> None:
         """更新情绪追踪器状态 - 好感、烦躁、心理压力、创伤值等"""

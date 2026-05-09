@@ -311,6 +311,7 @@ class VoiceVerdict(BaseDataModel):
     dominant_unfinished_intent: Optional[Dict[str, Any]] = None
     comprehension_confidence: float = 0.5
     needs_upgrade: bool = False
+    thinking_source: str = ""
 
     def has_active_intent(self) -> bool:
         return any(not i.is_passive() for i in self.intents)
@@ -336,6 +337,7 @@ class VoiceVerdict(BaseDataModel):
             "dominant_intent": self.dominant_unfinished_intent,
             "comprehension_confidence": self.comprehension_confidence,
             "needs_upgrade": self.needs_upgrade,
+            "thinking_source": self.thinking_source,
             "is_valid": self.is_valid,
             "error_detail": self.error_detail,
         }
@@ -358,6 +360,7 @@ class VoiceVerdict(BaseDataModel):
             dominant_unfinished_intent=data.get("dominant_intent"),
             comprehension_confidence=float(data.get("comprehension_confidence", 0.5)),
             needs_upgrade=bool(data.get("needs_upgrade", False)),
+            thinking_source=str(data.get("thinking_source", "") or ""),
         )
 
     @classmethod
