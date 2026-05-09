@@ -657,6 +657,18 @@ class StrategyActionStateMixin:
             driving_factors=driving_factors,
         )
         self._last_execution_runtime = execution_verdict.to_dict()
+        try:
+            from src.webui.services.runtime_state_hub import emit_runtime_delta
+
+            emit_runtime_delta(
+                self.stream_id,
+                module="execution_runtime",
+                path="domains.execution_runtime",
+                value=self._last_execution_runtime,
+                reason=str(execution_stage or "execution_runtime"),
+            )
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 运行态执行裁定推送失败: {exc}")
         return self._last_execution_runtime
 
     def _decide_action(

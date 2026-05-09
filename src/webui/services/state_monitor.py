@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from src.chat.heart_flow.heartfc_state_exporter import export_heartfc_state, list_heartfc_chats
 from src.chat.heart_flow.speak_prediction_engine import get_speak_prediction_engine
+from src.webui.services.runtime_state_hub import get_runtime_state_hub
 from src.webui.runtime_config import webui_module_view
 
 _DYNAMIC_TRACE_CACHE: Dict[str, Dict[str, float]] = {}
@@ -156,7 +157,17 @@ def _signal_color(severity: str) -> str:
 
 
 def _format_percent(value: float) -> str:
-    return f"{int(round(max(0.0, min(1.0, value)) * 100))}%"
+    return f"{max(0.0, min(1.0, value)) * 100:.1f}%"
+
+
+def _ratio_metric(value: float, *, precision: int = 1) -> Dict[str, Any]:
+    ratio = max(0.0, min(1.0, float(value or 0.0)))
+    return {
+        "raw": round(ratio, 4),
+        "percent": round(ratio * 100.0, precision),
+        "display_precision": precision,
+        "display_value": f"{ratio * 100.0:.{precision}f}%",
+    }
 
 
 def _label_energy_phase(value: Any) -> str:
@@ -498,7 +509,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         signals.append(
             _signal_card(
                 key="boredom_load",
-                label="无聊负荷",
+                label="无聊度",
                 family="emotion",
                 severity="medium" if boredom < emotion_cfg["boredom_high"] else "high",
                 value=boredom,
@@ -514,7 +525,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         signals.append(
             _signal_card(
                 key="loneliness_load",
-                label="孤独负荷",
+                label="孤独感",
                 family="emotion",
                 severity="medium" if loneliness < emotion_cfg["loneliness_high"] else "high",
                 value=loneliness,
@@ -530,7 +541,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         signals.append(
             _signal_card(
                 key="environment_fatigue_load",
-                label="环境疲劳",
+                label="疲劳感",
                 family="emotion",
                 severity="medium" if fatigue < emotion_cfg["fatigue_high"] else "high",
                 value=fatigue,
@@ -546,7 +557,7 @@ def _build_active_signals(domains: Dict[str, Any]) -> list[Dict[str, Any]]:
         signals.append(
             _signal_card(
                 key="withdrawal_drive",
-                label="撤离倾向",
+                label="退场倾向",
                 family="emotion",
                 severity="medium" if withdrawal < emotion_cfg["withdrawal_high"] else "high",
                 value=withdrawal,
@@ -1311,24 +1322,15 @@ def _build_circadian_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
     time_band_label = str(circadian.get("time_band_label", "") or "")
     time_band_description = str(circadian.get("time_band_description", "") or "")
     if not time_band:
-        if 13 <= current_hour < 17:
-            time_band, time_band_label, time_band_description = "afternoon", "下午", "午后低谷"
-        elif 20 <= current_hour < 22:
-            time_band, time_band_label, time_band_description = "evening", "晚上", "夜间社交窗口"
-        elif 22 <= current_hour < 23:
-            time_band, time_band_label, time_band_description = "late_evening", "晚上", "熬夜压力预热"
-        elif current_hour >= 23:
-            time_band, time_band_label, time_band_description = "late_night", "半夜", "睡眠窗口开始"
-        elif 0 <= current_hour < 4:
-            time_band, time_band_label, time_band_description = "midnight", "凌晨", "凌晨反思窗口"
-        elif 4 <= current_hour < 7:
-            time_band, time_band_label, time_band_description = "dawn", "清晨", "清晨恢复窗口"
-        elif 7 <= current_hour < 11:
-            time_band, time_band_label, time_band_description = "morning", "上午", "上午清醒"
-        elif 11 <= current_hour < 13:
-            time_band, time_band_label, time_band_description = "noon", "中午", "中午平稳"
-        else:
-            time_band, time_band_label, time_band_description = "daytime", "白天", "白天平稳"
+        try:
+            from src.core.night_cycle_system import resolve_system_time_band
+
+            timeline = resolve_system_time_band(current_hour)
+            time_band = str(timeline.get("key", "") or "daytime")
+            time_band_label = str(timeline.get("label", "") or "白天")
+            time_band_description = str(timeline.get("description", "") or "系统时间线")
+        except Exception:
+            time_band, time_band_label, time_band_description = "daytime", "白天", "系统时间线"
     pressure_breakdown = circadian.get("pressure_breakdown", {})
     if not isinstance(pressure_breakdown, dict):
         pressure_breakdown = {}
@@ -1977,9 +1979,9 @@ def _build_dynamic_trace(
         "thinking_percent": _safe_float(resource_detail.get("thinking_percent", 0.0)),
     }
     labels = {
-        "boredom_load": "无聊负荷",
-        "loneliness_load": "孤独负荷",
-        "environment_fatigue_load": "环境疲劳",
+        "boredom_load": "无聊度",
+        "loneliness_load": "孤独感",
+        "environment_fatigue_load": "疲劳感",
         "initiative_drive": "主动意愿",
         "scene_heat_score": "会话热度",
         "safety_score": "安全风险",
@@ -1993,8 +1995,8 @@ def _build_dynamic_trace(
         "initiative_drive": "内在时钟、情绪驱动、好奇心和疲劳共同影响",
         "scene_heat_score": "会话消息频率、活跃人数、互动质量和氛围共同影响",
         "safety_score": "安全边界融合的威胁信号共同影响",
-        "chat_percent": "聊天资源账本的消耗与恢复事件共同影响",
-        "thinking_percent": "思考资源账本的消耗与恢复事件共同影响",
+        "chat_percent": "聊天值的消耗与恢复事件共同影响",
+        "thinking_percent": "思考值的消耗与恢复事件共同影响",
     }
     previous = _DYNAMIC_TRACE_CACHE.get(channel_id, {})
     trace = []
@@ -2037,7 +2039,7 @@ def _build_initiative_state(domains: Dict[str, Any], prediction: Dict[str, Any])
         "effect_label": label,
         "chat_timing_label": str(prediction.get("decision_label", "继续观察") or "继续观察"),
         "effect_summary": (
-            "无聊和孤独会推高主动开口；环境疲劳、撤离倾向、压力和低资源会压低开口。"
+            "无聊度和孤独感会推高主动开口；疲劳感、退场倾向、压力和低资源会压低开口。"
         ),
     }
 
@@ -2055,7 +2057,7 @@ def _build_display_policy() -> Dict[str, list[str]]:
             "发言预测",
         ],
         "active": [
-            "无聊/孤独/环境疲劳/撤离/主动意愿",
+            "无聊度/孤独感/疲劳感/退场倾向/主动意愿",
             "情绪低落/好奇心/社交欲显著变化",
             "浅睡/深睡/熬穿/清晨恢复/睡眠债",
             "烦躁/压力/创伤/混乱/伪装",
@@ -2063,9 +2065,9 @@ def _build_display_policy() -> Dict[str, list[str]]:
             "冷却窗口/等待时长/重新接入/会话升温",
         ],
         "detail": [
-            "资源账本的聊天值和思考值",
+            "运行资源的聊天值和思考值",
             "夜间机制窗口、睡眠债、困意和熬夜压力",
-            "情绪账本、主动驱动和当前感受",
+            "情绪状态、主动倾向和当前感受",
             "记忆栈、记忆过载、回忆录和知识条目",
             "主动意图、待结算事件和后台随机事件",
             "会话感知、话题焦点、活跃人数",
@@ -2241,8 +2243,12 @@ def _build_presentation(
 
 async def build_monitor_overview() -> Dict[str, Any]:
     overview = list_heartfc_chats()
+    now = time.time()
     return {
-        "updated_at": time.time(),
+        "snapshot_kind": "overview",
+        "updated_at": now,
+        "server_time": now,
+        "state_version": int(now * 1000),
         "active_count": overview.get("active_count", 0),
         "hidden_internal_count": overview.get("hidden_internal_count", 0),
         "channels": overview.get("channels", []),
@@ -2267,10 +2273,15 @@ async def build_channel_monitor_state(channel_id: str) -> Optional[Dict[str, Any
         dashboard_snapshot=dashboard,
         prediction=prediction,
     )
-    return {
+    now = time.time()
+    packet = {
         "channel_id": str(channel_id),
-        "updated_at": time.time(),
+        "updated_at": now,
+        "server_time": now,
         "domains": state.get("domains", {}),
         "presentation": presentation,
         "prediction": prediction,
     }
+    packet["state_version"] = int(now * 1000)
+    await get_runtime_state_hub().set_snapshot(str(channel_id), packet, reason="monitor_build")
+    return packet

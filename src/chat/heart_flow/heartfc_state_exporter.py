@@ -188,28 +188,15 @@ def _time_band_label(value: Any) -> str:
 
 
 def _resolve_time_band(hour: Optional[int] = None) -> Dict[str, Any]:
-    import time as _time
+    try:
+        from src.core.night_cycle_system import resolve_system_time_band
 
-    h = _time.localtime().tm_hour if hour is None else int(hour) % 24
-    if 13 <= h < 17:
-        key, desc = "afternoon", "午后低谷"
-    elif 20 <= h < 22:
-        key, desc = "evening", "夜间社交窗口"
-    elif 22 <= h < 23:
-        key, desc = "late_evening", "熬夜压力预热"
-    elif 23 <= h:
-        key, desc = "late_night", "睡眠窗口开始"
-    elif 0 <= h < 4:
-        key, desc = "midnight", "凌晨反思窗口"
-    elif 4 <= h < 7:
-        key, desc = "dawn", "清晨恢复窗口"
-    elif 7 <= h < 11:
-        key, desc = "morning", "上午清醒"
-    elif 11 <= h < 13:
-        key, desc = "noon", "中午平稳"
-    else:
-        key, desc = "daytime", "白天平稳"
-    return {"key": key, "label": _time_band_label(key), "description": desc, "hour": h}
+        return resolve_system_time_band(hour)
+    except Exception:
+        import time as _time
+
+        h = _time.localtime().tm_hour if hour is None else int(hour) % 24
+        return {"key": "daytime", "label": _time_band_label("daytime"), "description": "系统时间线", "hour": h}
 
 
 def _body_state_label(value: Any) -> str:

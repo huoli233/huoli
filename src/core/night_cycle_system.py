@@ -36,6 +36,53 @@ def _ensure_persistence_slot_table():
         _PERSIST_DB_READY = True
     return PersistenceSlot
 
+
+def resolve_system_time_band(
+    hour: Optional[int],
+    *,
+    sleep_start_hour: int = 23,
+    sleep_end_hour: int = 7,
+    night_social_start: int = 20,
+    pressure_start_hour: int = 22,
+    midnight_reflect_start: int = 0,
+    dawn_recover_start: int = 4,
+    afternoon_slump_hours: Tuple[int, int] = (13, 17),
+    morning_boost_hours: Tuple[int, int] = (7, 11),
+) -> Dict[str, Any]:
+    """统一系统时间线解析，面板和夜间系统只从这里取展示时段。"""
+    h = time.localtime().tm_hour if hour is None else int(hour) % 24
+
+    def _in_range(value: int, start: int, end: int) -> bool:
+        start %= 24
+        end %= 24
+        if start == end:
+            return True
+        if start < end:
+            return start <= value < end
+        return value >= start or value < end
+
+    afternoon_start, afternoon_end = afternoon_slump_hours
+    morning_start, morning_end = morning_boost_hours
+    if _in_range(h, afternoon_start, afternoon_end):
+        band = ("afternoon", "下午", "午后低谷")
+    elif night_social_start <= h < pressure_start_hour:
+        band = ("evening", "晚上", "夜间社交窗口")
+    elif pressure_start_hour <= h < sleep_start_hour:
+        band = ("late_evening", "晚上", "熬夜压力预热")
+    elif h >= sleep_start_hour:
+        band = ("late_night", "半夜", "睡眠窗口开始")
+    elif midnight_reflect_start <= h < dawn_recover_start:
+        band = ("midnight", "凌晨", "凌晨反思窗口")
+    elif dawn_recover_start <= h < sleep_end_hour:
+        band = ("dawn", "清晨", "清晨恢复窗口")
+    elif _in_range(h, morning_start, morning_end):
+        band = ("morning", "上午", "上午清醒")
+    elif 11 <= h < 13:
+        band = ("noon", "中午", "中午平稳")
+    else:
+        band = ("daytime", "白天", "白天平稳")
+    return {"key": band[0], "label": band[1], "description": band[2], "hour": h}
+
 # ──────────────────────────────────────────────
 #  ACFN级数学工具库（数值稳定/有界输出）
 # ──────────────────────────────────────────────
@@ -665,38 +712,17 @@ class NightCycleSystem:
 
     def resolve_time_band(self, hour: Optional[int] = None) -> Dict[str, Any]:
         """返回当前展示用时间段，驱动窗口仍以夜间机制配置为准。"""
-        h = time.localtime().tm_hour if hour is None else int(hour) % 24
-
-        def _in_range(value: int, start: int, end: int) -> bool:
-            start %= 24
-            end %= 24
-            if start == end:
-                return True
-            if start < end:
-                return start <= value < end
-            return value >= start or value < end
-
-        afternoon_start, afternoon_end = self._state.afternoon_slump_hours
-        morning_start, morning_end = self._state.morning_boost_hours
-        if _in_range(h, afternoon_start, afternoon_end):
-            band = ("afternoon", "下午", "午后低谷")
-        elif self._night_social_start <= h < self._state.pressure_start_hour:
-            band = ("evening", "晚上", "夜间社交窗口")
-        elif self._state.pressure_start_hour <= h < self._sleep_start_hour:
-            band = ("late_evening", "晚上", "熬夜压力预热")
-        elif h >= self._sleep_start_hour:
-            band = ("late_night", "半夜", "睡眠窗口开始")
-        elif self._midnight_reflect_start <= h < self._dawn_recover_start:
-            band = ("midnight", "凌晨", "凌晨反思窗口")
-        elif self._dawn_recover_start <= h < self._sleep_end_hour:
-            band = ("dawn", "清晨", "清晨恢复窗口")
-        elif _in_range(h, morning_start, morning_end):
-            band = ("morning", "上午", "上午清醒")
-        elif 11 <= h < 13:
-            band = ("noon", "中午", "中午平稳")
-        else:
-            band = ("daytime", "白天", "白天平稳")
-        return {"key": band[0], "label": band[1], "description": band[2], "hour": h}
+        return resolve_system_time_band(
+            hour,
+            sleep_start_hour=self._sleep_start_hour,
+            sleep_end_hour=self._sleep_end_hour,
+            night_social_start=self._night_social_start,
+            pressure_start_hour=self._state.pressure_start_hour,
+            midnight_reflect_start=self._midnight_reflect_start,
+            dawn_recover_start=self._dawn_recover_start,
+            afternoon_slump_hours=self._state.afternoon_slump_hours,
+            morning_boost_hours=self._state.morning_boost_hours,
+        )
 
     @staticmethod
     def _format_hour_window(start: int, end: int) -> str:

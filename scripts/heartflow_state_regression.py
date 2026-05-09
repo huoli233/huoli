@@ -951,11 +951,12 @@ def check_force_guard_contract() -> Dict[str, Any]:
     lifecycle_source = (ROOT / "src/chat/heart_flow/enhanced_modules/scene_bot_lifecycle_mixin.py").read_text(
         encoding="utf-8"
     )
-    assert "and (not _admin_force_active or _autonomy_hard_skip)" in loop_source
-    assert "管理员强制唤醒受硬保护限制" in loop_source
+    assert "autonomy_guard[\"should_skip\"] and not _admin_force_active" in loop_source
+    assert "管理员测试通道已绕过不回复限制" in loop_source
     assert "_action in (\"deep_sleep\", \"hard_block\")" in loop_source
     assert "_action == \"sleep_resist\" and not self._is_force_wake_admin" in loop_source
-    assert "voice_conclusion = None if _is_admin_msg else self._cached_voice" in loop_source
+    assert "voice_conclusion = self._cached_voice" in loop_source
+    assert "管理员测试通道: 绕过回复限制，但保留感知/独白/关系/语气链路" in loop_source
     assert "管理员强制唤醒-无视仪表盘硬阻断" in loop_source
     assert "管理员强制唤醒-无视低信息重复抑制" in loop_source
     assert "force_reply_message = pinged_msg or self._get_latest_human_message(decision_messages)" in loop_source
@@ -1037,9 +1038,10 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
     probe._inject_night_soul_state(parts)
     joined = "\n".join(parts)
     assert "[夜间身体状态]" in joined
-    assert "清晨刚醒" in joined
-    assert "不要精神饱满地说“不困”" in joined
-    assert "刚醒，反应慢" in joined
+    assert "困意=72" in joined
+    assert "熬夜压力=88" in joined
+    assert "夜间语气约束" in joined
+    assert "夜间心境提示" in joined
     ensured = probe._ensure_soul_data_in_extra_info("[当前心理状态] 烦躁度0，回复平静。")
     assert "[夜间身体状态]" in ensured
     assert "夜间语气约束" in ensured
@@ -1336,6 +1338,9 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     assert "direct_fast_reply_generation_timeout" in flow_source
     assert "强制回复生成失败，已启用本地短兜底" in flow_source
     assert "看到了，怎么了？" not in flow_source
+    assert "我看见问题了，你具体指哪块" not in flow_source
+    assert "continuity_context" in flow_source
+    assert "_build_context_execution_block" in flow_source
     assert "_is_direct_reply_fastlane = bool(_is_admin_force_wake or getattr(self, \"_cached_targeted_to_bot\", False))" in loop_source
     assert "if _target_uid and not _is_direct_reply_fastlane" in loop_source
     assert "heartfc_stage25_fast_reply_timeout_seconds" in loop_source
@@ -1377,8 +1382,8 @@ def check_webui_contract() -> Dict[str, Any]:
     dashboard_style = (ROOT / "web/dashboard/src/components/EmotionDashboard/styles.css").read_text(encoding="utf-8")
     assert "fallbackPollTimerRef" in dashboard_source
     assert "pollMonitorFallback" in dashboard_source
-    assert "夜间状态" in dashboard_source
-    assert "夜间机制窗口、睡眠债、困意和熬夜压力" in dashboard_source
+    assert "时间线状态" in dashboard_source
+    assert "时间线窗口、睡眠债、困意和熬夜压力" in dashboard_source
     assert "当前时段" in dashboard_source
     assert "机制窗口" in dashboard_source or "mechanism_windows" in dashboard_source
     assert "压力分解" in dashboard_source
@@ -1386,8 +1391,8 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "社交窗口" in dashboard_source
     assert "睡眠窗口" in dashboard_source
     assert "状态同步" in dashboard_source
-    assert "function resolveTimeBand" in dashboard_source
-    assert 'return { hour, label: "凌晨", description: "凌晨反思窗口" }' in dashboard_source
+    assert "function resolveTimeBand" not in dashboard_source
+    assert "等待后端时间线" in dashboard_source
     assert "夜间影响" in dashboard_source
     assert "昼夜节律" not in dashboard_source
     assert "Promise.allSettled" not in dashboard_source
@@ -1395,13 +1400,19 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "void loadConfigScope();" in dashboard_source
     assert "hasEverConnectedRef" in dashboard_source
     assert "const shouldSyncRealtime = true;" in dashboard_source
-    assert 'const displayConnectionState = "live";' in dashboard_source
+    assert "const displayConnectionState = connectionState;" in dashboard_source
     assert 'window.addEventListener("blur"' not in dashboard_source
-    assert 'connecting: "实时同步"' in dashboard_source
-    assert 'reconnecting: "实时同步"' in dashboard_source
+    assert 'connecting: "连接中"' in dashboard_source
+    assert 'reconnecting: "重连中"' in dashboard_source
     assert "实时通道暂不可用，轮询同步失败" not in dashboard_source
-    assert 'polling: "实时同步"' in dashboard_source
+    assert 'polling: "补偿同步"' in dashboard_source
     assert ".live-pill.is-polling" in dashboard_style
+    assert "下一步发言概率" in dashboard_source
+    assert "Number(predictionPercent).toFixed(1)" in dashboard_source
+    assert "requestAnimationFrame" in dashboard_source
+    assert "state_delta" in dashboard_source
+    assert "state_heartbeat" in dashboard_source
+    assert "liveEtaLabel" in dashboard_source
 
     heartflow_router_source = (ROOT / "src/webui/routers/heartflow.py").read_text(encoding="utf-8")
     assert "asyncio.to_thread(build_config_scope_snapshot)" in heartflow_router_source
@@ -1443,6 +1454,66 @@ def check_webui_contract() -> Dict[str, Any]:
     }
 
 
+def check_runtime_state_hub_contract() -> Dict[str, Any]:
+    import asyncio
+
+    from src.webui.services.runtime_state_hub import get_runtime_state_hub
+
+    async def _exercise() -> Dict[str, Any]:
+        channel_id = "regression-runtime-hub"
+        hub = get_runtime_state_hub()
+        queue = await hub.subscribe(channel_id)
+        try:
+            snapshot = await hub.set_snapshot(
+                channel_id,
+                {
+                    "channel_id": channel_id,
+                    "presentation": {"resource_detail": {"chat_percent": 0.731}},
+                    "prediction": {"eta_seconds": 720},
+                },
+                reason="regression",
+            )
+            first = await asyncio.wait_for(queue.get(), timeout=1.0)
+            delta = await hub.update_path(
+                channel_id,
+                module="regression",
+                path="presentation.resource_detail.chat_percent",
+                value=0.735,
+                reason="value_changed",
+            )
+            second = await asyncio.wait_for(queue.get(), timeout=1.0)
+            heartbeat = await hub.heartbeat(channel_id)
+            cached = await hub.get_snapshot(channel_id)
+            assert snapshot["state_version"] >= 1
+            assert first["type"] == "state_snapshot"
+            assert delta is not None
+            assert second["type"] == "state_delta"
+            assert second["path"] == "presentation.resource_detail.chat_percent"
+            assert second["new"] == 0.735
+            assert heartbeat["type"] == "state_heartbeat"
+            assert cached is not None
+            assert cached["presentation"]["resource_detail"]["chat_percent"] == 0.735
+            return {
+                "snapshot": True,
+                "delta": True,
+                "heartbeat": True,
+            }
+        finally:
+            await hub.unsubscribe(queue, channel_id)
+
+    websocket_source = (ROOT / "src/webui/routers/websocket/state_monitor.py").read_text(encoding="utf-8")
+    hub_source = (ROOT / "src/webui/services/runtime_state_hub.py").read_text(encoding="utf-8")
+    assert "state_delta" in websocket_source
+    assert "state_heartbeat" in websocket_source
+    assert '"type": "state_snapshot"' in websocket_source
+    assert "state_overview" not in websocket_source
+    assert "subscription.get()" in websocket_source
+    assert "asyncio.wait_for(websocket.receive_json(), timeout=interval)" not in websocket_source
+    assert "class RuntimeStateHub" in hub_source
+    assert "emit_runtime_delta" in hub_source
+    return asyncio.run(_exercise())
+
+
 def main() -> None:
     results = {
         "source": check_source_contract(),
@@ -1463,6 +1534,7 @@ def main() -> None:
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),
         "night_status_labels": check_night_status_label_contract(),
+        "runtime_state_hub": check_runtime_state_hub_contract(),
         "webui": check_webui_contract(),
     }
     print(json.dumps(results, ensure_ascii=False, indent=2))

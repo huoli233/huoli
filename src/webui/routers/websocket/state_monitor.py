@@ -7,6 +7,7 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from src.common.logger import get_logger
 from src.webui.runtime_config import webui_module_view
 from src.webui.services.state_monitor import build_channel_monitor_state, build_monitor_overview
+from src.webui.services.runtime_state_hub import get_runtime_state_hub
 
 logger = get_logger("WS状态监控")
 router = APIRouter(tags=["websocket"])
@@ -27,11 +28,23 @@ async def websocket_state_monitor_endpoint(
     await websocket.accept()
     logger.info(f"状态监控 WebSocket 已建立: {session_id}, 会话={channel_id or '全部群聊/私聊'}")
     config = _websocket_config()
-    min_interval = float(config.get("state_monitor_min_interval_seconds", 0.5))
-    max_interval = float(config.get("state_monitor_max_interval_seconds", 10.0))
-    default_interval = float(config.get("state_monitor_default_interval_seconds", 1.0))
-    interval = default_interval if interval is None else interval
-    interval = max(min_interval, min(max_interval, interval))
+    heartbeat_interval = max(0.5, float(config.get("state_monitor_heartbeat_seconds", 1.0)))
+    hub = get_runtime_state_hub()
+    subscription = await hub.subscribe(channel_id)
+    client_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
+
+    async def read_client_messages() -> None:
+        try:
+            while True:
+                data = await websocket.receive_json()
+                if client_queue.full():
+                    try:
+                        client_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+                await client_queue.put(data)
+        except WebSocketDisconnect:
+            await client_queue.put({"type": "__disconnect__"})
 
     async def send_snapshot(target_channel: Optional[str] = None) -> None:
         chosen_channel = target_channel if target_channel is not None else channel_id
@@ -50,29 +63,68 @@ async def websocket_state_monitor_endpoint(
                 return
             await websocket.send_json({"type": "state_snapshot", "data": payload})
         else:
-            await websocket.send_json({"type": "state_overview", "data": await build_monitor_overview()})
+            await websocket.send_json({"type": "state_snapshot", "data": await build_monitor_overview()})
+
+    async def rebuild_subscription(old_channel: Optional[str], target_channel: Optional[str]) -> None:
+        nonlocal subscription
+        await hub.unsubscribe(subscription, old_channel)
+        subscription = await hub.subscribe(target_channel)
 
     try:
         await send_snapshot()
+        reader_task = asyncio.create_task(read_client_messages())
         while True:
+            event_task = asyncio.create_task(subscription.get())
+            heartbeat_task = asyncio.create_task(asyncio.sleep(heartbeat_interval))
+            client_task = asyncio.create_task(client_queue.get())
             try:
-                data = await asyncio.wait_for(websocket.receive_json(), timeout=interval)
-                msg_type = data.get("type", "unknown")
-                if msg_type == "ping":
-                    await websocket.send_json({"type": "pong", "data": {"timestamp": time.time()}})
-                elif msg_type == "refresh":
-                    requested_channel = data.get("data", {}).get("channel_id")
-                    await send_snapshot(requested_channel)
-                elif msg_type == "switch_channel":
-                    channel_id = data.get("data", {}).get("channel_id")
-                    await send_snapshot()
-                else:
-                    await websocket.send_json({"type": "echo", "data": data})
-            except asyncio.TimeoutError:
-                await send_snapshot()
+                done, pending = await asyncio.wait(
+                    {client_task, event_task, heartbeat_task},
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                for task in pending:
+                    task.cancel()
+                if client_task in done:
+                    data = client_task.result()
+                    msg_type = data.get("type", "unknown")
+                    if msg_type == "__disconnect__":
+                        break
+                    if msg_type == "ping":
+                        await websocket.send_json(
+                            {
+                                "type": "pong",
+                                "data": {
+                                    "timestamp": time.time(),
+                                    "server_time": time.time(),
+                                },
+                            }
+                        )
+                    elif msg_type == "refresh":
+                        requested_channel = data.get("data", {}).get("channel_id")
+                        await send_snapshot(requested_channel)
+                    elif msg_type == "switch_channel":
+                        old_channel = channel_id
+                        channel_id = data.get("data", {}).get("channel_id")
+                        await rebuild_subscription(old_channel, channel_id)
+                        await send_snapshot()
+                    else:
+                        await websocket.send_json({"type": "echo", "data": data})
+                elif event_task in done:
+                    event = event_task.result()
+                    await websocket.send_json({"type": event.get("type", "state_delta"), "data": event})
+                elif heartbeat_task in done:
+                    await websocket.send_json(
+                        {
+                            "type": "state_heartbeat",
+                            "data": await hub.heartbeat(channel_id),
+                        }
+                    )
             except WebSocketDisconnect:
                 break
     finally:
+        if "reader_task" in locals():
+            reader_task.cancel()
+        await hub.unsubscribe(subscription, channel_id)
         logger.debug(f"状态监控 WebSocket 已断开: {session_id}")
 
 

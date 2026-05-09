@@ -1089,8 +1089,14 @@ class LoopMainDriverMixin:
         _t345 = time.time()
         ambient_info = self._sample_channel_ambient()
         _is_admin_msg = self._is_force_wake_admin(incoming_batch, pinged_msg)
-        run_perception = False if _is_direct_reply_fastlane else self._should_run_perception(now)
-        run_voice = False if _is_direct_reply_fastlane else self._should_run_voice(now, incoming_batch, pinged_msg)
+        run_perception = self._should_run_perception(now)
+        run_voice = self._should_run_voice(now, incoming_batch, pinged_msg)
+        if _is_admin_msg:
+            run_perception = True
+            run_voice = True
+        elif _is_direct_reply_fastlane:
+            run_perception = False
+            run_voice = False
         # 窥屏态升级复用：如果窥屏态 LLM 已决定 reply/followup 且缓存有效，跳过重复独白
         _peek_voice_reuse = False
         if (
@@ -1108,7 +1114,7 @@ class LoopMainDriverMixin:
             + (" (窥屏态verdict复用)" if _peek_voice_reuse else "")
         )
         if _is_admin_msg:
-            logger.info(f"{self.log_prefix} 👑 管理员极速通道: 跳过观察+独白")
+            logger.info(f"{self.log_prefix} 👑 管理员测试通道: 绕过回复限制，但保留感知/独白/关系/语气链路")
         elif _is_direct_reply_fastlane:
             logger.info(f"{self.log_prefix} ⚡ 直接快回链路: 跳过观察+独白")
         if _is_direct_reply_fastlane:
@@ -1135,11 +1141,8 @@ class LoopMainDriverMixin:
                 )
             )
             _task_keys.append("voice")
-        if _is_admin_msg:
-            logger.info(f"{self.log_prefix} 👑 管理员极速通道: 跳过关系度聚合")
-        else:
-            _parallel_tasks.append(self._compute_relation_metrics(decision_messages))
-            _task_keys.append("relation")
+        _parallel_tasks.append(self._compute_relation_metrics(decision_messages))
+        _task_keys.append("relation")
 
         if _parallel_tasks:
             try:
@@ -1177,7 +1180,7 @@ class LoopMainDriverMixin:
             awareness_snapshot = {"perception_missing": True}
 
         # 拆包内心独白结果
-        voice_conclusion = None if _is_admin_msg else self._cached_voice
+        voice_conclusion = self._cached_voice
         if run_voice:
             _vval = _result_map.get("voice")
             if isinstance(_vval, BaseException):
@@ -1523,11 +1526,9 @@ class LoopMainDriverMixin:
         self._update_decision_trace(autonomy_guard_reason=str(autonomy_guard.get("reason", "") or ""))
         _admin_force_active = self._is_force_wake_admin(incoming_batch, pinged_msg)
         _autonomy_hard_skip = bool(autonomy_guard.get("hard_skip", False))
-        if autonomy_guard["should_skip"] and (not _admin_force_active or _autonomy_hard_skip):
+        if autonomy_guard["should_skip"] and not _admin_force_active:
             if autonomy_guard.get("source") == "content_state":
                 self._apply_content_state_skip(content_state_signal)
-            if _admin_force_active and _autonomy_hard_skip:
-                logger.info(f"{self.log_prefix} 👑 管理员强制唤醒受硬保护限制: {autonomy_guard['reason']}")
             self._emit_action_verdict("autonomy_block", autonomy_guard["reason"], time.time() - _t0)
             logger.info(
                 f"{self.log_prefix} 🚫 {autonomy_guard['reason']}，本轮不回复 | 管线耗时 {time.time() - _t0:.2f}s"
@@ -1558,7 +1559,7 @@ class LoopMainDriverMixin:
             and _admin_force_active
             and legacy_gate != "block"
         ):
-            logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-无视自治守卫: {autonomy_guard['reason']}")
+            logger.info(f"{self.log_prefix} 👑 管理员测试通道已绕过不回复限制: {autonomy_guard['reason']}")
 
         # ── 阶段 4.7：内心独白强驱动检查 - 欲望等级高时直接回复 ──
         voice_driven_reply = False

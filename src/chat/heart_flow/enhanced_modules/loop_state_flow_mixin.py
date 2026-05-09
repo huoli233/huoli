@@ -420,6 +420,18 @@ class LoopStateFlowMixin:
                 "decision_trace": dict(getattr(self, "_last_decision_trace", None) or {}),
             }
             self._last_flow_decision_summary = summary
+            try:
+                from src.webui.services.runtime_state_hub import emit_runtime_delta
+
+                emit_runtime_delta(
+                    self.stream_id,
+                    module="flow_runtime",
+                    path="domains.flow_runtime.last_flow_decision_summary",
+                    value=summary,
+                    reason=f"flow_summary:{stage}",
+                )
+            except Exception as hub_exc:
+                logger.debug(f"{self.log_prefix} 运行态心流摘要推送失败: {hub_exc}")
             _trace_brief = self._decision_trace_brief()
             logger.info(
                 f"{self.log_prefix} [心流摘要/{stage}] 决策={final_decision} | "
@@ -496,4 +508,3 @@ class LoopStateFlowMixin:
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 等待门控异常，放行: {exc}")
             return "proceed"
-

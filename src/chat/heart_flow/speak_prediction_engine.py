@@ -280,6 +280,7 @@ class SpeakPredictionEngine:
             else:
                 probability = min(probability, 0.34)
 
+        generated_at = time.time()
         if probability >= 0.85:
             eta_seconds = 20
         elif probability >= 0.70:
@@ -425,8 +426,9 @@ class SpeakPredictionEngine:
             "channel_id": channel_id,
             "generated_at": time.time(),
             "speak_probability": round(probability, 3),
-            "probability_percent": int(round(probability * 100)),
+            "probability_percent": round(probability * 100, 1),
             "eta_seconds": eta_seconds,
+            "deadline_at": round(generated_at + eta_seconds, 3),
             "eta_label": "立即" if eta_seconds <= 30 else f"约 {round(eta_seconds / 60)} 分钟后",
             "shared_verdict_id": str(runtime_verdict.get("verdict_id", "") or ""),
             "model_path": runtime_model_path or "未裁定",

@@ -609,3 +609,33 @@
 - 删除前保留分支：`preserve/full-modules-虚假本地聊天室与Mai命名清理`；实际删除分支：`delete/虚假本地聊天室与Mai命名清理`。
 - `chat_id` 仍是稳定流 ID，不是随机新建；本轮解决的是 WebUI 管理连接伪造第二个聊天流导致的割裂。
 - 工作区内已有 `.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/` 不属于本轮提交，已避免暂存。
+
+## 2026-05-09T08:22:30+08:00 - Task: 实时运行态监控与管理员强制测试链路修复
+
+### What was done:
+- 新增 WebUI 运行态总线 `RuntimeStateHub`，支持连接初始 `state_snapshot`、运行中 `state_delta`、保活 `state_heartbeat`，并提供心流同步代码可调用的非阻塞增量投递入口。
+- 将 `/ws/state-monitor` 改为运行态事件订阅：连接后发一次快照，后续按 hub 增量推送；未选频道时也使用 `state_snapshot`，通过 `snapshot_kind=overview` 表示总览快照，不再使用分叉的 `state_overview` 初始化协议。
+- 状态监控快照补充 `server_time/state_version`，比例显示统一到一位小数，面板文案改为 `运行资源`、`情绪状态`、`主动倾向`、`下一步发言概率`、`无聊度/孤独感/疲劳感/退场倾向`。
+- 建立统一时间线解析入口 `resolve_system_time_band()`，夜间系统和 HeartFC 状态导出共用后端时间线，前端不再自行硬编码时段判断。
+- 修复管理员强制测试链路：管理员只绕过“不回复限制”，不再跳过感知、独白、关系聚合、语气、上下文和记忆链路；`already_well_replied`、低信息重复、仪表盘硬阻断等软限制不再挡管理员测试消息。
+- 修复快回上下文：直接快回/强制回复失败兜底时注入自我引用、连续上下文、执行上下文和夜间身体状态，避免输出开发者口吻兜底。
+- 将心流执行态、动作裁定、状态面板、最终决策摘要等运行时变化接入增量推送。
+- 前端状态页使用真实 WebSocket 连接状态，不再固定伪装 live；用本地 ticker 推进 ETA、沉默秒数和运行时长，百分比保留一位小数。
+
+### Testing:
+- `uv run ruff check` 针对本轮触及源码与脚本通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，覆盖运行态 hub、管理员测试旁路、夜间语气、WebUI 协议、DB/JSON 契约。
+- `uv run python scripts/webui_smoke_test.py` 通过，确认 `/ws/state-monitor` 初始化类型为 `state_snapshot`，公共/token/cookie 三种模式均可 ping/pong。
+- `uv run python scripts/config_profile_regression.py` 通过。
+- `uv run python scripts/model_runtime_audit.py` 通过。
+- `uv run python -m compileall src scripts` 通过，使用临时 `PYTHONPYCACHEPREFIX`。
+- `cd web/dashboard && npm run build` 通过，生成 `web/dashboard/dist/assets/index-D6x1EEAH.js`。
+- `git diff --check` 通过。
+- 使用本地 `uvicorn src.webui.app:create_app --factory` + headless Chrome 实际打开 `/dashboard` 通过，确认 React 渲染出 `下一步发言概率`、`运行资源`、`时间线状态`、`主动倾向`，连接状态真实展示，旧 `自主账本/主动驱动总线/资源账本/情绪账本` 文案未出现在页面文本中。
+- 说明：仓库全量 `uv run ruff check src scripts` 仍被历史未用导入/未用变量等 117 个既有问题阻塞，未纳入本轮大范围修复；本轮改动文件的精确 ruff 已通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 工作区内已有 `.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/` 不属于本轮，已避免暂存。
+- Browser Use 插件所需 Node REPL 工具未暴露，本轮使用本机 Chrome headless 远程调试完成 UI 实际渲染验证。
+- 当前分支：`delete/虚假本地聊天室与Mai命名清理`；保留分支仍为 `preserve/full-modules-虚假本地聊天室与Mai命名清理`。

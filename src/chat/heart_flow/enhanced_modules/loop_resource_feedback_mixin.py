@@ -1206,6 +1206,18 @@ class LoopResourceFeedbackMixin:
             _snap = _engine.build_dashboard(raw_sources=_raw, force=force)
             self._cached_dashboard_snapshot = _snap.to_display_dict()
             self._last_dashboard_build_ts = _now
+            try:
+                from src.webui.services.runtime_state_hub import emit_runtime_delta
+
+                emit_runtime_delta(
+                    self.stream_id,
+                    module="dashboard",
+                    path="presentation.dashboard_snapshot",
+                    value=self._cached_dashboard_snapshot,
+                    reason="dashboard_refresh",
+                )
+            except Exception as hub_exc:
+                logger.debug(f"{self.log_prefix} 运行态仪表盘推送失败: {hub_exc}")
             return self._cached_dashboard_snapshot
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 状态仪表盘构建异常: {exc}")
@@ -1591,5 +1603,23 @@ class LoopResourceFeedbackMixin:
                 verdict_parts.append(summary)
             verdict_parts.append(f"管线耗时={pipeline_elapsed:.2f}s")
             logger.info(f"{self.log_prefix} 动作裁定 " + " ".join(verdict_parts))
+            try:
+                from src.webui.services.runtime_state_hub import emit_runtime_delta
+
+                emit_runtime_delta(
+                    self.stream_id,
+                    module="action_verdict",
+                    path="domains.execution_runtime.last_action_verdict",
+                    value={
+                        "action": verdict_action,
+                        "reason": verdict_reason,
+                        "pipeline_elapsed": round(float(pipeline_elapsed or 0.0), 3),
+                        "confidence": round(float(confidence or 0.0), 3) if confidence >= 0 else None,
+                        "at": time.time(),
+                    },
+                    reason=str(verdict_action or "action_verdict"),
+                )
+            except Exception as hub_exc:
+                logger.debug(f"{self.log_prefix} 运行态动作裁定推送失败: {hub_exc}")
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 动作裁定输出异常: {exc}")

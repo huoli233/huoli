@@ -121,6 +121,8 @@ type Prediction = {
   content_source_label?: string;
   eta_seconds: number;
   eta_label: string;
+  generated_at?: number;
+  deadline_at?: number;
   decision_label?: string;
   decision_reason?: string;
   content_direction: string;
@@ -494,14 +496,20 @@ type DisplayPolicy = {
 
 type MonitorPacket = {
   channel_id: string;
+  snapshot_kind?: string;
   updated_at: number;
+  server_time?: number;
+  state_version?: number;
   domains: Record<string, unknown>;
   presentation: Presentation;
   prediction: Prediction;
 };
 
 type OverviewPayload = {
+  snapshot_kind?: string;
   updated_at: number;
+  server_time?: number;
+  state_version?: number;
   active_count: number;
   hidden_internal_count?: number;
   channels: OverviewChannel[];
@@ -541,8 +549,8 @@ const severityRank: Record<string, number> = {
 
 const fallbackDisplayPolicy: DisplayPolicy = {
   resident: ["精力储备", "内在心情", "注意状态", "社交姿态", "安全护盾", "流转阶段", "场景热度", "发言预测"],
-  active: ["无聊/孤独/环境疲劳/撤离/主动意愿", "情绪低落/好奇心/社交欲显著变化", "浅睡/深睡/熬穿/清晨恢复/睡眠债", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/会话升温"],
-  detail: ["资源账本的聊天值和思考值", "夜间机制窗口、睡眠债、困意和熬夜压力", "情绪账本、主动驱动和当前感受", "行为机制和上下文感知", "会话整体状态", "当前对象状态", "安全护盾细节", "值变化原因", "发言预测的驱动和抑制因素"],
+  active: ["无聊度/孤独感/疲劳感/退场倾向/主动意愿", "情绪低落/好奇心/社交欲显著变化", "浅睡/深睡/熬穿/清晨恢复/睡眠债", "烦躁/压力/创伤/混乱/伪装", "关系好感/信任显著偏高或偏低", "冷却窗口/等待时长/重新接入/会话升温"],
+  detail: ["运行资源的聊天值和思考值", "时间线窗口、睡眠债、困意和熬夜压力", "情绪状态、主动倾向和当前感受", "行为机制和上下文感知", "会话整体状态", "当前对象状态", "安全护盾细节", "值变化原因", "发言预测的驱动和抑制因素"],
   hidden: ["内部阈值", "调试原因", "缓存字段", "旧命名残留", "纯计数器原值"],
 };
 
@@ -563,7 +571,7 @@ function wsUrl(channelId: string): string {
 
 function percent(value: number | undefined | null): string {
   const safe = Math.max(0, Math.min(1, Number(value ?? 0)));
-  return `${Math.round(safe * 100)}%`;
+  return `${(safe * 100).toFixed(1)}%`;
 }
 
 function fixed(value: number | undefined | null, digits = 1): string {
@@ -660,35 +668,6 @@ function hourText(value: number | undefined | null): string {
   return `${String(hour).padStart(2, "0")}:00`;
 }
 
-function resolveTimeBand(value: number | undefined | null): { hour: number; label: string; description: string } {
-  const hour = Math.max(0, Math.min(23, Math.round(Number(value ?? new Date().getHours()))));
-  if (hour >= 13 && hour < 17) {
-    return { hour, label: "下午", description: "午后低谷" };
-  }
-  if (hour >= 20 && hour < 22) {
-    return { hour, label: "晚上", description: "夜间社交窗口" };
-  }
-  if (hour >= 22 && hour < 23) {
-    return { hour, label: "晚上", description: "熬夜压力预热" };
-  }
-  if (hour >= 23) {
-    return { hour, label: "半夜", description: "睡眠窗口开始" };
-  }
-  if (hour >= 0 && hour < 4) {
-    return { hour, label: "凌晨", description: "凌晨反思窗口" };
-  }
-  if (hour >= 4 && hour < 7) {
-    return { hour, label: "清晨", description: "清晨恢复窗口" };
-  }
-  if (hour >= 7 && hour < 11) {
-    return { hour, label: "上午", description: "上午清醒" };
-  }
-  if (hour >= 11 && hour < 13) {
-    return { hour, label: "中午", description: "中午平稳" };
-  }
-  return { hour, label: "白天", description: "白天平稳" };
-}
-
 function mechanismWindowText(
   windows: CircadianDetail["mechanism_windows"] | undefined,
   key: string,
@@ -723,12 +702,12 @@ function modelPathLabel(value: string | undefined): string {
 
 function connectionLabel(value: string): string {
   return {
-    connecting: "实时同步",
+    connecting: "连接中",
     live: "实时同步",
-    polling: "实时同步",
-    reconnecting: "实时同步",
-    error: "实时同步",
-  }[value] ?? "实时同步";
+    polling: "补偿同步",
+    reconnecting: "重连中",
+    error: "连接异常",
+  }[value] ?? "连接中";
 }
 
 function metricTone(value: number): string {
@@ -749,6 +728,56 @@ function scopeLabel(value: string): string {
   }[value] ?? value;
 }
 
+function cloneWithPath(source: MonitorPacket | null, path: string, value: unknown): MonitorPacket | null {
+  if (!source || !path) {
+    return source;
+  }
+  const next = structuredClone(source) as Record<string, unknown>;
+  const parts = path.split(".").filter(Boolean);
+  let cursor = next;
+  for (const part of parts.slice(0, -1)) {
+    const current = cursor[part];
+    if (!current || typeof current !== "object" || Array.isArray(current)) {
+      cursor[part] = {};
+    }
+    cursor = cursor[part] as Record<string, unknown>;
+  }
+  if (parts.length > 0) {
+    cursor[parts[parts.length - 1]] = value;
+  }
+  return next as MonitorPacket;
+}
+
+function etaText(prediction: Prediction | undefined, serverOffsetMs: number, nowMs: number): string {
+  if (!prediction) {
+    return "-";
+  }
+  const deadlineSeconds =
+    Number(prediction.deadline_at ?? 0) ||
+    Number(prediction.generated_at ?? 0) + Number(prediction.eta_seconds ?? 0);
+  if (!deadlineSeconds) {
+    return prediction.eta_label ?? "-";
+  }
+  const serverNow = (nowMs + serverOffsetMs) / 1000;
+  const remaining = Math.max(0, deadlineSeconds - serverNow);
+  if (remaining <= 30) {
+    return "立即";
+  }
+  if (remaining < 3600) {
+    return `约 ${Math.ceil(remaining / 60)} 分钟后`;
+  }
+  return `约 ${(remaining / 3600).toFixed(1)} 小时后`;
+}
+
+function elapsedSecondsText(startedAt: number | undefined | null, serverOffsetMs: number, nowMs: number): string {
+  const started = Number(startedAt ?? 0);
+  if (started <= 0) {
+    return "等待同步";
+  }
+  const serverNow = (nowMs + serverOffsetMs) / 1000;
+  return `${Math.max(0, Math.floor(serverNow - started))}秒`;
+}
+
 export function EmotionDashboard() {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [selectedChannel, setSelectedChannel] = useState("");
@@ -756,6 +785,8 @@ export function EmotionDashboard() {
   const [configScope, setConfigScope] = useState<ConfigScopeSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [connectionState, setConnectionState] = useState("connecting");
+  const [serverOffsetMs, setServerOffsetMs] = useState(0);
+  const [clockNowMs, setClockNowMs] = useState(() => Date.now());
   const [errorMessage, setErrorMessage] = useState("");
   const [configScopeError, setConfigScopeError] = useState("");
   const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("editable");
@@ -793,7 +824,6 @@ export function EmotionDashboard() {
   const prediction = packet?.prediction;
   const resourceDetail = packet?.presentation?.resource_detail;
   const circadianDetail = packet?.presentation?.circadian_detail;
-  const fallbackTimeBand = resolveTimeBand(circadianDetail?.current_hour);
   const emotionDetail = packet?.presentation?.emotion_detail;
   const behaviorDetail = packet?.presentation?.behavior_detail;
   const timingGateDetail = packet?.presentation?.timing_gate_detail;
@@ -843,9 +873,15 @@ export function EmotionDashboard() {
   );
   const selectedScopeLabel = conversationScopeLabel(selectedOverview);
   const predictionPercent =
-    prediction?.probability_percent ?? Math.round((prediction?.speak_probability ?? 0) * 100);
+    prediction?.probability_percent ?? Number(((prediction?.speak_probability ?? 0) * 100).toFixed(1));
   const shouldSyncRealtime = true;
-  const displayConnectionState = "live";
+  const displayConnectionState = connectionState;
+  const liveEtaLabel = etaText(prediction, serverOffsetMs, clockNowMs);
+  const liveSilenceSeconds = Math.max(
+    0,
+    Number(emotionDetail?.silence_seconds ?? 0) +
+      Math.max(0, ((clockNowMs + serverOffsetMs) / 1000) - Number(packet?.server_time ?? packet?.updated_at ?? 0)),
+  );
 
   useEffect(() => {
     let ignore = false;
@@ -870,6 +906,20 @@ export function EmotionDashboard() {
       document.removeEventListener("visibilitychange", handleActivation);
       window.removeEventListener("focus", handleActivation);
     };
+  }, []);
+
+  useEffect(() => {
+    let frame = 0;
+    let last = 0;
+    const tick = (timestamp: number) => {
+      if (timestamp - last >= 100) {
+        last = timestamp;
+        setClockNowMs(Date.now());
+      }
+      frame = window.requestAnimationFrame(tick);
+    };
+    frame = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
@@ -997,23 +1047,53 @@ export function EmotionDashboard() {
         try {
           const message = JSON.parse(event.data) as { type?: string; data?: unknown };
           if (message.type === "state_snapshot" && message.data) {
-            setPacket(message.data as MonitorPacket);
+            const eventPacket = message.data as { data?: MonitorPacket | OverviewPayload; server_time?: number };
+            const payload = (eventPacket.data ?? message.data) as MonitorPacket | OverviewPayload;
+            const snapshotServerTime = Number(payload.server_time ?? eventPacket.server_time ?? 0);
+            if (snapshotServerTime > 0) {
+              setServerOffsetMs(snapshotServerTime * 1000 - Date.now());
+            }
+            if ((payload as OverviewPayload).snapshot_kind === "overview" || "channels" in payload) {
+              const overviewPayload = payload as OverviewPayload;
+              setOverview(overviewPayload);
+              const channels = overviewPayload?.channels ?? [];
+              if (!selectedChannel && channels.length > 0) {
+                setSelectedChannel(channels[0]?.channel_id ?? "");
+              } else if (
+                selectedChannel &&
+                channels.length > 0 &&
+                !channels.some((channel) => channel.channel_id === selectedChannel)
+              ) {
+                setSelectedChannel(channels[0]?.channel_id ?? "");
+              } else if (channels.length === 0) {
+                setPacket(null);
+              }
+            } else {
+              const nextPacket = payload as MonitorPacket;
+              setPacket(nextPacket);
+            }
             setErrorMessage("");
-          } else if (message.type === "state_overview" && message.data) {
-            const overviewPayload = message.data as OverviewPayload;
-            setOverview(overviewPayload);
-            setErrorMessage("");
-            const channels = overviewPayload?.channels ?? [];
-            if (!selectedChannel && channels.length > 0) {
-              setSelectedChannel(channels[0]?.channel_id ?? "");
-            } else if (
-              selectedChannel &&
-              channels.length > 0 &&
-              !channels.some((channel) => channel.channel_id === selectedChannel)
-            ) {
-              setSelectedChannel(channels[0]?.channel_id ?? "");
-            } else if (channels.length === 0) {
-              setPacket(null);
+          } else if (message.type === "state_delta" && message.data) {
+            const event = message.data as {
+              channel_id?: string;
+              path?: string;
+              new?: unknown;
+              server_time?: number;
+              version?: number;
+              requires_refresh?: boolean;
+            };
+            if (event.server_time) {
+              setServerOffsetMs(event.server_time * 1000 - Date.now());
+            }
+            if (event.requires_refresh) {
+              socket.send(JSON.stringify({ type: "refresh", data: { channel_id: selectedChannel } }));
+            } else if (event.path) {
+              setPacket((current) => cloneWithPath(current, event.path ?? "", event.new));
+            }
+          } else if (message.type === "state_heartbeat" && message.data) {
+            const event = message.data as { server_time?: number };
+            if (event.server_time) {
+              setServerOffsetMs(event.server_time * 1000 - Date.now());
             }
           } else if (message.type === "state_error") {
             setPacket(null);
@@ -1181,9 +1261,9 @@ export function EmotionDashboard() {
           </p>
         </article>
         <article className="command-card is-score">
-          <span>是否该聊</span>
-          <strong>{predictionPercent}%</strong>
-          <p>{prediction?.decision_label ?? "等待状态"} · {runtimeSyncLabel(prediction)} · {prediction?.eta_label ?? "-"}</p>
+          <span>下一步发言概率</span>
+          <strong>{Number(predictionPercent).toFixed(1)}%</strong>
+          <p>{prediction?.decision_label ?? "等待状态"} · {runtimeSyncLabel(prediction)} · {liveEtaLabel}</p>
         </article>
         <article className="command-card">
           <span>最后同步</span>
@@ -1211,7 +1291,7 @@ export function EmotionDashboard() {
       <main className="dashboard-grid">
         <section className="panel">
           <div className="panel-header">
-            <h2>资源账本</h2>
+            <h2>运行资源</h2>
             <span>{resourceDetail?.energy_phase_label ?? "未知"}</span>
           </div>
           <div className="metric-wall">
@@ -1240,14 +1320,14 @@ export function EmotionDashboard() {
 
         <section className="panel">
           <div className="panel-header">
-            <h2>夜间状态</h2>
+            <h2>时间线状态</h2>
             <span>{circadianDetail?.phase_label ?? "清醒"}</span>
           </div>
           <div className="metric-wall">
             <div className="metric-tile">
               <span>当前时段</span>
-              <strong>{circadianDetail?.time_band_label ?? fallbackTimeBand.label}</strong>
-              <p>{hourText(circadianDetail?.current_hour ?? fallbackTimeBand.hour)} · {circadianDetail?.time_band_description ?? fallbackTimeBand.description}</p>
+              <strong>{circadianDetail?.time_band_label ?? "等待同步"}</strong>
+              <p>{hourText(circadianDetail?.current_hour)} · {circadianDetail?.time_band_description ?? "等待后端时间线"}</p>
             </div>
             <div className={`metric-tile tone-${metricTone((100 - (circadianDetail?.drowsiness_value ?? 0)) / 100)}`}>
               <span>困意值</span>
@@ -1331,7 +1411,7 @@ export function EmotionDashboard() {
 
         <section className="panel">
           <div className="panel-header">
-            <h2>主动驱动</h2>
+            <h2>主动倾向</h2>
             <span>{initiativeState?.effect_label ?? "等待状态"}</span>
           </div>
           <div className="drive-radar">
@@ -1340,28 +1420,28 @@ export function EmotionDashboard() {
               <strong>{percent(initiativeState?.initiative_drive)}</strong>
             </div>
             <div>
-              <span>无聊负荷</span>
+              <span>无聊度</span>
               <strong>{percent(initiativeState?.boredom_load)}</strong>
             </div>
             <div>
-              <span>孤独负荷</span>
+              <span>孤独感</span>
               <strong>{percent(initiativeState?.loneliness_load)}</strong>
             </div>
             <div>
-              <span>环境疲劳</span>
+              <span>疲劳感</span>
               <strong>{percent(initiativeState?.environment_fatigue_load)}</strong>
             </div>
             <div>
-              <span>撤离倾向</span>
+              <span>退场倾向</span>
               <strong>{percent(initiativeState?.withdrawal_drive)}</strong>
             </div>
           </div>
-          <p className="panel-note">{initiativeState?.effect_summary ?? "主动驱动会进入发言预测，不再只是日志里的装饰值。"}</p>
+          <p className="panel-note">{initiativeState?.effect_summary ?? "主动倾向会进入发言预测，不再只是日志里的装饰值。"}</p>
         </section>
 
         <section className="panel">
           <div className="panel-header">
-            <h2>情绪账本</h2>
+            <h2>情绪状态</h2>
             <span>{emotionDetail?.mood_label ?? "平静"}</span>
           </div>
           <div className="drive-radar">
@@ -1386,7 +1466,7 @@ export function EmotionDashboard() {
               <strong>{percent(emotionDetail?.loneliness_load)}</strong>
             </div>
             <div>
-              <span>疲劳</span>
+              <span>疲劳感</span>
               <strong>{percent(emotionDetail?.environment_fatigue_load)}</strong>
             </div>
             <div>
@@ -1394,12 +1474,12 @@ export function EmotionDashboard() {
               <strong>{percent(emotionDetail?.initiative_drive)}</strong>
             </div>
             <div>
-              <span>撤离倾向</span>
+              <span>退场倾向</span>
               <strong>{percent(emotionDetail?.withdrawal_drive)}</strong>
             </div>
           </div>
           <p className="panel-note">
-            {emotionDetail?.feeling_text ?? "当前没有明显情绪波动"} · 已沉默 {countText(emotionDetail?.silence_seconds, "秒")} · 未回应 {emotionDetail?.unanswered_count ?? 0} 次
+            {emotionDetail?.feeling_text ?? "当前没有明显情绪波动"} · 已沉默 {countText(liveSilenceSeconds, "秒")} · 未回应 {emotionDetail?.unanswered_count ?? 0} 次
           </p>
         </section>
 
@@ -1665,12 +1745,12 @@ export function EmotionDashboard() {
 
         <section className="panel">
           <div className="panel-header">
-            <h2>自主账本</h2>
+            <h2>主动意图</h2>
             <span>{autonomyDetail?.background_event_label || "无后台事件"}</span>
           </div>
           <div className="metric-wall">
             <div className={`metric-tile tone-${metricTone(autonomyDetail?.intention_drive ?? 0)}`}>
-              <span>主动驱动总线</span>
+              <span>主动倾向总线</span>
               <strong>{percent(autonomyDetail?.intention_drive)}</strong>
               <p>活跃意图 {autonomyDetail?.intention_alive_count ?? 0}</p>
             </div>
