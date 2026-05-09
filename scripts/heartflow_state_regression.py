@@ -318,6 +318,34 @@ def check_deprecated_small_module_cleanup_contract() -> Dict[str, Any]:
     }
 
 
+def check_social_compat_bridge_cleanup_contract() -> Dict[str, Any]:
+    fuser_source = (
+        ROOT / "src/modules/social_value/social_affect_fuser.py"
+    ).read_text(encoding="utf-8")
+    settlement_source = (
+        ROOT / "src/modules/social_value/settlement_engine.py"
+    ).read_text(encoding="utf-8")
+    for token in (
+        "compat_" + "update",
+        "compat_" + "get_value",
+        "compat_" + "get_stage",
+        "compat_" + "get_custom_label",
+        "compat_" + "record_value",
+        "compat_" + "get_level_factor",
+        "compat_" + "favor_of",
+        "compat_" + "capture_snapshot",
+    ):
+        assert token not in fuser_source
+    assert ("Social" + "UpdateResult") not in fuser_source
+    assert ("build_" + "legacy_update_result") not in settlement_source
+    assert ("Social" + "UpdateResult") not in settlement_source
+    assert "def collect_diagnostics" in settlement_source
+    return {
+        "social_affect_compat_bridge_removed": True,
+        "settlement_legacy_result_builder_removed": True,
+    }
+
+
 def check_participant_contract() -> Dict[str, Any]:
     domains = {
         "relationship_profile": {"user_id": "u1", "display_name": "甲", "relationship_label": "熟人"},
@@ -1703,6 +1731,7 @@ def main() -> None:
         "prediction_runtime": check_prediction_runtime_contract(),
         "memory_autonomy": check_memory_and_autonomy_contract(),
         "deprecated_small_module_cleanup": check_deprecated_small_module_cleanup_contract(),
+        "social_compat_bridge_cleanup": check_social_compat_bridge_cleanup_contract(),
         "participants": check_participant_contract(),
         "world_snapshot_relation": check_world_snapshot_relation_contract(),
         "dynamic_personal_impression": check_dynamic_personal_impression_contract(),

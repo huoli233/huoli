@@ -7,7 +7,6 @@ from src.modules.social_value.runtime_config import social_value_module_view
 from src.modules.social_value.social_storage import SocialStorage
 from src.modules.social_value.models import (
     SocialValueRecord,
-    SocialUpdateResult,
 )
 
 logger = get_logger("结算引擎")
@@ -630,45 +629,6 @@ class SettlementEngine:
             "severity": round(sev, 2),
             "intent": intent,
         }
-
-    # ================================================================
-    #  兼容桥接（供旧消费方渐进迁移）
-    # ================================================================
-
-    def build_legacy_update_result(
-        self,
-        report: SettlementReport,
-        behavior: Dict[str, Any],
-        category: str = "",
-    ) -> SocialUpdateResult:
-        """将 SettlementReport 转换为旧版 SocialUpdateResult，供尚未迁移的消费方使用"""
-        return SocialUpdateResult(
-            old_value=(
-                report.prior_score if not report.is_first_encounter else 0.0
-            ),
-            new_value=report.settled_score,
-            delta=report.settled_score
-            - (0.0 if report.is_first_encounter else report.prior_score),
-            behavior_type=behavior.get("behavior_type", "unknown"),
-            intent=behavior.get("intent", "other"),
-            severity=behavior.get("severity", 0.5),
-            category=category,
-            params_used={
-                "hours_elapsed": round(report.hours_elapsed, 4),
-                "score_after_decay": round(report.score_after_decay, 4),
-                "raw_delta": round(report.raw_delta, 4),
-                "delta_after_saturation": round(
-                    report.delta_after_saturation, 4
-                ),
-                "delta_after_reversal": round(report.delta_after_reversal, 4),
-                "delta_after_damping": round(report.delta_after_damping, 4),
-                "delta_after_cap": round(report.delta_after_cap, 4),
-                "final_delta": round(report.final_delta, 4),
-                "reversal_triggered": report.reversal_triggered,
-                "cap_triggered": report.cap_triggered,
-                "is_first_encounter": report.is_first_encounter,
-            },
-        )
 
     def collect_diagnostics(self) -> Dict[str, Any]:
         """收集运行时诊断信息"""

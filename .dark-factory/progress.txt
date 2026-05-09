@@ -941,3 +941,26 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 本轮没有删除 WebUI legacy 兼容、配置迁移、关系字段兼容、当前心流 legacy_gate 等仍在运行链路或回归契约中使用的代码。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-09T16:46:57+08:00 - Task: 清理社交值废弃兼容桥
+
+### What was done:
+- 按删除分支规则建立 `preserve/full-modules-社交兼容桥清理`，并在 `delete/社交兼容桥清理` 上执行本轮删除。
+- 删除 `SocialAffectFuser` 中无外部调用的 `compat_*` 兼容桥接方法。
+- 删除 `SettlementEngine.build_legacy_update_result()`，该方法只被已删除的 `compat_update()` 使用。
+- 保留 `SocialUpdateResult` 数据模型和 `SocialValueCore`，因为 `social_value_core.py` 仍在现役使用。
+- 更新 `scripts/heartflow_state_regression.py`，增加社交兼容桥清理契约，防止 `compat_*` 与旧结果构造器回流。
+
+### Testing:
+- 静态搜索 `rg "build_legacy_update_result\\(|compat_update\\(|compat_get_value\\(|compat_get_stage\\(|compat_get_custom_label\\(|compat_record_value\\(|compat_get_level_factor\\(|compat_favor_of\\(|compat_capture_snapshot\\(" src scripts` 无命中。
+- 静态搜索 `rg "SocialUpdateResult" src/modules/social_value/social_affect_fuser.py src/modules/social_value/settlement_engine.py scripts/heartflow_state_regression.py` 无命中。
+- `uv run ruff check scripts/heartflow_state_regression.py src/modules/social_value/social_affect_fuser.py src/modules/social_value/settlement_engine.py` 通过。
+- `uv run python scripts/model_runtime_audit.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `social_compat_bridge_cleanup` 契约返回全 true。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- `AnticipationSetup`、`HeartFChatting` 基类、配置迁移、运行态 legacy_gate 等仍有现役兼容或基类职责，本轮未删除。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

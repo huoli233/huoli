@@ -19,7 +19,6 @@ from src.modules.social_value.runtime_config import social_value_float
 from src.modules.social_value.runtime_config import social_value_int
 from src.modules.social_value.runtime_config import social_value_list
 from src.modules.social_value.social_storage import SocialStorage
-from src.modules.social_value.models import SocialUpdateResult
 
 logger = get_logger("社交影响融合")
 
@@ -413,77 +412,6 @@ class SocialAffectFuser:
     async def apply_time_decay(self, user_id: str, channel_id: str, hours: float) -> float:
         """单独执行时间衰减（供定时任务使用）"""
         return await self._settlement.decay_only(user_id, channel_id, hours)
-
-    # ================================================================
-    #  兼容桥接（已弃用 — 无外部调用者，下一版本可安全删除）
-    #  仅 compat_record_value 仍有 proactive_decider 调用
-    # ================================================================
-
-    async def compat_update(
-        self,
-        user_id: str,
-        channel_id: str,
-        content: str,
-        context: Dict[str, Any],
-    ) -> SocialUpdateResult:
-        """[已弃用] 兼容旧版 SocialValueCore.update()，无外部调用者"""
-        result = await self.evaluate(user_id, channel_id, content, context)
-        behavior_signal = context.get("behavior_signal", {})
-        category = self._settlement.get_behavior_category(
-            (
-                behavior_signal.get("behavior_type", "neutral")
-                if isinstance(behavior_signal, dict)
-                else "neutral"
-            ),
-            (
-                behavior_signal.get("intent", "other")
-                if isinstance(behavior_signal, dict)
-                else "other"
-            ),
-        )
-        return self._settlement.build_legacy_update_result(
-            result.settlement,
-            behavior_signal if isinstance(behavior_signal, dict) else {},
-            category,
-        )
-
-    async def compat_get_value(self, user_id: str, channel_id: str) -> float:
-        """兼容旧版 SocialValueCore.get_value()"""
-        return await self._settlement.read_score(user_id, channel_id)
-
-    def compat_get_stage(self, user_id: str, channel_id: str) -> str:
-        """兼容旧版 RelationshipTracker.get_stage()"""
-        return self.get_phase_label(user_id, channel_id)
-
-    def compat_get_custom_label(self, user_id: str, channel_id: str) -> str:
-        """兼容旧版 RelationshipTracker.get_custom_label()"""
-        dossier = self._phase.fetch_dossier(user_id, channel_id)
-        return dossier.custom_nick
-
-    def compat_record_value(self, user_id: str, channel_id: str, social_value: float) -> Optional[PhaseTransition]:
-        """兼容旧版 RelationshipTracker.record_value()"""
-        return self._phase.ingest_score(user_id, channel_id, social_value)
-
-    def compat_get_level_factor(self, user_id: str, channel_id: str) -> float:
-        """兼容旧版 RelationshipTracker.get_level_factor()"""
-        return self.get_phase_weight(user_id, channel_id)
-
-    def compat_favor_of(self, anchor_id: str) -> float:
-        """兼容旧版 BondSettler.favor_of()"""
-        # BondSettler 使用 anchor_id 而非 (uid, channel_id)
-        # 这里做最佳努力匹配
-        for _key, dossier in self._phase._dossiers.items():
-            if dossier.uid == anchor_id:
-                return 0.0
-        return 0.0
-
-    def compat_capture_snapshot(self, peer_id: str) -> Dict[str, float]:
-        """兼容旧版 BondSettler.capture_snapshot()"""
-        return {
-            "favor": 0.0,
-            "trust": 0.0,
-            "annoyance": 0.0,
-        }
 
     # ================================================================
     #  内部方法
