@@ -1249,3 +1249,25 @@
 - 变更需要重启主程序/WebUI 后生效；旧进程不会自动加载新日志和夜间回复护栏。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T02:24:34+08:00 - Task: 修复状态页 HTTP 实时同步派生层滞后
+
+### What was done:
+- 排查 `/dashboard` 实时同步链路，确认前端已使用 `/api/heartflow/monitor/live` 长轮询，不再使用状态监控 WebSocket。
+- 定位实时显示卡顿原因：运行态事件多为 `domains.*` 增量，后端 live 路由收到 `state_delta` 后直接返回 hub 快照，导致 `presentation/prediction` 派生层没有同步重算，前端主要展示层仍是旧数据。
+- 修改 `src/webui/routers/heartflow.py`：频道 live API 收到非监控完整快照事件时，立即调用 `build_channel_monitor_state(channel_id)` 重建完整监控包，再返回给前端。
+- 保留 `monitor_*` 原生完整快照的快速路径，避免自己刚构建的完整包被重复构建。
+- 更新 `scripts/heartflow_state_regression.py`，锁定 delta 到达后必须重建完整监控包的契约。
+
+### Testing:
+- `uv run ruff check src/webui/routers/heartflow.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `runtime_state_hub.delta_rebuilds_monitor_packet=true`。
+- `uv run python scripts/webui_smoke_test.py` 通过，确认状态监控 WebSocket 仍已移除且 HTTP live API 可用。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，只有工作区 CRLF 提示。
+
+### Notes:
+- 这次没有改前端 UI 文件；问题在后端 live API 返回了未重算派生层的快照。
+- 修改后需要重启主程序/WebUI，`http://127.0.0.1:8001/dashboard` 才会加载新的 live API 行为。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

@@ -109,9 +109,16 @@ async def wait_heartflow_monitor_state(
         if latest is None:
             raise HTTPException(status_code=404, detail="Heartflow chat is not active")
         return {"success": True, "changed": False, "monitor": latest}
-    if event.get("type") == "state_snapshot":
+    monitor = None
+    if (
+        event.get("type") == "state_snapshot"
+        and str(event.get("reason", "") or "").startswith("monitor_")
+        and is_channel_monitor_packet(event.get("data"), channel_id)
+    ):
         monitor = event.get("data")
     else:
+        monitor = await build_channel_monitor_state(channel_id)
+    if not is_channel_monitor_packet(monitor, channel_id):
         monitor = await hub.get_snapshot(channel_id)
     if not is_channel_monitor_packet(monitor, channel_id):
         monitor = await build_channel_monitor_state(channel_id)

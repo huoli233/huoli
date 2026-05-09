@@ -1840,6 +1840,7 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
                 "no_partial_seed": True,
                 "event_driven_snapshot": True,
                 "http_wait_for_update": True,
+                "delta_rebuilds_monitor_packet": True,
             }
         finally:
             await hub.unsubscribe(queue, channel_id)
@@ -1854,6 +1855,8 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
     assert "emit_runtime_delta" in hub_source
     assert "wait_for_update" in hub_source
     assert "MONITOR_OVERVIEW_CHANNEL_ID" in hub_source
+    assert "startswith(\"monitor_\")" in heartflow_router_source
+    assert "monitor = await build_channel_monitor_state(channel_id)" in heartflow_router_source
     assert "if not isinstance(existing, dict) or not existing:" in hub_source
     assert "is_channel_monitor_packet" in heartflow_router_source
     assert "warm_monitor_snapshots" in state_monitor_source
