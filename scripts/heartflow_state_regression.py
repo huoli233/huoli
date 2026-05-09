@@ -1284,6 +1284,40 @@ def check_db_backed_json_storage_contract() -> Dict[str, Any]:
     }
 
 
+def check_memoir_channel_key_contract() -> Dict[str, Any]:
+    from src.chat.proactive.session_tracker import DialogueMemoir, MemoirCabinet
+
+    cabinet = MemoirCabinet.__new__(MemoirCabinet)
+    cabinet._memoirs = {}
+    cabinet._user_locks = {}
+    user_id = "memoir-user-regression"
+    channel_id = "memoir-channel-regression"
+    memoir = DialogueMemoir(user_id=user_id, channel_id=channel_id)
+    cabinet.commit(channel_id, memoir)
+    assert cabinet.lookup_sync(user_id) is memoir
+    assert cabinet.lookup_sync(channel_id) is None
+    assert cabinet.lookup_by_channel(channel_id) is memoir
+    return {
+        "memoir_key_uses_user_id": True,
+        "memoir_channel_lookup_preserved": True,
+    }
+
+
+def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
+    source = (ROOT / "src/chat/heart_flow/heartflow.py").read_text(encoding="utf-8")
+    startup_block = source[source.index("async def startup") : source.index("async def shutdown")]
+    warmup_block = source[
+        source.index("async def _run_startup_warmup") : source.index("    @staticmethod\n    def _should_skip_prewarm")
+    ]
+    assert "self._warm_core_services()" in startup_block
+    assert "self._schedule_startup_warmup()" not in startup_block
+    assert "get_chat_manager().streams.values()" in warmup_block
+    return {
+        "startup_skips_known_stream_prewarm": True,
+        "manual_warmup_code_kept": True,
+    }
+
+
 def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     msg = type(
         "FakeMessage",
@@ -1628,6 +1662,8 @@ def main() -> None:
         "huoli_naming": check_huoli_naming_contract(),
         "admin_identity": check_admin_identity_not_relationship_contract(),
         "db_backed_json_storage": check_db_backed_json_storage_contract(),
+        "memoir_channel_key": check_memoir_channel_key_contract(),
+        "heartflow_startup_prewarm": check_heartflow_startup_no_channel_prewarm_contract(),
         "force_reply_generation_failure": check_force_reply_generation_failure_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),

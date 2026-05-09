@@ -102,7 +102,7 @@ class Heartflow:
             self._dimension_dispatcher = None
             logger.warning(f"[心流] 多维状态调度器启动异常: {exc}")
         self._bind_proactive_hooks()
-        self._schedule_startup_warmup()
+        self._warm_core_services()
         self._cleanup_task = asyncio.create_task(self._periodic_cleanup_loop())
         logger.info("[心流] 主协调器已启动")
 

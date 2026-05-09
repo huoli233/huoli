@@ -810,6 +810,27 @@
 - `config/model_config.toml` 被 `.gitignore` 忽略，属于本地含密钥运行配置，不应提交完整文件到 Git。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
 
+## 2026-05-09T15:58:00+08:00 - Task: 修正回忆录与启动聊天实例创建语义
+
+### What was done:
+- 排查 15:49 日志，确认消息入口、心流实例和回复器均识别为群聊 `人坤测试`，不是私聊；`31380395` 是用户回忆录 key 的前缀，不是新建目录。
+- 将回忆录新建日志改为同时输出脱敏用户 key 和频道 key，避免把用户回忆录误看成私聊频道。
+- 修正 `MemoirCabinet.commit()` 兼容接口，防止旧调用把 `channel_id` 当成回忆录索引写入 `_memoirs`。
+- 修正 `lookup_by_channel()`，频道下即使回忆录还没有 `last_user_spoke_at` 也能被查回。
+- 用户消息写入回忆录后立即持久化到 `Huoli.db` slot，避免异常退出或未走 shutdown 时下次又显示新建。
+- 心流启动改为只预热核心服务，不再启动时遍历历史聊天流并批量创建心流聊天实例；真实群聊仍会在收到消息时按需创建。
+
+### Testing:
+- `uv run ruff check src/chat/proactive/session_tracker.py src/chat/heart_flow/heartflow_message_processor.py src/chat/heart_flow/heartflow.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python -c "import scripts.heartflow_state_regression as r; ..."` 通过，覆盖回忆录 key 不被频道污染、启动不再批量预热历史聊天流。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q ...` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新结果包含 `memoir_channel_key` 和 `heartflow_startup_prewarm`。
+- `git diff --check -- ...` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
 ## 2026-05-09T15:44:00+08:00 - Task: 移除回复生成失败本地兜底发送
 
 ### What was done:

@@ -422,7 +422,7 @@ class MemoirCabinet:
                 return loaded
             fresh = DialogueMemoir(user_id=user_id, channel_id=channel_id)
             self._memoirs[user_id] = fresh
-            logger.info(f"新建回忆录: {user_id[:8]}")
+            logger.info(f"新建用户回忆录: user={user_id[:8]} channel={channel_id[:8]}")
             return fresh
 
     def lookup_sync(self, user_id: str) -> Optional[DialogueMemoir]:
@@ -432,7 +432,7 @@ class MemoirCabinet:
     def lookup_by_channel(self, channel_id: str) -> Optional[DialogueMemoir]:
         """按频道ID查找最近的回忆录（群聊回退）"""
         _best = None
-        _best_ts = 0.0
+        _best_ts = -1.0
         for m in self._memoirs.values():
             if getattr(m, "channel_id", "") == channel_id:
                 _ts = getattr(m, "last_user_spoke_at", 0.0) or 0.0
@@ -452,6 +452,9 @@ class MemoirCabinet:
         if memoir is None:
             memoir = DialogueMemoir(user_id=user_id, channel_id=channel_id or user_id)
             self._memoirs[user_id] = memoir
+            logger.info(
+                f"新建用户回忆录: user={user_id[:8]} channel={(channel_id or user_id)[:8]}"
+            )
         elif channel_id:
             memoir.channel_id = channel_id
         return memoir
@@ -459,7 +462,10 @@ class MemoirCabinet:
     def commit(self, user_id: str, memoir: DialogueMemoir) -> None:
         """兼容旧调用：同步写回内存。"""
         memoir.touched_at = time.time()
-        self._memoirs[user_id] = memoir
+        actual_user_id = str(getattr(memoir, "user_id", "") or user_id)
+        if user_id and user_id != actual_user_id and self._memoirs.get(user_id) is memoir:
+            self._memoirs.pop(user_id, None)
+        self._memoirs[actual_user_id] = memoir
 
     # ---- 持久化 ----
     async def persist_memoir(self, user_id: str) -> bool:

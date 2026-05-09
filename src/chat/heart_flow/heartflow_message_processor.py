@@ -292,6 +292,7 @@ async def _record_dialogue_memoir(
             sender_id=user_id,
             msg_time=msg_time,
         )
+        await cabinet.persist_memoir(user_id)
     except Exception as exc:
         logger.debug(f"主动回忆录记录异常: {exc}")
 
