@@ -1460,6 +1460,30 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
 
+## 2026-05-10T07:36:50+08:00 - Task: 收束主体回复模式裁定
+
+### What was done:
+- 新增轻量主体模式裁定 `_decide_subject_reply_mode()`，先把本轮分成 `observe`、`fast_reply`、`deep_think`、`rest/lurk`，再让后续链路执行。
+- preflight 阶段不再把管理员/点名一律硬塞进 fastlane；简单直达走快回，复杂问题或技术问题走 deep_think，保留完整世界快照、感知、关系和维度链路。
+- pre 阶段用显著性、行为分类、重复/骚扰信号做轻量早退；低显著且非强制内容直接观察，不再进后面多层抢决策。
+- voice 阶段在真实内心独白后再次细化：主体明确 `rest`、`lurk`、`observe` 时直接成为终态；主体要求深思时标记 `needs_upgrade` 并关闭快回。
+- 执行修正后重新计算 `_final_reply/_final_upgrade/_final_skip`，避免裁定更新后执行阶段仍使用旧分支。
+- 更新心流回归脚本，锁定主体裁定入口、preflight 模式分流、voice 阶段终态和 deep_think 升级标记。
+
+### Testing:
+- `uv run ruff check src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/webui_smoke_test.py` 通过，确认 `state_monitor_websocket_removed=true`。
+- `uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 这轮解决的是“谁决定快回/深思/不回”的入口问题，不再让管理员/点名天然等价为快回。
+- 管理员强制仍保留最高穿透能力；普通点名如果真实内心独白选择不回，会按主体裁定终止。
+- 复杂问题会优先走 deep_think，简单直达仍走 fast_reply。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
 ## 2026-05-10T06:05:00+08:00 - Task: 移除夜间短句本地模板替换
 
 ### What was done:

@@ -56,6 +56,123 @@ if TYPE_CHECKING:
     from src.chat.proactive.proactive_decider import ProactiveDecision
 
 class LoopMainDriverMixin:
+    def _decide_subject_reply_mode(
+        self,
+        *,
+        incoming_batch: List[Any],
+        pinged_msg: Any = None,
+        is_admin_force: bool = False,
+        targeted_to_bot: bool = False,
+        repetition_signal: Optional[Dict[str, Any]] = None,
+        harassment_signal: Optional[Dict[str, Any]] = None,
+        behavior_signal: Optional[Dict[str, Any]] = None,
+        message_salience: Optional[Dict[str, Any]] = None,
+        voice_conclusion: Any = None,
+        stage: str = "pre",
+    ) -> Dict[str, Any]:
+        """轻量主体模式裁定：先决定不回、快回还是深思，再让下游执行。"""
+        latest_human = self._get_latest_human_message(list(incoming_batch or []))
+        text = ""
+        if latest_human is not None:
+            text = str(
+                getattr(latest_human, "processed_plain_text", "")
+                or getattr(latest_human, "plain_text", "")
+                or getattr(latest_human, "content", "")
+                or ""
+            ).strip()
+        normalized = re.sub(r"\s+", "", text)
+        direct_target = bool(is_admin_force or pinged_msg is not None or targeted_to_bot)
+        salience_score = int((message_salience or {}).get("score", 0) or 0)
+        behavior_category = str((behavior_signal or {}).get("category", "") or "")
+        behavior_severity = float((behavior_signal or {}).get("severity", 0.0) or 0.0)
+        repeat_low_info = bool(
+            repetition_signal
+            and repetition_signal.get("detected")
+            and repetition_signal.get("latest_matches_repeat")
+            and repetition_signal.get("low_info_cluster")
+        )
+        harassment_detected = bool(harassment_signal and harassment_signal.get("detected"))
+
+        question_like = any(marker in text for marker in ("?", "？", "为什么", "怎么", "如何", "咋", "啥时候"))
+        technical_like = any(
+            marker in text
+            for marker in (
+                "优化",
+                "修复",
+                "报错",
+                "异常",
+                "逻辑",
+                "架构",
+                "上下文",
+                "人格",
+                "记忆",
+                "工具",
+                "配置",
+                "代码",
+                "耗时",
+                "延迟",
+                "速度",
+                "WebUI",
+                "prompt",
+                "token",
+            )
+        )
+        long_or_structured = bool(len(normalized) >= 80 or "\n" in text or "```" in text or "[picid:" in text)
+        complex_input = bool(question_like or technical_like or long_or_structured)
+
+        voice_action = ""
+        voice_should = None
+        voice_desire = 0
+        voice_upgrade = False
+        if voice_conclusion is not None:
+            voice_action = str(getattr(voice_conclusion, "next_action", "") or "").strip().lower()
+            voice_should = getattr(voice_conclusion, "should_reply", None)
+            try:
+                voice_desire = int(float(getattr(voice_conclusion, "reply_desire_level", 0) or 0))
+            except Exception:
+                voice_desire = 0
+            voice_upgrade = bool(getattr(voice_conclusion, "needs_upgrade", False))
+
+        reasons: list[str] = []
+        mode = "observe"
+        if stage != "pre" and voice_action in {"rest", "disengage", "lurk", "observe", "wait"} and not is_admin_force:
+            mode = "lurk" if voice_action == "lurk" else ("rest" if voice_action in {"rest", "disengage"} else "observe")
+            reasons.append(f"voice_action={voice_action}")
+        elif stage != "pre" and (voice_upgrade or (voice_should is True and voice_desire >= 7 and complex_input)):
+            mode = "deep_think"
+            reasons.append("inner_voice_upgrade")
+        elif direct_target and complex_input:
+            mode = "deep_think"
+            reasons.append("direct_complex")
+        elif direct_target:
+            mode = "fast_reply"
+            reasons.append("direct_simple")
+        elif repeat_low_info and not is_admin_force:
+            mode = "observe"
+            reasons.append("low_info_repeat")
+        elif harassment_detected and behavior_severity >= 0.6 and not direct_target:
+            mode = "observe"
+            reasons.append("harassment_observe")
+        elif complex_input and salience_score >= 2:
+            mode = "deep_think"
+            reasons.append("ambient_complex")
+        elif salience_score >= 3 and behavior_category in {"friendly", "hostile"}:
+            mode = "fast_reply"
+            reasons.append(f"salient_{behavior_category}")
+        else:
+            mode = "observe"
+            reasons.append("low_salience")
+
+        return {
+            "mode": mode,
+            "reason": ",".join(reasons),
+            "stage": stage,
+            "direct_target": direct_target,
+            "complex_input": complex_input,
+            "salience": salience_score,
+            "text_len": len(normalized),
+        }
+
     async def _refresh_direct_fastlane_inner_state(
         self,
         decision_messages: List[Any],
@@ -653,9 +770,22 @@ class LoopMainDriverMixin:
             return True
 
         _is_admin_force_wake = self._is_force_wake_admin(incoming_batch, pinged_msg)
-        _is_direct_reply_fastlane = bool(_is_admin_force_wake or getattr(self, "_cached_targeted_to_bot", False))
+        subject_mode = self._decide_subject_reply_mode(
+            incoming_batch=incoming_batch,
+            pinged_msg=pinged_msg,
+            is_admin_force=_is_admin_force_wake,
+            targeted_to_bot=bool(getattr(self, "_cached_targeted_to_bot", False)),
+            stage="preflight",
+        )
+        self._last_subject_reply_mode = subject_mode
+        _preflight_subject_mode = str(subject_mode.get("mode", "observe") or "observe")
+        _is_direct_reply_fastlane = _preflight_subject_mode == "fast_reply"
         self._direct_fast_reply_generation = bool(_is_direct_reply_fastlane)
-        self._force_full_reply_generation = False
+        self._force_full_reply_generation = _preflight_subject_mode == "deep_think"
+        logger.info(
+            f"{self.log_prefix} [主体裁定/preflight] mode={_preflight_subject_mode} "
+            f"reason={subject_mode.get('reason', '')}"
+        )
 
         # 重建完整世界快照（携带目标用户ID），供 Phase 2.5+ 所有门控使用
         _target_uid = ""
@@ -1075,6 +1205,52 @@ class LoopMainDriverMixin:
             # 被@时优先锁定回复目标，避免后续落到错误的最新消息
             force_reply_message = pinged_msg
         _force_direct_ping = force_reply_message is not None
+        subject_mode = self._decide_subject_reply_mode(
+            incoming_batch=decision_messages,
+            pinged_msg=pinged_msg,
+            is_admin_force=_is_admin_force_wake,
+            targeted_to_bot=bool(getattr(self, "_cached_targeted_to_bot", False)),
+            repetition_signal=repetition_signal,
+            harassment_signal=harassment_signal,
+            behavior_signal=behavior_signal,
+            message_salience=message_salience,
+            stage="pre",
+        )
+        self._last_subject_reply_mode = subject_mode
+        _subject_mode = str(subject_mode.get("mode", "observe") or "observe")
+        logger.info(
+            f"{self.log_prefix} [主体裁定] mode={_subject_mode} "
+            f"reason={subject_mode.get('reason', '')} salience={subject_mode.get('salience', 0)}"
+        )
+        if _subject_mode == "observe" and not _is_admin_force_wake and not _force_direct_ping:
+            self._last_flow_blocker = f"主体裁定观察:{subject_mode.get('reason', 'observe')}"
+            self._store_gate_runtime(
+                now=now,
+                stage="subject_mode_observe",
+                reason=self._last_flow_blocker,
+                source="subject_mode",
+                final_action="observe",
+                next_action="observe",
+                blocker=self._last_flow_blocker,
+                extra_votes=subject_mode,
+            )
+            self._emit_flow_decision_summary("subject_mode", "observe")
+            await self._emit_outcome_summary(False, {})
+            await self._sleep_or_wake(_TICK_FLOOR_SEC)
+            return True
+        if _subject_mode == "fast_reply" and not bool(getattr(self, "_force_full_reply_generation", False)):
+            _is_direct_reply_fastlane = True
+            self._direct_fast_reply_generation = True
+            self._force_full_reply_generation = False
+            if force_reply_message is None:
+                force_reply_message = pinged_msg or self._get_latest_human_message(decision_messages)
+                _force_direct_ping = force_reply_message is not None
+            logger.debug(f"{self.log_prefix} [主体裁定] fast_reply 接管本轮")
+        elif _subject_mode == "deep_think":
+            _is_direct_reply_fastlane = False
+            self._direct_fast_reply_generation = False
+            self._force_full_reply_generation = True
+            logger.debug(f"{self.log_prefix} [主体裁定] deep_think 保留完整思考链路")
 
         # ... 其他代码保持不变 ...
 
@@ -1405,6 +1581,53 @@ class LoopMainDriverMixin:
         if _target_uid_for_panel:
             self._last_user_id = _target_uid_for_panel
             await self._emit_target_profile(_target_uid_for_panel)
+
+        subject_mode = self._decide_subject_reply_mode(
+            incoming_batch=decision_messages,
+            pinged_msg=pinged_msg,
+            is_admin_force=_is_admin_force_wake,
+            targeted_to_bot=bool(getattr(self, "_cached_targeted_to_bot", False)),
+            repetition_signal=repetition_signal,
+            harassment_signal=harassment_signal,
+            behavior_signal=behavior_signal,
+            message_salience=message_salience,
+            voice_conclusion=voice_conclusion,
+            stage="voice",
+        )
+        self._last_subject_reply_mode = subject_mode
+        _voice_subject_mode = str(subject_mode.get("mode", "observe") or "observe")
+        logger.info(
+            f"{self.log_prefix} [主体裁定/voice] mode={_voice_subject_mode} "
+            f"reason={subject_mode.get('reason', '')} salience={subject_mode.get('salience', 0)}"
+        )
+        if _voice_subject_mode in {"observe", "rest", "lurk"} and not _is_admin_force_wake:
+            self._last_flow_blocker = f"主体裁定{_voice_subject_mode}:{subject_mode.get('reason', '')}"
+            self._store_gate_runtime(
+                now=now,
+                stage=f"subject_mode_{_voice_subject_mode}",
+                reason=self._last_flow_blocker,
+                source="subject_mode",
+                final_action="observe",
+                next_action=_voice_subject_mode,
+                blocker=self._last_flow_blocker,
+                extra_votes=subject_mode,
+            )
+            self._mark_decision_winner("subject_mode")
+            self._apply_post_reply_state(did_reply=False, reason=self._last_flow_blocker)
+            self._emit_flow_decision_summary("subject_mode", _voice_subject_mode)
+            self._emit_action_verdict("subject_mode", self._last_flow_blocker, time.time() - _t0)
+            await self._emit_outcome_summary(False, relation_result)
+            await self._sleep_or_wake(_TICK_FLOOR_SEC)
+            return True
+        if _voice_subject_mode == "deep_think" and voice_conclusion is not None:
+            try:
+                voice_conclusion.needs_upgrade = True
+            except Exception as _subject_mode_exc:
+                logger.debug(f"{self.log_prefix} 主体裁定深思标记失败: {_subject_mode_exc}")
+            self._direct_fast_reply_generation = False
+            self._force_full_reply_generation = True
+        elif _voice_subject_mode == "fast_reply" and not bool(getattr(self, "_force_full_reply_generation", False)):
+            self._direct_fast_reply_generation = True
 
         # ── 阶段 4.6：早期退出检查 - 内心独白决定不想回复时直接跳过 ──
         early_exit = self._check_early_exit(
@@ -2061,6 +2284,9 @@ class LoopMainDriverMixin:
             decision_messages=decision_messages,
         )
         should_act = bool(_decision_runtime.should_reply)
+        _final_reply = _decision_runtime.next_action == "reply"
+        _final_upgrade = _decision_runtime.next_action == "upgrade"
+        _final_skip = not (_final_reply or _final_upgrade)
         self._align_states_with_inner_voice(voice_conclusion, source="decision_finalize")
         logger.info(
             f"{self.log_prefix} [执行修正] action={_decision_runtime.next_action} "

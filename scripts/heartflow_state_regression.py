@@ -1706,7 +1706,13 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "我看见问题了，你具体指哪块" not in flow_source
     assert "continuity_context" in flow_source
     assert "_build_context_execution_block" in flow_source
-    assert "_is_direct_reply_fastlane = bool(_is_admin_force_wake or getattr(self, \"_cached_targeted_to_bot\", False))" in loop_source
+    assert "def _decide_subject_reply_mode" in loop_source
+    assert "[主体裁定/preflight]" in loop_source
+    assert "_preflight_subject_mode == \"fast_reply\"" in loop_source
+    assert "_preflight_subject_mode == \"deep_think\"" in loop_source
+    assert "subject_mode_observe" in loop_source
+    assert "[主体裁定/voice]" in loop_source
+    assert "voice_conclusion.needs_upgrade = True" in loop_source
     assert "if _target_uid and not _is_direct_reply_fastlane" in loop_source
     assert "heartfc_stage25_fast_reply_timeout_seconds" in loop_source
     assert "1.2 if _is_direct_reply_fastlane else 6.0" in loop_source
