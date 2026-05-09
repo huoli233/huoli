@@ -667,3 +667,28 @@
 - 本轮只治理了强制回复兜底链路中的触发词硬编码；审计显示其它 enhanced_modules 仍存在 P0/P1/P2 硬编码，需要继续按模块拆分治理。
 - 当前分支在提交前为 `delete/状态页假实时轮询移除`。
 - 工作区内已有 `.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/` 不属于本轮，已避免暂存。
+
+## 2026-05-09T08:59:45+08:00 - Task: 状态页假实时轮询与启动重型快照移除
+
+### What was done:
+- 前端状态页启动链路只保留轻量 `/api/heartflow/monitor` 会话列表请求，用于确定真实 HeartFlow 会话；未选会话时显示 `等待会话`，不再建立 `/ws/state-monitor` 总览订阅。
+- 删除状态页 HTTP 轮询补偿定时器和 `pollMonitorFallback`，实时状态只由带 `channel_id` 的 WebSocket 运行态事件驱动。
+- 删除状态页自动配置分级面板、`/api/heartflow/config-scope` 启动请求和相关样式，避免打开页面时触发重型配置快照和降级日志。
+- 后端 `/ws/state-monitor` 拒绝未带 `channel_id` 的连接，`refresh/switch_channel` 也要求明确会话，彻底避免“全部群聊/私聊”式总览订阅。
+- 后端移除 `/api/heartflow/config-scope` 路由中的超时降级快照实现，状态页不再产生 `状态页配置分级构建超时(2s)，返回降级快照` 日志。
+- 更新 WebUI smoke 和 heartflow 回归契约，禁止旧轮询、旧配置分级、无会话 WS 总览订阅重新出现。
+
+### Testing:
+- `uv run ruff check src/webui/routers/heartflow.py src/webui/routers/websocket/state_monitor.py scripts/heartflow_state_regression.py scripts/webui_smoke_test.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `startup_http_fallback_polling_removed=true`、`config_scope_removed_from_status_page=true`。
+- `uv run python scripts/webui_smoke_test.py` 通过，确认 `/ws/state-monitor` 无 `channel_id` 返回 `state_error`，带缺失会话 ID 时仍保持 WS 可 ping/pong。
+- `uv run python -m compileall src scripts` 通过。
+- `cd web/dashboard && npm run build` 通过，生成新的 `web/dashboard/dist` 静态资源。
+- `git diff --check` 针对本轮文件通过。
+- 使用本机 Chrome headless + DevTools Protocol 打开构建后的 `/dashboard`，确认页面启动没有请求 `/api/heartflow/config-scope`，所有 `/ws/state-monitor` 请求均带 `channel_id=mock-channel`，页面文本不再包含 `配置分级`。
+- 说明：仓库全量 `uv run ruff check src scripts` 仍被历史未用导入/未用变量等 117 个既有问题阻塞；本轮触及文件精确 ruff 已通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 删除前保留分支：`preserve/full-modules-状态页假实时轮询移除`；实际删除分支：`delete/状态页假实时轮询移除`。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt`、多个 `docs/*.md`、`.trae/`、若干心流/感知模型文件改动，本轮提交必须继续精确暂存，避免带入。

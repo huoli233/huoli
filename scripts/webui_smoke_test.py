@@ -171,19 +171,11 @@ def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
 
     with client.websocket_connect("/ws/state-monitor") as websocket:
         first = websocket.receive_json()
-        if first.get("type") != "state_snapshot":
-            raise AssertionError(f"Unexpected public state-monitor init message: {first}")
-        payload = first.get("data", {})
-        if payload.get("snapshot_kind") == "overview":
-            if "updated_at" not in payload or "channels" not in payload:
-                raise AssertionError(f"Unexpected public overview snapshot shape: {payload}")
-        else:
-            for required_key in ("domains", "presentation", "prediction"):
-                if required_key not in payload:
-                    raise AssertionError(f"Unexpected public state-snapshot shape: missing {required_key}")
-        websocket.send_json({"type": "ping", "data": {}})
-        pong = _expect_message(websocket, "pong")
-        results.append({"path": "/ws/state-monitor", "mode": "public", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
+        if first.get("type") != "state_error":
+            raise AssertionError(f"State monitor without channel_id must be rejected, got {first}")
+        if "channel_id" not in str(first.get("data", {})):
+            raise AssertionError(f"State monitor rejection must explain missing channel_id, got {first}")
+        results.append({"path": "/ws/state-monitor", "mode": "public", "status": "requires_channel", "init_type": first.get("type")})
 
     with client.websocket_connect(f"/ws/auth?token={token}") as websocket:
         message = _expect_message(websocket, "auth_success")
@@ -200,35 +192,19 @@ def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
         pong = _expect_message(websocket, "pong")
         results.append({"path": "/ws/plugin-progress", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
 
-    with client.websocket_connect(f"/ws/state-monitor?token={token}") as websocket:
+    with client.websocket_connect(f"/ws/state-monitor?token={token}&channel_id=__smoke_missing__") as websocket:
         first = websocket.receive_json()
-        if first.get("type") != "state_snapshot":
+        if first.get("type") != "state_error":
             raise AssertionError(f"Unexpected state-monitor init message: {first}")
-        payload = first.get("data", {})
-        if payload.get("snapshot_kind") == "overview":
-            if "updated_at" not in payload or "channels" not in payload:
-                raise AssertionError(f"Unexpected overview snapshot shape: {payload}")
-        else:
-            for required_key in ("domains", "presentation", "prediction"):
-                if required_key not in payload:
-                    raise AssertionError(f"Unexpected state-snapshot shape: missing {required_key}")
         websocket.send_json({"type": "ping", "data": {}})
         pong = _expect_message(websocket, "pong")
         results.append({"path": "/ws/state-monitor", "mode": "token", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
 
     cookie_headers = {"Cookie": f"huoli_session={token}"}
-    with client.websocket_connect("/ws/state-monitor", headers=cookie_headers) as websocket:
+    with client.websocket_connect("/ws/state-monitor?channel_id=__smoke_missing__", headers=cookie_headers) as websocket:
         first = websocket.receive_json()
-        if first.get("type") != "state_snapshot":
+        if first.get("type") != "state_error":
             raise AssertionError(f"Unexpected state-monitor init message: {first}")
-        payload = first.get("data", {})
-        if payload.get("snapshot_kind") == "overview":
-            if "updated_at" not in payload or "channels" not in payload:
-                raise AssertionError(f"Unexpected overview snapshot shape: {payload}")
-        else:
-            for required_key in ("domains", "presentation", "prediction"):
-                if required_key not in payload:
-                    raise AssertionError(f"Unexpected state-snapshot shape: missing {required_key}")
         websocket.send_json({"type": "ping", "data": {}})
         pong = _expect_message(websocket, "pong")
         results.append({"path": "/ws/state-monitor", "mode": "cookie", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
@@ -273,10 +249,9 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     )
 
     required_dashboard_fragments = {
-        "always_on_gate": "const shouldSyncRealtime = true;",
-        "visibility_listener": 'document.addEventListener("visibilitychange", handleActivation);',
-        "focus_listener": 'window.addEventListener("focus", handleActivation);',
-        "real_connection_display": "const displayConnectionState = connectionState;",
+        "channel_gate": "const shouldSyncRealtime = Boolean(selectedChannel);",
+        "waiting_display": 'const displayConnectionState = selectedChannel ? connectionState : "waiting";',
+        "no_channel_guard": "if (!selectedChannel) {",
         "immediate_refresh": 'socket.send(JSON.stringify({ type: "refresh", data: { channel_id: selectedChannel } }));',
         "fast_silent_reconnect": "}, 800);",
         "state_delta": "state_delta",
@@ -288,12 +263,17 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     ]
     assert not missing_dashboard, f"状态监控前端常驻连接契约缺失: {missing_dashboard}"
     assert "轮询同步失败" not in dashboard_source, "后台轮询失败不应显示到状态页前台"
-    assert "状态页保持实时总览待机" not in dashboard_source, "后台 state_error 不应显示成前台错误"
+    assert "fallbackPollTimerRef" not in dashboard_source, "状态页不应保留 HTTP 轮询补偿定时器"
+    assert "pollMonitorFallback" not in dashboard_source, "状态页不应保留 HTTP 轮询补偿函数"
+    assert "config-scope" not in dashboard_source, "状态页启动链路不应请求配置分级快照"
     assert "authReady" not in dashboard_source, "状态页实时同步不应依赖 WebUI 登录态"
     assert "/api/webui/auth/check" not in dashboard_source, "状态页不应在建立实时连接前检查登录"
+    assert 'document.addEventListener("visibilitychange"' not in dashboard_source, "状态页不应因可见性事件扰动实时连接"
+    assert 'window.addEventListener("focus"' not in dashboard_source, "状态页不应因焦点事件重置连接状态"
     assert 'window.addEventListener("blur"' not in dashboard_source, "状态页不应因窗口失焦断开实时连接"
     assert 'setConnectionState("idle")' not in dashboard_source, "状态页不应把临时不可见显示为未连接"
     assert 'const displayConnectionState = "live";' not in dashboard_source, "状态页不应再固定伪装 live"
+    assert 'polling: "补偿同步"' not in dashboard_source, "状态页不应显示 HTTP 补偿同步状态"
 
     forbidden_backend_fragments = [
         "verify_auth_token_from_cookie_or_header",
@@ -306,15 +286,18 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     remaining_backend_fragments = [fragment for fragment in forbidden_backend_fragments if fragment in state_monitor_source]
     assert not remaining_backend_fragments, f"状态监控 WebSocket 仍残留认证门控: {remaining_backend_fragments}"
     assert "await websocket.accept()" in state_monitor_source, "状态监控 WebSocket 应直接接受只读连接"
+    assert "channel_id required" in state_monitor_source, "状态监控 WebSocket 应拒绝未指定会话的总览订阅"
+    assert "build_monitor_overview" not in state_monitor_source, "状态监控 WebSocket 不应再构建总览快照"
     assert "subscription.get()" in state_monitor_source, "状态监控 WebSocket 应订阅运行态事件"
     assert "state_heartbeat" in state_monitor_source, "状态监控 WebSocket 应提供心跳而非轮询重建"
 
     return {
         "activation_gate": True,
-        "always_on_connection": True,
+        "channel_scoped_connection": True,
         "real_connection_display": True,
         "public_state_monitor": True,
         "no_auth_gate": True,
+        "startup_polling_removed": True,
     }
 
 

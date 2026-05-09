@@ -515,30 +515,6 @@ type OverviewPayload = {
   channels: OverviewChannel[];
 };
 
-type ConfigScopeModule = {
-  module: string;
-  scope: "system" | "mixed" | "user" | string;
-  semantic_domains: string[];
-  user_editable_keys: string[];
-  system_only_keys: string[];
-  editable_key_count: number;
-  system_key_count: number;
-};
-
-type ConfigScopeSnapshot = {
-  updated_at: number;
-  summary: {
-    total: number;
-    system: number;
-    mixed: number;
-    user: number;
-    editable: number;
-  };
-  modules: ConfigScopeModule[];
-};
-
-type ScopeFilter = "all" | "editable" | "user" | "mixed" | "system";
-
 const severityRank: Record<string, number> = {
   critical: 5,
   high: 4,
@@ -702,9 +678,9 @@ function modelPathLabel(value: string | undefined): string {
 
 function connectionLabel(value: string): string {
   return {
+    waiting: "等待会话",
     connecting: "连接中",
     live: "实时同步",
-    polling: "补偿同步",
     reconnecting: "重连中",
     error: "连接异常",
   }[value] ?? "连接中";
@@ -718,14 +694,6 @@ function metricTone(value: number): string {
     return "medium";
   }
   return "low";
-}
-
-function scopeLabel(value: string): string {
-  return {
-    user: "用户可改",
-    mixed: "部分可改",
-    system: "系统级",
-  }[value] ?? value;
 }
 
 function cloneWithPath(source: MonitorPacket | null, path: string, value: unknown): MonitorPacket | null {
@@ -782,23 +750,12 @@ export function EmotionDashboard() {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
   const [selectedChannel, setSelectedChannel] = useState("");
   const [packet, setPacket] = useState<MonitorPacket | null>(null);
-  const [configScope, setConfigScope] = useState<ConfigScopeSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
-  const [connectionState, setConnectionState] = useState("connecting");
+  const [connectionState, setConnectionState] = useState("waiting");
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
   const [clockNowMs, setClockNowMs] = useState(() => Date.now());
   const [errorMessage, setErrorMessage] = useState("");
-  const [configScopeError, setConfigScopeError] = useState("");
-  const [scopeFilter, setScopeFilter] = useState<ScopeFilter>("editable");
-  const [scopeQuery, setScopeQuery] = useState("");
-  const [isPageActive, setIsPageActive] = useState(
-    () =>
-      typeof document === "undefined" ||
-      (document.visibilityState === "visible" &&
-        (typeof document.hasFocus !== "function" || document.hasFocus())),
-  );
   const reconnectTimerRef = useRef<number | null>(null);
-  const fallbackPollTimerRef = useRef<number | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const hasEverConnectedRef = useRef(false);
 
@@ -837,76 +794,20 @@ export function EmotionDashboard() {
   const dynamicTrace = packet?.presentation?.dynamic_trace ?? [];
   const initiativeState = packet?.presentation?.initiative_state;
   const displayPolicy = packet?.presentation?.display_policy ?? fallbackDisplayPolicy;
-  const configScopeGroups = useMemo(() => {
-    const query = scopeQuery.trim().toLowerCase();
-    const modules = (configScope?.modules ?? []).filter((item) => {
-      if (scopeFilter === "editable" && item.scope === "system") {
-        return false;
-      }
-      if (scopeFilter !== "all" && scopeFilter !== "editable" && item.scope !== scopeFilter) {
-        return false;
-      }
-      if (!query) {
-        return true;
-      }
-      const haystack = [
-        item.module,
-        item.scope,
-        ...item.semantic_domains,
-        ...item.user_editable_keys,
-        ...item.system_only_keys,
-      ]
-        .join(" ")
-        .toLowerCase();
-      return haystack.includes(query);
-    });
-    return {
-      user: modules.filter((item) => item.scope === "user"),
-      mixed: modules.filter((item) => item.scope === "mixed"),
-      system: modules.filter((item) => item.scope === "system"),
-    };
-  }, [configScope, scopeFilter, scopeQuery]);
-  const configScopeVisibleCount =
-    configScopeGroups.user.length + configScopeGroups.mixed.length + configScopeGroups.system.length;
   const selectedOverview = (overview?.channels ?? []).find(
     (channel) => channel.channel_id === selectedChannel,
   );
   const selectedScopeLabel = conversationScopeLabel(selectedOverview);
   const predictionPercent =
     prediction?.probability_percent ?? Number(((prediction?.speak_probability ?? 0) * 100).toFixed(1));
-  const shouldSyncRealtime = true;
-  const displayConnectionState = connectionState;
+  const shouldSyncRealtime = Boolean(selectedChannel);
+  const displayConnectionState = selectedChannel ? connectionState : "waiting";
   const liveEtaLabel = etaText(prediction, serverOffsetMs, clockNowMs);
   const liveSilenceSeconds = Math.max(
     0,
     Number(emotionDetail?.silence_seconds ?? 0) +
       Math.max(0, ((clockNowMs + serverOffsetMs) / 1000) - Number(packet?.server_time ?? packet?.updated_at ?? 0)),
   );
-
-  useEffect(() => {
-    let ignore = false;
-
-    function syncActivationState() {
-      if (!ignore) {
-        setIsPageActive(typeof document === "undefined" || document.visibilityState === "visible");
-        setErrorMessage("");
-      }
-    }
-
-    const handleActivation = () => {
-      syncActivationState();
-    };
-
-    document.addEventListener("visibilitychange", handleActivation);
-    window.addEventListener("focus", handleActivation);
-    syncActivationState();
-
-    return () => {
-      ignore = true;
-      document.removeEventListener("visibilitychange", handleActivation);
-      window.removeEventListener("focus", handleActivation);
-    };
-  }, []);
 
   useEffect(() => {
     let frame = 0;
@@ -926,6 +827,8 @@ export function EmotionDashboard() {
     let ignore = false;
 
     async function loadMonitorOverview() {
+      setLoading(true);
+      setErrorMessage("");
       try {
         const response = await fetch("/api/heartflow/monitor", {
           credentials: "same-origin",
@@ -941,77 +844,27 @@ export function EmotionDashboard() {
         setOverview(monitor ?? null);
         const initialChannel = monitor?.channels?.[0]?.channel_id ?? "";
         setSelectedChannel(initialChannel);
+        if (!initialChannel) {
+          setConnectionState("waiting");
+          setPacket(null);
+        }
       } catch (error) {
         if (!ignore) {
           setErrorMessage(`初始化状态页失败: ${String(error)}`);
         }
-      }
-    }
-
-    async function loadConfigScope() {
-      try {
-        const response = await fetch("/api/heartflow/config-scope", {
-          credentials: "same-origin",
-        });
-        if (!response.ok) {
-          throw new Error(`config-scope ${response.status}`);
-        }
-        const data = await response.json();
-        if (!ignore) {
-          setConfigScope(data?.config_scope ?? null);
-          setConfigScopeError("");
-        }
-      } catch (error) {
-        if (!ignore) {
-          setConfigScopeError(`读取配置分级失败: ${String(error)}`);
-        }
-      }
-    }
-
-    void loadMonitorOverview();
-    void loadConfigScope();
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadMonitor() {
-      if (!selectedChannel) {
-        setPacket(null);
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      setErrorMessage("");
-      try {
-        const response = await fetch(`/api/heartflow/monitor/${encodeURIComponent(selectedChannel)}`, {
-          credentials: "same-origin",
-        });
-        const data = await response.json();
-        if (!cancelled) {
-          setPacket(data?.monitor ?? null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setErrorMessage(`拉取状态失败: ${String(error)}`);
-        }
       } finally {
-        if (!cancelled) {
+        if (!ignore) {
           setLoading(false);
         }
       }
     }
 
-    loadMonitor();
+    void loadMonitorOverview();
 
     return () => {
-      cancelled = true;
+      ignore = true;
     };
-  }, [selectedChannel]);
+  }, []);
 
   useEffect(() => {
     if (socketRef.current) {
@@ -1021,6 +874,13 @@ export function EmotionDashboard() {
     if (reconnectTimerRef.current) {
       window.clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
+    }
+
+    if (!selectedChannel) {
+      setPacket(null);
+      setConnectionState("waiting");
+      hasEverConnectedRef.current = false;
+      return;
     }
 
     if (!shouldSyncRealtime) {
@@ -1134,87 +994,6 @@ export function EmotionDashboard() {
     };
   }, [selectedChannel, shouldSyncRealtime]);
 
-  useEffect(() => {
-    if (fallbackPollTimerRef.current) {
-      window.clearTimeout(fallbackPollTimerRef.current);
-      fallbackPollTimerRef.current = null;
-    }
-
-    if (!shouldSyncRealtime || connectionState === "live") {
-      return;
-    }
-
-    let stopped = false;
-
-    async function pollMonitorFallback() {
-      try {
-        const overviewResponse = await fetch("/api/heartflow/monitor", {
-          credentials: "same-origin",
-        });
-        if (!overviewResponse.ok) {
-          throw new Error(`overview ${overviewResponse.status}`);
-        }
-        const overviewData = await overviewResponse.json();
-        if (stopped) {
-          return;
-        }
-
-        const monitor = overviewData?.monitor as OverviewPayload | undefined;
-        const channels = monitor?.channels ?? [];
-        setOverview(monitor ?? null);
-
-        const channelToLoad =
-          selectedChannel && channels.some((channel) => channel.channel_id === selectedChannel)
-            ? selectedChannel
-            : (channels[0]?.channel_id ?? "");
-
-        if (!channelToLoad) {
-          setPacket(null);
-          return;
-        }
-
-        if (channelToLoad !== selectedChannel) {
-          setSelectedChannel(channelToLoad);
-          return;
-        }
-
-        const packetResponse = await fetch(`/api/heartflow/monitor/${encodeURIComponent(channelToLoad)}`, {
-          credentials: "same-origin",
-        });
-        if (!packetResponse.ok) {
-          throw new Error(`channel ${packetResponse.status}`);
-        }
-        const packetData = await packetResponse.json();
-        if (!stopped) {
-          setPacket(packetData?.monitor ?? null);
-          setConnectionState((current) => (current === "live" ? current : "polling"));
-          setErrorMessage("");
-        }
-      } catch {
-        if (!stopped) {
-          setConnectionState((current) => (current === "live" ? current : "reconnecting"));
-        }
-      } finally {
-        if (!stopped) {
-          fallbackPollTimerRef.current = window.setTimeout(pollMonitorFallback, 1800);
-        }
-      }
-    }
-
-    fallbackPollTimerRef.current = window.setTimeout(
-      pollMonitorFallback,
-      connectionState === "connecting" ? 0 : 600,
-    );
-
-    return () => {
-      stopped = true;
-      if (fallbackPollTimerRef.current) {
-        window.clearTimeout(fallbackPollTimerRef.current);
-        fallbackPollTimerRef.current = null;
-      }
-    };
-  }, [connectionState, selectedChannel, shouldSyncRealtime]);
-
   return (
     <div className="dashboard-shell">
       <header className="dashboard-header">
@@ -1246,7 +1025,7 @@ export function EmotionDashboard() {
       {loading && <div className="status-banner">正在同步状态数据…</div>}
       {errorMessage && <div className="status-banner is-error">{errorMessage}</div>}
       {!loading && !errorMessage && (overview?.active_count ?? 0) === 0 && (
-        <div className="status-banner">当前没有活跃会话，状态页会保持实时总览待机，等新的 Heartflow 会话出现后自动接入。</div>
+        <div className="status-banner">当前没有活跃会话，状态页会等待新的 Heartflow 会话出现后接入。</div>
       )}
 
       <section className="command-grid">
@@ -2116,119 +1895,6 @@ export function EmotionDashboard() {
               {(displayPolicy?.hidden ?? []).map((item) => <span key={item}>{item}</span>)}
             </div>
           </div>
-        </section>
-
-        <section className="panel panel-config-scope">
-          <div className="panel-header">
-            <h2>配置分级</h2>
-            <span>
-              {configScope
-                ? `${configScopeVisibleCount} / ${configScope.summary.total} 当前显示 · ${formatClock(configScope.updated_at)}`
-                : "等待配置分级"}
-            </span>
-          </div>
-          {!configScope ? (
-            <div className="empty-state">
-              {configScopeError || "正在读取 system / mixed / user 分级..."}
-            </div>
-          ) : (
-            <>
-              <div className="scope-summary-grid">
-                <div className="scope-summary-tile">
-                  <span>总模块</span>
-                  <strong>{configScope.summary.total}</strong>
-                </div>
-                <div className="scope-summary-tile">
-                  <span>系统级</span>
-                  <strong>{configScope.summary.system}</strong>
-                </div>
-                <div className="scope-summary-tile">
-                  <span>部分可改</span>
-                  <strong>{configScope.summary.mixed}</strong>
-                </div>
-                <div className="scope-summary-tile">
-                  <span>用户可改</span>
-                  <strong>{configScope.summary.user}</strong>
-                </div>
-              </div>
-
-              <div className="scope-toolbar">
-                <div className="scope-filter-row">
-                  {([
-                    ["editable", "只看可调"],
-                    ["all", "全部"],
-                    ["user", "用户可改"],
-                    ["mixed", "部分可改"],
-                    ["system", "系统级"],
-                  ] as const).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={`scope-filter-chip${scopeFilter === value ? " is-active" : ""}`}
-                      onClick={() => setScopeFilter(value)}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <label className="scope-search">
-                  <span>搜索模块 / 语义域 / 键</span>
-                  <input
-                    type="search"
-                    value={scopeQuery}
-                    onChange={(event) => setScopeQuery(event.target.value)}
-                    placeholder="比如 memory、identity、cooldown..."
-                  />
-                </label>
-              </div>
-
-              {configScopeVisibleCount === 0 ? (
-                <div className="empty-state">当前筛选条件下没有匹配模块。</div>
-              ) : (
-                <div className="scope-columns">
-                  {(["user", "mixed", "system"] as const).map((scope) => {
-                    const modules = configScopeGroups[scope];
-                    return (
-                      <div className="scope-column" key={scope}>
-                        <div className="scope-column-header">
-                          <h3>{scopeLabel(scope)}</h3>
-                          <span>{modules.length} 个模块</span>
-                        </div>
-                        {modules.length === 0 ? (
-                          <div className="empty-state inline">当前没有这一类模块。</div>
-                        ) : (
-                          <div className="scope-module-list">
-                            {modules.map((item) => (
-                              <article className="scope-module-row" key={item.module}>
-                                <div className="scope-module-head">
-                                  <strong>{item.module}</strong>
-                                  <span className={`scope-badge scope-badge-${scope}`}>{scopeLabel(scope)}</span>
-                                </div>
-                                <p className="scope-domain-text">
-                                  语义域：{item.semantic_domains.length > 0 ? item.semantic_domains.join(", ") : "无"}
-                                </p>
-                                {item.user_editable_keys.length > 0 ? (
-                                  <div className="scope-chip-row">
-                                    {item.user_editable_keys.map((key) => (
-                                      <span className="scope-chip" key={`${item.module}-${key}`}>
-                                        {key}
-                                      </span>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  <p className="scope-note">用户不可直接修改，系统锁定 {item.system_key_count} 项。</p>
-                                )}
-                              </article>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </>
-          )}
         </section>
 
         <section className="panel panel-timeline">

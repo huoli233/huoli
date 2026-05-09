@@ -1410,8 +1410,10 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
 def check_webui_contract() -> Dict[str, Any]:
     dashboard_source = (ROOT / "web/dashboard/src/components/EmotionDashboard/index.tsx").read_text(encoding="utf-8")
     dashboard_style = (ROOT / "web/dashboard/src/components/EmotionDashboard/styles.css").read_text(encoding="utf-8")
-    assert "fallbackPollTimerRef" in dashboard_source
-    assert "pollMonitorFallback" in dashboard_source
+    assert "fallbackPollTimerRef" not in dashboard_source
+    assert "pollMonitorFallback" not in dashboard_source
+    assert "config-scope" not in dashboard_source
+    assert "配置分级" not in dashboard_source
     assert "时间线状态" in dashboard_source
     assert "时间线窗口、睡眠债、困意和熬夜压力" in dashboard_source
     assert "当前时段" in dashboard_source
@@ -1427,16 +1429,21 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "昼夜节律" not in dashboard_source
     assert "Promise.allSettled" not in dashboard_source
     assert "void loadMonitorOverview();" in dashboard_source
-    assert "void loadConfigScope();" in dashboard_source
+    assert "void loadConfigScope();" not in dashboard_source
     assert "hasEverConnectedRef" in dashboard_source
-    assert "const shouldSyncRealtime = true;" in dashboard_source
-    assert "const displayConnectionState = connectionState;" in dashboard_source
+    assert "const shouldSyncRealtime = Boolean(selectedChannel);" in dashboard_source
+    assert 'if (!selectedChannel) {' in dashboard_source
+    assert 'const displayConnectionState = selectedChannel ? connectionState : "waiting";' in dashboard_source
     assert 'window.addEventListener("blur"' not in dashboard_source
+    assert 'document.addEventListener("visibilitychange"' not in dashboard_source
+    assert 'window.addEventListener("focus"' not in dashboard_source
+    assert 'waiting: "等待会话"' in dashboard_source
     assert 'connecting: "连接中"' in dashboard_source
     assert 'reconnecting: "重连中"' in dashboard_source
     assert "实时通道暂不可用，轮询同步失败" not in dashboard_source
-    assert 'polling: "补偿同步"' in dashboard_source
-    assert ".live-pill.is-polling" in dashboard_style
+    assert 'polling: "补偿同步"' not in dashboard_source
+    assert ".live-pill.is-polling" not in dashboard_style
+    assert ".live-pill.is-waiting" in dashboard_style
     assert "下一步发言概率" in dashboard_source
     assert "Number(predictionPercent).toFixed(1)" in dashboard_source
     assert "requestAnimationFrame" in dashboard_source
@@ -1445,9 +1452,14 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "liveEtaLabel" in dashboard_source
 
     heartflow_router_source = (ROOT / "src/webui/routers/heartflow.py").read_text(encoding="utf-8")
-    assert "asyncio.to_thread(build_config_scope_snapshot)" in heartflow_router_source
-    assert "timeout=2.0" in heartflow_router_source
-    assert "_config_scope_fallback" in heartflow_router_source
+    assert "asyncio.to_thread(build_config_scope_snapshot)" not in heartflow_router_source
+    assert "状态页配置分级构建超时" not in heartflow_router_source
+    assert "_config_scope_fallback" not in heartflow_router_source
+
+    websocket_source = (ROOT / "src/webui/routers/websocket/state_monitor.py").read_text(encoding="utf-8")
+    assert "channel_id required" in websocket_source
+    assert "build_monitor_overview" not in websocket_source
+    assert "全部群聊/私聊" not in websocket_source
 
     client = TestClient(create_app())
     dashboard = client.get("/dashboard")
@@ -1455,8 +1467,7 @@ def check_webui_contract() -> Dict[str, Any]:
     config_scope = client.get("/api/heartflow/config-scope")
     assert dashboard.status_code == 200
     assert monitor.status_code == 200
-    assert config_scope.status_code == 200
-    assert "config_scope" in config_scope.json()
+    assert config_scope.status_code == 404
     channels = monitor.json().get("monitor", {}).get("channels", [])
     checked_channel = False
     if channels:
@@ -1480,7 +1491,8 @@ def check_webui_contract() -> Dict[str, Any]:
         "dashboard": dashboard.status_code,
         "monitor": monitor.status_code,
         "channel_checked": checked_channel,
-        "http_fallback_polling": True,
+        "startup_http_fallback_polling_removed": True,
+        "config_scope_removed_from_status_page": True,
     }
 
 

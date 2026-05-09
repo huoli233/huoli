@@ -6,7 +6,7 @@ from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from src.common.logger import get_logger
 from src.webui.runtime_config import webui_module_view
-from src.webui.services.state_monitor import build_channel_monitor_state, build_monitor_overview
+from src.webui.services.state_monitor import build_channel_monitor_state
 from src.webui.services.runtime_state_hub import get_runtime_state_hub
 
 logger = get_logger("WS状态监控")
@@ -26,7 +26,20 @@ async def websocket_state_monitor_endpoint(
 ):
     session_id = f"state_{int(time.time() * 1000)}_{id(websocket)}"
     await websocket.accept()
-    logger.info(f"状态监控 WebSocket 已建立: {session_id}, 会话={channel_id or '全部群聊/私聊'}")
+    if not channel_id:
+        await websocket.send_json(
+            {
+                "type": "state_error",
+                "data": {
+                    "message": "state monitor websocket requires channel_id",
+                },
+            }
+        )
+        await websocket.close(code=1008, reason="channel_id required")
+        logger.info(f"状态监控 WebSocket 拒绝未指定会话: {session_id}")
+        return
+
+    logger.info(f"状态监控 WebSocket 已建立: {session_id}, 会话={channel_id}")
     config = _websocket_config()
     heartbeat_interval = max(0.5, float(config.get("state_monitor_heartbeat_seconds", 1.0)))
     hub = get_runtime_state_hub()
@@ -62,8 +75,6 @@ async def websocket_state_monitor_endpoint(
                 )
                 return
             await websocket.send_json({"type": "state_snapshot", "data": payload})
-        else:
-            await websocket.send_json({"type": "state_snapshot", "data": await build_monitor_overview()})
 
     async def rebuild_subscription(old_channel: Optional[str], target_channel: Optional[str]) -> None:
         nonlocal subscription
@@ -101,10 +112,31 @@ async def websocket_state_monitor_endpoint(
                         )
                     elif msg_type == "refresh":
                         requested_channel = data.get("data", {}).get("channel_id")
+                        if not requested_channel:
+                            await websocket.send_json(
+                                {
+                                    "type": "state_error",
+                                    "data": {
+                                        "message": "state monitor refresh requires channel_id",
+                                    },
+                                }
+                            )
+                            continue
                         await send_snapshot(requested_channel)
                     elif msg_type == "switch_channel":
+                        target_channel = data.get("data", {}).get("channel_id")
+                        if not target_channel:
+                            await websocket.send_json(
+                                {
+                                    "type": "state_error",
+                                    "data": {
+                                        "message": "state monitor switch_channel requires channel_id",
+                                    },
+                                }
+                            )
+                            continue
                         old_channel = channel_id
-                        channel_id = data.get("data", {}).get("channel_id")
+                        channel_id = target_channel
                         await rebuild_subscription(old_channel, channel_id)
                         await send_snapshot()
                     else:
