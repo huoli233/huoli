@@ -358,6 +358,12 @@ class Heartflow:
     def note_user_activity(self, stream_id: str, user_id: str, text: str) -> None:
         """向主动链路广播用户消息。"""
         self.touch(stream_id)
+        chat = self.heartflow_chat_list.get(stream_id)
+        if chat is not None and hasattr(chat, "notify_message_arrived"):
+            try:
+                chat.notify_message_arrived()
+            except Exception as exc:
+                logger.debug(f"[心流] 唤醒频道循环失败 {stream_id}: {exc}")
         # 多维状态系统事件广播
         if self._dimension_dispatcher is not None:
             try:
@@ -493,6 +499,12 @@ class Heartflow:
             discover_modules()
         except Exception as exc:
             logger.debug(f"[心流] 模块协调预热异常: {exc}")
+        try:
+            from src.chat.prompts.soul_config_loader import preload
+
+            preload()
+        except Exception as exc:
+            logger.debug(f"[心流] 灵魂配置预热异常: {exc}")
 
         warmers = []
         try:
@@ -569,6 +581,42 @@ class Heartflow:
             )
 
             warmers.append(get_emotion_driven_core)
+        except Exception as _e:
+            logger.debug(f"异常: {_e}")
+        try:
+            from src.person_info.bot_identity import get_bot_identity_manager
+
+            warmers.append(get_bot_identity_manager)
+        except Exception as _e:
+            logger.debug(f"异常: {_e}")
+        try:
+            from src.core.world_snapshot import get_panel_integration_manager
+
+            warmers.append(get_panel_integration_manager)
+        except Exception as _e:
+            logger.debug(f"异常: {_e}")
+        try:
+            from src.modules.recall.self_behavior_learner import (
+                get_self_behavior_learner,
+            )
+
+            warmers.append(get_self_behavior_learner)
+        except Exception as _e:
+            logger.debug(f"异常: {_e}")
+        try:
+            from src.modules.modcore.perception.perception_generator import (
+                get_perception_generator,
+            )
+
+            warmers.append(get_perception_generator)
+        except Exception as _e:
+            logger.debug(f"异常: {_e}")
+        try:
+            from src.chat.heart_flow.group_persona_manager import (
+                get_group_persona_manager,
+            )
+
+            warmers.append(get_group_persona_manager)
         except Exception as _e:
             logger.debug(f"异常: {_e}")
         for warmer in warmers:

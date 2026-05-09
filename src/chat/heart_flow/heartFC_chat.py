@@ -55,6 +55,8 @@ class HeartFChatting(ChatCoreBase):
         try:
             # 标记为活动状态，防止重复启动
             self.running = True
+            if self._wake_event is None:
+                self._wake_event = asyncio.Event()
 
             self._loop_task = asyncio.create_task(self._main_chat_loop())
             self._loop_task.add_done_callback(self._handle_loop_completion)
@@ -76,7 +78,7 @@ class HeartFChatting(ChatCoreBase):
         try:
             while self.running:
                 success = await self._loopbody()
-                await asyncio.sleep(0.1)
+                await self._sleep_or_wake(0.1)
                 if not success:
                     break
         except asyncio.CancelledError:

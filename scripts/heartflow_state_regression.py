@@ -1233,8 +1233,21 @@ def check_inner_voice_low_info_tone_contract() -> Dict[str, Any]:
     )
     fixed = engine._stabilize_low_info_reflection(verdict, ctx)
     assert "发疯" not in fixed.thinking
-    assert any(marker in fixed.thinking for marker in ("重复", "看懂", "没说清楚"))
+    assert any(marker in fixed.thinking for marker in ("重复", "看懂", "没说清楚", "太短", "别乱猜"))
     assert "low_info_guard" in fixed.thinking_source
+    overguess = VoiceVerdict(
+        thinking="又来这句，他是不是没活了，有点无聊。",
+        reply_desire_level=6,
+        should_reply=True,
+        current_mood="无聊",
+        thinking_source="llm_json",
+    )
+    low_info_fixed = engine._stabilize_low_info_reflection(
+        overguess,
+        BoundaryContext(raw_text="草饲你", text_length=3, mentioned_me=False),
+    )
+    assert "没活" not in low_info_fixed.thinking
+    assert "low_info_guard" in low_info_fixed.thinking_source
     multi_ref = VoiceVerdict(
         thinking="这俩人又在打什么哑谜，感觉有点莫名其妙的。",
         reply_desire_level=4,
@@ -1250,10 +1263,14 @@ def check_inner_voice_low_info_tone_contract() -> Dict[str, Any]:
     assert "这人" in normalized.thinking
     assert "single_speaker_guard" in normalized.thinking_source
     prompt_source = (ROOT / "src/chat/prompts/catalog.py").read_text(encoding="utf-8")
+    group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
     assert "不要写\"发疯\"" in prompt_source
+    assert "不要脑补他\"没活了\"" in prompt_source
     assert "不要把\"他和我\"误写成\"这俩人/他们俩\"" in prompt_source
+    assert "不要说“没活了”" in group_reply_source
     return {
         "hostile_low_info_thought_softened": True,
+        "underexplained_short_overguess_softened": True,
         "single_speaker_reference_normalized": True,
     }
 
@@ -1446,6 +1463,10 @@ def check_memoir_channel_key_contract() -> Dict[str, Any]:
 
 def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     source = (ROOT / "src/chat/heart_flow/heartflow.py").read_text(encoding="utf-8")
+    chat_core_source = (ROOT / "src/chat/chat_core_base.py").read_text(encoding="utf-8")
+    loop_source = (ROOT / "src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py").read_text(
+        encoding="utf-8"
+    )
     main_source = (ROOT / "src/main.py").read_text(encoding="utf-8")
     logger_source = (ROOT / "src/common/logger.py").read_text(encoding="utf-8")
     base_chat_source = (ROOT / "src/chat/heart_flow/heartFC_chat.py").read_text(encoding="utf-8")
@@ -1462,6 +1483,15 @@ def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     assert "startup_all" in warmup_block
     assert "prewarm_chat(stream.stream_id" in warmup_block
     assert "启动频道预热完成" in warmup_block
+    assert "notify_message_arrived()" in source
+    assert "def notify_message_arrived" in chat_core_source
+    assert "await self._sleep_or_wake" in loop_source
+    assert "get_self_behavior_learner" in source
+    assert "get_perception_generator" in source
+    assert "get_bot_identity_manager" in source
+    assert "get_group_persona_manager" in source
+    assert "回复发送前耗时" in loop_source
+    assert "结算收尾耗时" in loop_source
     assert "启动频道运行实例" in create_block
     assert "绑定已存在聊天流" in create_block
     assert "创建聊天实例" not in create_block
@@ -1480,6 +1510,9 @@ def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     return {
         "startup_prewarms_known_streams": True,
         "startup_warmup_scans_real_streams": True,
+        "message_arrival_wakes_loop": True,
+        "startup_warms_first_reply_singletons": True,
+        "reply_timing_split_before_settlement": True,
         "startup_duration_seconds_unit": True,
         "log_cleanup_timezone_compare_fixed": True,
         "heartflow_runtime_log_disambiguated": True,

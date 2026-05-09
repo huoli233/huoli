@@ -1411,3 +1411,28 @@
 - 本轮改动后启动会后台激活已有真实聊天流运行态，但不会提前调用回复模型生成内容；具体回复仍要等真实消息到来。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T05:46:00+08:00 - Task: 优化首轮响应延迟与低信息短句上下文污染
+
+### What was done:
+- 确认启动扫描已生效：频道运行实例在用户消息到达前已经启动，当前慢点不再是“没扫描”，而是主循环睡眠、首轮懒加载、模型调用和结算收尾叠加。
+- 为聊天主循环增加消息唤醒事件：`note_user_activity()` 收到用户消息后会立即唤醒对应频道循环，避免消息卡在 10 秒/2 秒/休眠 sleep 周期后才被读取。
+- 将主循环内的固定 `asyncio.sleep()` 改为可被消息打断的 `_sleep_or_wake()`，减少后台常驻循环的空等延迟。
+- 扩展启动预热：提前实例化机器人身份、世界快照 panel、灵魂配置、自我行为学习器、感知生成器、群画像管理器等首轮回复会用到的单例，减少第一次回复中途才初始化。
+- 收紧低信息短句独白：对“草饲你”这类短且没说完整的输入，不允许独白脑补“没活了/找茬/挑衅/阴阳怪气”，统一收束为“信息太少/没说清楚/先别乱猜”。
+- 回复生成低信息约束同步禁止“没活了”等无证据脑补，避免内心独白污染最终回复风格。
+- 拆分耗时日志：新增“回复发送前耗时”和“结算收尾耗时”，并把原“完整管线耗时”改成“本轮处理总耗时”，避免把发送后结算也误认为回复构建速度。
+
+### Testing:
+- `uv run ruff check src/chat/chat_core_base.py src/chat/heart_flow/heartFC_chat.py src/chat/heart_flow/heartflow.py src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py src/chat/heart_flow/inner_voice.py src/chat/prompts/catalog.py src/chat/replyer/group_generator.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `message_arrival_wakes_loop=true`、`startup_warms_first_reply_singletons=true`、`reply_timing_split_before_settlement=true`、`underexplained_short_overguess_softened=true`。
+- `uv run python scripts/webui_smoke_test.py` 通过，确认 `state_monitor_websocket_removed=true`，状态监控 WebSocket 没有恢复。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 本轮不会减少 Gemini 本身约 8 秒的模型响应耗时；它减少的是消息到达后的空等、首次懒加载、以及日志口径误导。
+- 低信息短句仍会允许角色有冷淡/懒得猜的内心反应，但不会再把短句扩写成“用户没活了/找茬”这类无证据判断。
+- 变更需要重启主程序后生效。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

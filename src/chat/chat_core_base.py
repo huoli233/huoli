@@ -81,6 +81,26 @@ class ChatCoreBase:
         self._current_cycle_detail: CycleDetail = None  # type: ignore
         self.last_read_time = time.time() - 2
         self._history_loop_limit: int = 0
+        self._wake_event: Optional[asyncio.Event] = None
+
+    def notify_message_arrived(self) -> None:
+        """唤醒主循环，避免新消息卡在当前 sleep 周期后才处理。"""
+        event = self._wake_event
+        if event is not None:
+            event.set()
+
+    async def _sleep_or_wake(self, delay: float) -> None:
+        """可被消息到达打断的 sleep。"""
+        delay = max(0.0, float(delay or 0.0))
+        if self._wake_event is None:
+            self._wake_event = asyncio.Event()
+        self._wake_event.clear()
+        if delay <= 0:
+            return
+        try:
+            await asyncio.wait_for(self._wake_event.wait(), timeout=delay)
+        except asyncio.TimeoutError:
+            return
 
     def start_cycle(self) -> Tuple[Dict[str, float], str]:
         self._cycle_counter += 1

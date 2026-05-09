@@ -816,16 +816,36 @@ class SelfDialogueEngine:
                     break
 
         low_variety = len(set(normalized)) <= max(2, len(normalized) // 3)
-        should_stabilize = is_short and (
-            repeated_phrase or low_variety or has_repeated_segment
+        underexplained_short = is_short and not any(ch in raw_text for ch in "?？!！")
+        should_stabilize = underexplained_short or (
+            is_short and (repeated_phrase or low_variety or has_repeated_segment)
         )
         if not should_stabilize:
             return verdict
 
         current = str(verdict.thinking or "").strip()
         hostile_markers = ("发疯", "有病", "神经病", "脑残", "傻逼", "sb")
+        overguess_markers = (
+            "没活",
+            "复读机",
+            "刷屏",
+            "找茬",
+            "钓鱼",
+            "阴阳怪气",
+            "故意",
+            "挑衅",
+        )
         if current and any(marker in current.lower() for marker in hostile_markers):
-            verdict.thinking = "又在重复这句，先看懂再说。"
+            verdict.thinking = "这句太短了，先别乱猜。"
+            verdict.thinking_source = f"{verdict.thinking_source or 'unknown'}+low_info_guard"
+            if not verdict.current_mood or verdict.current_mood in ("疑惑", "困惑"):
+                verdict.current_mood = "无聊"
+            if verdict.reply_desire_level > 4 and not ctx.mentioned_me:
+                verdict.reply_desire_level = max(1, verdict.reply_desire_level - 2)
+                verdict.should_reply = verdict.reply_desire_level >= 5
+            return verdict
+        if current and any(marker in current for marker in overguess_markers):
+            verdict.thinking = "这句信息太少了，先按没说清楚处理。"
             verdict.thinking_source = f"{verdict.thinking_source or 'unknown'}+low_info_guard"
             if not verdict.current_mood or verdict.current_mood in ("疑惑", "困惑"):
                 verdict.current_mood = "无聊"
@@ -841,6 +861,14 @@ class SelfDialogueEngine:
         if verdict.reply_desire_level > 4 and not ctx.mentioned_me:
             verdict.reply_desire_level = max(1, verdict.reply_desire_level - 2)
             verdict.should_reply = verdict.reply_desire_level >= 5
+
+        if underexplained_short and current and len(current) > 10 and not ctx.mentioned_me:
+            verdict.thinking = "这句信息太少了，先按没说清楚处理。"
+            verdict.thinking_source = f"{verdict.thinking_source or 'unknown'}+low_info_guard"
+            if not verdict.current_mood or verdict.current_mood == "疑惑":
+                verdict.current_mood = "无聊"
+            verdict.thinking = self._compress_thought(verdict.thinking)
+            return verdict
 
         if current and not looks_like_guess and len(current) <= 8:
             verdict.thinking = self._compress_thought(current)

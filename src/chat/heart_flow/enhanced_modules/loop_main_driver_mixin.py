@@ -259,13 +259,13 @@ class LoopMainDriverMixin:
         gate_result = self._evaluate_phase_gate(current_phase, now)
         if gate_result == "skip" and not admin_force_precheck:
             self._consecutive_skip_ticks += 1
-            await asyncio.sleep(_DORMANT_POLL_SEC)
+            await self._sleep_or_wake(_DORMANT_POLL_SEC)
             return True
         if gate_result == "glance" and not admin_force_precheck:
             # 休息期窥屏：只消耗少量体力，不进入完整流水线
             self._apply_glance_drain()
             self._consecutive_skip_ticks = 0
-            await asyncio.sleep(_DORMANT_POLL_SEC)
+            await self._sleep_or_wake(_DORMANT_POLL_SEC)
             return True
         if gate_result in {"skip", "glance"} and admin_force_precheck:
             logger.info(f"{self.log_prefix} 👑 管理员强制消息穿透阶段门控: {gate_result}")
@@ -286,7 +286,7 @@ class LoopMainDriverMixin:
         if eagerness_val < _ENERGY_DRAIN_FLOOR and not admin_force_precheck:
             # 能量严重不足，迁移至休息
             self._shift_to_dormant(cause=f"能量耗尽: {eagerness_reason}")
-            await asyncio.sleep(_DORMANT_POLL_SEC)
+            await self._sleep_or_wake(_DORMANT_POLL_SEC)
             return True
         if eagerness_val < _ENERGY_DRAIN_FLOOR and admin_force_precheck:
             logger.info(f"{self.log_prefix} 👑 管理员强制消息穿透低能量门控: {eagerness_reason}")
@@ -375,7 +375,7 @@ class LoopMainDriverMixin:
             )
             self._emit_flow_decision_summary("self_echo_gate", "heartbeat_only")
             logger.debug(f"{self.log_prefix} 🪞 仅读到自身消息回流，跳过完整管线")
-            await asyncio.sleep(_TICK_FLOOR_SEC)
+            await self._sleep_or_wake(_TICK_FLOOR_SEC)
             return True
         dynamic_threshold = self._compute_dynamic_threshold()
         if len(incoming_batch) < dynamic_threshold:
@@ -426,7 +426,7 @@ class LoopMainDriverMixin:
                     "eagerness_value": round(float(eagerness_val or 0.0), 3),
                 },
             )
-            await asyncio.sleep(_TICK_FLOOR_SEC)
+            await self._sleep_or_wake(_TICK_FLOOR_SEC)
             return True
 
         self._consecutive_skip_ticks = 0
@@ -478,7 +478,7 @@ class LoopMainDriverMixin:
                         extra_votes={"watch_level": _wl_val, "forced_ping": False},
                     )
                     self._emit_flow_decision_summary("watch_gate", "heartbeat_only")
-                    await asyncio.sleep(_TICK_FLOOR_SEC * 3)
+                    await self._sleep_or_wake(_TICK_FLOOR_SEC * 3)
                     return True
                 else:
                     logger.debug(f"{self.log_prefix} 🚫 黑屏态但被@提及，降级放行")
@@ -645,7 +645,7 @@ class LoopMainDriverMixin:
                 next_action="observe",
                 blocker=self._last_flow_blocker,
             )
-            await asyncio.sleep(_TICK_FLOOR_SEC)
+            await self._sleep_or_wake(_TICK_FLOOR_SEC)
             return True
 
         _is_admin_force_wake = self._is_force_wake_admin(incoming_batch, pinged_msg)
@@ -794,7 +794,7 @@ class LoopMainDriverMixin:
                     extra_votes={"night_action": _action},
                 )
                 self._emit_flow_decision_summary("night_gate", "skip")
-                await asyncio.sleep(_TICK_FLOOR_SEC)
+                await self._sleep_or_wake(_TICK_FLOOR_SEC)
                 return True
             if _action == "force_wake":
                 try:
@@ -834,7 +834,7 @@ class LoopMainDriverMixin:
                             blocker=self._last_flow_blocker,
                             extra_votes={"night_action": _llm_action, "night_source": "llm_decide_l2"},
                         )
-                        await asyncio.sleep(_TICK_FLOOR_SEC)
+                        await self._sleep_or_wake(_TICK_FLOOR_SEC)
                         return True
                 _llm_verdict = _llm_decision.get("llm_verdict", {})
                 _thinking = _llm_verdict.get("thinking", "")
@@ -887,7 +887,7 @@ class LoopMainDriverMixin:
                     extra_votes={"night_action": _action, "night_source": "fallback"},
                 )
                 self._emit_flow_decision_summary("night_gate", "skip")
-                await asyncio.sleep(_TICK_FLOOR_SEC)
+                await self._sleep_or_wake(_TICK_FLOOR_SEC)
                 return True
         _pattern_route = self._apply_pattern_based_routing(incoming_batch, pinged_msg=pinged_msg)
         if (
@@ -907,7 +907,7 @@ class LoopMainDriverMixin:
                 blocker=self._last_flow_blocker,
             )
             await self._run_peek_observe_loop(incoming_batch)
-            await asyncio.sleep(_TICK_FLOOR_SEC)
+            await self._sleep_or_wake(_TICK_FLOOR_SEC)
             return True
         if _pattern_route and self._is_force_wake_admin(incoming_batch, pinged_msg):
             logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-无视群体硬路由: {_pattern_route}")
@@ -931,7 +931,7 @@ class LoopMainDriverMixin:
                 next_action="observe",
                 blocker=self._last_flow_blocker,
             )
-            await asyncio.sleep(_TICK_FLOOR_SEC)
+            await self._sleep_or_wake(_TICK_FLOOR_SEC)
             return True
         if _scene_block and self._is_force_wake_admin(incoming_batch, pinged_msg):
             logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-无视场景约束: {_scene_block}")
@@ -989,7 +989,7 @@ class LoopMainDriverMixin:
                         blocker=self._last_flow_blocker,
                         extra_votes={"dashboard_urgency": _dash_urgency},
                     )
-                    await asyncio.sleep(_TICK_FLOOR_SEC * 2)
+                    await self._sleep_or_wake(_TICK_FLOOR_SEC * 2)
                     return True
 
         self._store_gate_runtime(
@@ -1153,7 +1153,7 @@ class LoopMainDriverMixin:
                 )
             except asyncio.TimeoutError:
                 logger.error(f"{self.log_prefix} 🔄 阶段3+4 LLM调用超时({_stage_timeout:.0f}s)，跳过本轮")
-                await asyncio.sleep(_TICK_FLOOR_SEC)
+                await self._sleep_or_wake(_TICK_FLOOR_SEC)
                 return True
             _result_map = dict(zip(_task_keys, _parallel_results, strict=True))
             # 检查是否有异常
@@ -1388,7 +1388,7 @@ class LoopMainDriverMixin:
             self._emit_action_verdict("early_exit", early_exit["reason"], time.time() - _t0)
             logger.info(f"{self.log_prefix} ⚡ {early_exit['reason']}，跳过LLM调用 | 管线耗时 {time.time() - _t0:.2f}s")
             await self._emit_outcome_summary(False, relation_result)
-            await asyncio.sleep(_TICK_FLOOR_SEC)
+            await self._sleep_or_wake(_TICK_FLOOR_SEC)
             return True
         if early_exit["should_skip"] and self._is_force_wake_admin(incoming_batch, pinged_msg):
             logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-无视早期退出: {early_exit['reason']}")
@@ -1552,7 +1552,7 @@ class LoopMainDriverMixin:
             self._apply_post_reply_state(did_reply=False, reason=autonomy_guard["reason"])
             self._emit_flow_decision_summary("autonomy_guard", "skip")
             await self._emit_outcome_summary(False, relation_result)
-            await asyncio.sleep(_POST_MESSAGE_RETRY_SEC)
+            await self._sleep_or_wake(_POST_MESSAGE_RETRY_SEC)
             return True
         if (
             autonomy_guard["should_skip"]
@@ -1772,7 +1772,7 @@ class LoopMainDriverMixin:
             self._emit_flow_decision_summary("final_decision", "skip")
             self._emit_action_verdict("llm_skip", "LLM决策跳过", time.time() - _t0)
             await self._run_peek_observe_loop(incoming_batch)
-            await asyncio.sleep(_TICK_FLOOR_SEC)
+            await self._sleep_or_wake(_TICK_FLOOR_SEC)
             return True
 
         # ── 阶段 4.8：LLM 自主规划 - 仅在内心独白不确定时调用 ──
@@ -1944,7 +1944,7 @@ class LoopMainDriverMixin:
                 )
                 self._emit_flow_decision_summary("planner_cooldown", "skip")
                 await self._emit_outcome_summary(False, relation_result)
-                await asyncio.sleep(_POST_MESSAGE_RETRY_SEC)
+                await self._sleep_or_wake(_POST_MESSAGE_RETRY_SEC)
                 return True
 
             planner_decision = None
@@ -2191,6 +2191,7 @@ class LoopMainDriverMixin:
                     actual_reply_made = False
                     logger.error(f"{self.log_prefix} ⚠️ 计划回复超时(120s)")
             if actual_reply_made:
+                _reply_sent_elapsed = time.time() - _t0
                 self._last_flow_blocker = ""
                 self._emit_flow_decision_summary("final_decision", "reply")
                 _reply_source = (
@@ -2241,8 +2242,12 @@ class LoopMainDriverMixin:
                 self._emit_action_verdict(
                     f"reply({_reply_source})",
                     "回复已发送",
-                    time.time() - _t0,
+                    _reply_sent_elapsed,
                     confidence=_reply_confidence,
+                )
+                logger.info(
+                    f"{self.log_prefix} 🔄 回复发送前耗时 {_reply_sent_elapsed:.2f}s | "
+                    f"结算收尾耗时 {time.time() - _t0 - _reply_sent_elapsed:.2f}s"
                 )
             else:
                 # 第三层：规划器决定不回复
@@ -2274,7 +2279,7 @@ class LoopMainDriverMixin:
                     planner_decision=planner_decision,
                     inaction_reason=_no_reply_reason,
                 )
-            logger.info(f"{self.log_prefix} 🔄 完整管线耗时 {time.time() - _t0:.2f}s")
+            logger.info(f"{self.log_prefix} 🔄 本轮处理总耗时 {time.time() - _t0:.2f}s")
         else:
             # 第三层：决定不行动
             _inaction_reason = "统一规划器决定不行动"
@@ -2309,7 +2314,7 @@ class LoopMainDriverMixin:
                 inaction_reason=_inaction_reason,
             )
             logger.info(f"{self.log_prefix} 🔄 决定不行动，管线耗时 {time.time() - _t0:.2f}s")
-            await asyncio.sleep(_POST_MESSAGE_RETRY_SEC if has_user_message else 10)
+            await self._sleep_or_wake(_POST_MESSAGE_RETRY_SEC if has_user_message else 10)
             return True
 
         return True
