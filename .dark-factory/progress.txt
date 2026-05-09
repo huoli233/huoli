@@ -1103,3 +1103,26 @@
 - 修复后需要重启服务，运行进程才会重新加载不含 `qwen3-next-80b` 的工具池。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-09T23:40:00+08:00 - Task: 收紧工具耗时与夜间回复语气
+
+### What was done:
+- 定位当前回复慢的主要来源：`回复准备` 中的工具调用分析可占 9 秒以上，回复生成模型本身并不是主要耗时点。
+- 将 `ToolExecutor` 的 LLM 工具调用分析从硬编码 30 秒改为读取 `runtime_tuning.tool_executor_llm_timeout_seconds`，默认 6 秒；超时后跳过工具，不再拖住回复构建。
+- 在 `config/core_config.toml` 和 `template/core_config_template.toml` 增加 `tool_executor_llm_timeout_seconds = 6.0`，并纳入 runtime_tuning 可编辑键。
+- 强化夜间回复本地护栏：夜间困倦状态下，如果模型生成短句但没有困意/迟钝底色，会自动收束成带困倦语气的短句。
+- 更新 `scripts/heartflow_state_regression.py` 和 `scripts/config_profile_regression.py`，锁定工具超时配置和夜间短句困倦护栏。
+
+### Testing:
+- `uv run ruff check src/plugin_system/core/tool_use.py src/chat/replyer/group_generator.py scripts/heartflow_state_regression.py scripts/config_profile_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `sleepy_short_reply_guard=true`。
+- `uv run python scripts/config_profile_regression.py` 通过，确认 `tool_executor_llm_timeout_seconds` 可被 runtime_tuning 解析。
+- `uv run python scripts/model_runtime_audit.py` 通过，确认当前模型路由仍为 `gemini-2.5-flash`、`qwen3-30b`、`bge-m3`。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过。
+
+### Notes:
+- 当前日志里 `qwen3-next-80b` 出现在 23:32，是移除工具模型前的旧运行配置/旧进程结果；重启后当前配置不会再选它。
+- 夜间系统已经触发了 `ACTIVE_TWILIGHT` 和 `[夜间语气约束]`，本轮改动把“提示词约束”补强为本地后处理护栏。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

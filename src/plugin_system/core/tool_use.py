@@ -50,6 +50,18 @@ _TOOL_ARG_ALIASES = {
     "words": ("word", "query", "keyword"),
     "person_name": ("name", "nickname", "user_name"),
 }
+_DEFAULT_TOOL_EXECUTOR_TIMEOUT_SECONDS = 6.0
+
+
+def _tool_executor_timeout_seconds() -> float:
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        values = get_core_config().resolve_module_view("runtime_tuning").values
+        timeout = float(values.get("tool_executor_llm_timeout_seconds", _DEFAULT_TOOL_EXECUTOR_TIMEOUT_SECONDS))
+    except Exception:
+        timeout = _DEFAULT_TOOL_EXECUTOR_TIMEOUT_SECONDS
+    return max(1.0, min(timeout, 30.0))
 
 
 class ToolExecutor:
@@ -98,6 +110,7 @@ class ToolExecutor:
             time_now=time_now,
         )
         logger.debug(f"{self.log_prefix} 开始LLM工具调用分析")
+        llm_timeout = _tool_executor_timeout_seconds()
         try:
             _response, (_reasoning_content, _model_name, tool_calls) = await asyncio.wait_for(
                 self.llm_model.generate_response_async(
@@ -105,10 +118,10 @@ class ToolExecutor:
                     tools=tools,
                     raise_when_empty=False,
                 ),
-                timeout=30.0,
+                timeout=llm_timeout,
             )
         except asyncio.TimeoutError:
-            logger.warning(f"{self.log_prefix} LLM工具调用超时(30s)")
+            logger.warning(f"{self.log_prefix} LLM工具调用超时({llm_timeout:.1f}s)")
             tool_calls = []
         tool_results, used_tools = await self.execute_tool_calls(tool_calls)
         if tool_results:

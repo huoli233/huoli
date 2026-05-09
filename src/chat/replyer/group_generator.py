@@ -88,6 +88,29 @@ def _contains_sleep_denial(text: str) -> bool:
     )
 
 
+def _contains_sleepy_tone(text: str) -> bool:
+    payload = str(text or "").strip()
+    if not payload:
+        return False
+    return any(
+        marker in payload
+        for marker in (
+            "困",
+            "睡",
+            "累",
+            "醒",
+            "慢",
+            "迷糊",
+            "昏",
+            "撑不住",
+            "脑子",
+            "半拍",
+            "哈欠",
+            "眯",
+        )
+    )
+
+
 def _night_state_is_sleepy(extra_info: str) -> bool:
     payload = str(extra_info or "")
     if not payload:
@@ -3599,19 +3622,26 @@ class DefaultReplyer:
         extra_info: str,
         reply_message: Optional[DatabaseMessages],
     ) -> str:
-        """清晨半醒/熬夜压力下拦截“不困”类反向回复。"""
+        """夜间困倦状态下强制收束短回复语气，避免精神饱满。"""
         text = str(content or "").strip()
         if not text:
             return text
         if not (_night_state_is_sleepy(extra_info) or _target_asks_sleep(reply_message)):
-            return text
-        if not _contains_sleep_denial(text):
             return text
         raw_target = str(
             getattr(reply_message, "processed_plain_text", "")
             or getattr(reply_message, "display_message", "")
             or ""
         )
+        if not _contains_sleep_denial(text):
+            if _contains_sleepy_tone(text):
+                return text
+            if len(text) <= 12:
+                clean_text = text.rstrip("。！？!?")
+                if any(marker in raw_target for marker in ("刀盾", "咋了", "怎么了", "啥")):
+                    return f"困死了，{clean_text}..."
+                return f"困，有点慢半拍。{clean_text}"
+            return text
         if any(marker in raw_target for marker in ("困吗", "不困", "睡不睡", "还醒", "熬夜", "没睡")):
             return "困，脑子还没完全醒。"
         return "有点困，反应慢半拍。"

@@ -344,6 +344,8 @@ heartfc_energy_drain_floor = 0.08
 heartfc_post_message_retry_sec = 2.0
 # 强制回复生成超时（秒）
 heartfc_force_reply_generation_timeout_seconds = 35.0
+# 回复工具分析 LLM 超时（秒），超时则跳过工具，避免拖慢回复构建
+tool_executor_llm_timeout_seconds = 6.0
 # 后台主动通道节奏与退避
 heartfc_background_proactive_base_interval_seconds = 12.0
 heartfc_background_proactive_min_interval_seconds = 6.0
@@ -678,6 +680,7 @@ heartfc_voice_cooldown_sec = 6.0
 heartfc_direct_fast_reply_generation_timeout_seconds = 8.0
 heartfc_force_reply_generation_timeout_seconds = 35.0
 heartfc_post_send_focus_audit_timeout_seconds = 2.0
+tool_executor_llm_timeout_seconds = 6.0
 heartfc_energy_drain_floor = 0.08
 heartfc_post_message_retry_sec = 2.0
 heartfc_background_proactive_base_interval_seconds = 12.0
@@ -2084,7 +2087,7 @@ base_refs = ["runtime_defaults"]
 semantic_domains = ["runtime_tuning"]
 profile_name = "runtime_tuning_view"
 edit_scope = "mixed"
-user_editable_keys = ["autosave_interval_seconds", "flow_planner_slow_threshold_seconds", "heartfc_direct_fast_reply_generation_timeout_seconds", "heartfc_post_send_focus_audit_timeout_seconds", "heartfc_perception_cooldown_sec", "heartfc_voice_cooldown_sec"]
+user_editable_keys = ["autosave_interval_seconds", "flow_planner_slow_threshold_seconds", "heartfc_direct_fast_reply_generation_timeout_seconds", "heartfc_post_send_focus_audit_timeout_seconds", "tool_executor_llm_timeout_seconds", "heartfc_perception_cooldown_sec", "heartfc_voice_cooldown_sec"]
 system_only_keys = ["flow_planner_timeout_seconds", "heartfc_dormant_poll_sec", "heartfc_energy_drain_floor", "heartfc_post_message_retry_sec", "heartfc_tick_floor_sec", "vlm_concurrency_limit"]
 
 [profile_mapping.module_views.heartfc_thresholds]

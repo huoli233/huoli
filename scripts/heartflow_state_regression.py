@@ -1175,6 +1175,13 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
     assert "不太困" not in guarded
     assert "想再聊" not in guarded
     assert "困" in guarded
+    sleepy_short = DefaultReplyer._apply_sleepy_fast_reply_guard(
+        content="又咋了？",
+        extra_info=ensured,
+        reply_message=type("ReplyMessageProbe", (), {"processed_plain_text": "我的刀盾", "display_message": ""})(),
+    )
+    assert sleepy_short != "又咋了？"
+    assert "困" in sleepy_short
     remove_night_cycle(channel_id)
     source = (ROOT / "src/chat/heart_flow/enhanced_modules/scene_planner_bridge_mixin.py").read_text(
         encoding="utf-8"
@@ -1185,6 +1192,7 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
         "night_soul_prompt_injected": True,
         "dawn_sleepy_tone_guard": True,
         "fast_reply_sleep_denial_guard": True,
+        "sleepy_short_reply_guard": True,
     }
 
 
@@ -1523,10 +1531,15 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     coordinator_source = (ROOT / "src/chat/heart_flow/reply_coordinator.py").read_text(encoding="utf-8")
     generator_source = (ROOT / "src/plugin_system/apis/generator_api.py").read_text(encoding="utf-8")
     group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
+    tool_executor_source = (ROOT / "src/plugin_system/core/tool_use.py").read_text(encoding="utf-8")
     core_config_source = (ROOT / "config/core_config.toml").read_text(encoding="utf-8")
     core_template_source = (ROOT / "template/core_config_template.toml").read_text(encoding="utf-8")
     assert "heartfc_force_reply_generation_timeout_seconds" in flow_source
     assert "heartfc_direct_fast_reply_generation_timeout_seconds" in flow_source
+    assert "tool_executor_llm_timeout_seconds" in tool_executor_source
+    assert "tool_executor_llm_timeout_seconds" in core_config_source
+    assert "tool_executor_llm_timeout_seconds" in core_template_source
+    assert "timeout=30.0" not in tool_executor_source
     assert "heartfc_post_send_focus_audit_timeout_seconds" in interaction_source
     assert "_post_finalize_focus_audit" in interaction_source
     assert "asyncio.wait_for" in interaction_source
