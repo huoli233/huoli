@@ -268,13 +268,13 @@ class Heartflow:
         self,
         chat_id: Any,
     ) -> Optional[EnhancedHeartFChatting | BrainChatting]:
-        """实际执行聊天实例创建。"""
+        """为已存在的 ChatStream 启动本进程运行实例。"""
         _MAX_CHAT_INSTANCES = 2000
         if len(self.heartflow_chat_list) >= _MAX_CHAT_INSTANCES:
             cleaned = await self.cleanup_inactive(max_idle_sec=600.0)
             if len(self.heartflow_chat_list) >= _MAX_CHAT_INSTANCES:
                 logger.warning(
-                    f"[心流] 聊天实例数已达上限 {_MAX_CHAT_INSTANCES}（清理了{cleaned}个），拒绝创建 {chat_id}"
+                    f"[心流] 频道运行实例数已达上限 {_MAX_CHAT_INSTANCES}（清理了{cleaned}个），拒绝启动 {chat_id}"
                 )
                 return None
         lock = self._creation_locks.get(chat_id)
@@ -310,7 +310,10 @@ class Heartflow:
                 get_background_orchestrator().register_channel(str(chat_id))
             except Exception as _e:
                 logger.debug(f"{self.log_prefix} 异常: {_e}")
-            logger.info(f"[心流] 创建聊天实例 {chat_id}, 类型={'群聊' if chat_stream.group_info else '私聊'}")
+            logger.info(
+                f"[心流] 启动频道运行实例 {chat_id}, "
+                f"绑定已存在聊天流, 类型={'群聊' if chat_stream.group_info else '私聊'}"
+            )
             return new_chat
 
     # ---- 清理 ----
@@ -469,38 +472,14 @@ class Heartflow:
         )
 
     async def _run_startup_warmup(self) -> None:
-        """后台预热核心模块与全部已知聊天流，避免再等首条消息冷启动。"""
+        """后台只预热核心模块，不为历史聊天流启动频道运行实例。"""
         await asyncio.sleep(0.2)
         self._warm_core_services()
-        try:
-            streams = list(get_chat_manager().streams.values())
-            streams.sort(
-                key=lambda item: getattr(item, "last_active_time", 0.0),
-                reverse=True,
-            )
-            warmed = 0
-            batch_size = 8
-            for offset in range(0, len(streams), batch_size):
-                pending = []
-                for stream in streams[offset : offset + batch_size]:
-                    if self._should_skip_prewarm(stream, reason="startup_all"):
-                        continue
-                    task = self.prewarm_chat(stream.stream_id, reason="startup_all")
-                    if task is not None:
-                        pending.append(task)
-                if pending:
-                    warmed += len(pending)
-                    await asyncio.gather(*pending, return_exceptions=True)
-            if warmed:
-                logger.info(f"[心流] 启动全量预热完成，聊天流数: {warmed}")
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            logger.warning(f"[心流] 启动预热异常: {exc}")
+        logger.debug("[心流] 启动频道预热已禁用，历史聊天流将按首条消息按需绑定")
 
     @staticmethod
     def _should_skip_prewarm(stream: ChatStream, *, reason: str = "") -> bool:
-        """启动预热只覆盖真实平台聊天流，避免 WebUI 管理会话污染频道。"""
+        """频道预热只覆盖真实平台聊天流，避免 WebUI 管理会话污染频道。"""
         group_id = getattr(getattr(stream, "group_info", None), "group_id", None)
         if is_internal_webui_stream(platform=getattr(stream, "platform", ""), group_id=group_id):
             return True

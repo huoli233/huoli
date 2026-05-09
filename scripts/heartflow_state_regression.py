@@ -1136,7 +1136,6 @@ def check_webui_internal_chat_disabled_contract() -> Dict[str, Any]:
     assert "ChatStreams.delete()" in stream_source
     assert "Messages.delete()" in stream_source
     assert "拒绝为 WebUI 内部管理连接创建心流实例" in heartflow_source
-    assert 'self._should_skip_prewarm(stream, reason="startup_all")' in heartflow_source
     assert is_internal_webui_stream(platform="webui", group_id=None) is True
     assert is_internal_webui_stream(platform="qq", group_id=LEGACY_WEBUI_LOCAL_GROUP_ID) is True
     assert is_internal_webui_stream(platform="qq", group_id="real-group") is False
@@ -1309,12 +1308,19 @@ def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     warmup_block = source[
         source.index("async def _run_startup_warmup") : source.index("    @staticmethod\n    def _should_skip_prewarm")
     ]
+    create_block = source[source.index("async def _create_chat_instance") : source.index("    # ---- 清理 ----")]
     assert "self._warm_core_services()" in startup_block
     assert "self._schedule_startup_warmup()" not in startup_block
-    assert "get_chat_manager().streams.values()" in warmup_block
+    assert "get_chat_manager().streams.values()" not in warmup_block
+    assert "startup_all" not in warmup_block
+    assert "prewarm_chat(stream.stream_id" not in warmup_block
+    assert "启动频道运行实例" in create_block
+    assert "绑定已存在聊天流" in create_block
+    assert "创建聊天实例" not in create_block
     return {
         "startup_skips_known_stream_prewarm": True,
-        "manual_warmup_code_kept": True,
+        "startup_warmup_does_not_scan_streams": True,
+        "heartflow_runtime_log_disambiguated": True,
     }
 
 
