@@ -63,6 +63,68 @@ class ProactiveReactiveFlowMixin:
         return candidates[index]
 
     @staticmethod
+    def _runtime_markers(key: str) -> List[str]:
+        return [marker.strip() for marker in _rt_str_list(key) if marker.strip()]
+
+    @staticmethod
+    def _contains_runtime_marker(text: str, key: str, *, ignore_case: bool = False) -> bool:
+        markers = ProactiveReactiveFlowMixin._runtime_markers(key)
+        if ignore_case:
+            haystack = text.lower()
+            return any(marker.lower() in haystack for marker in markers if marker)
+        return any(marker in text for marker in markers if marker)
+
+    @staticmethod
+    def _matches_runtime_marker(text: str, key: str, *, ignore_case: bool = False) -> bool:
+        markers = ProactiveReactiveFlowMixin._runtime_markers(key)
+        if ignore_case:
+            target = text.lower()
+            return any(marker.lower() == target for marker in markers if marker)
+        return any(marker == text for marker in markers if marker)
+
+    @staticmethod
+    def _bot_name_markers() -> List[str]:
+        markers = ProactiveReactiveFlowMixin._runtime_markers(
+            "heartfc_force_reply_fallback_bot_name_markers"
+        )
+
+        def add_marker(value: Any) -> None:
+            marker = str(value or "").strip()
+            if marker:
+                markers.append(marker)
+
+        try:
+            from src.config.core_config_engine import get_core_config
+
+            identity_values = get_core_config().resolve_module_view("identity_bot").values
+            add_marker(identity_values.get("nickname", ""))
+            alias_values = identity_values.get("alias_names", [])
+            if isinstance(alias_values, (list, tuple, set)):
+                for alias in alias_values:
+                    add_marker(alias)
+        except Exception as exc:
+            logger.debug(f"读取身份配置触发词失败: {exc}")
+        add_marker(getattr(global_config.bot, "nickname", ""))
+        for alias in getattr(global_config.bot, "alias_names", []) or []:
+            add_marker(alias)
+        unique_markers: List[str] = []
+        seen: Set[str] = set()
+        for marker in markers:
+            normalized = marker.strip()
+            if not normalized:
+                continue
+            dedupe_key = normalized.lower()
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            unique_markers.append(normalized)
+        return unique_markers
+
+    @staticmethod
+    def _contains_bot_name_marker(text: str) -> bool:
+        return any(marker in text for marker in ProactiveReactiveFlowMixin._bot_name_markers())
+
+    @staticmethod
     def _build_forced_reply_fallback_text(target_message: Any) -> str:
         raw_text = (
             getattr(target_message, "processed_plain_text", "")
@@ -76,23 +138,32 @@ class ProactiveReactiveFlowMixin:
                 "heartfc_force_reply_fallback_empty_texts",
                 text,
             )
-        lowered = text.lower()
-        if "刀盾" in text:
+        if ProactiveReactiveFlowMixin._contains_runtime_marker(
+            text,
+            "heartfc_force_reply_fallback_daodun_markers",
+        ):
             return ProactiveReactiveFlowMixin._pick_runtime_text(
                 "heartfc_force_reply_fallback_daodun_texts",
                 text,
             )
-        elif "爱丽丝" in text:
+        elif ProactiveReactiveFlowMixin._contains_bot_name_marker(text):
             return ProactiveReactiveFlowMixin._pick_runtime_text(
                 "heartfc_force_reply_fallback_bot_name_texts",
                 text,
             )
-        elif any(marker in text for marker in ("?", "？", "什么", "怎么", "为啥", "为什么")):
+        elif ProactiveReactiveFlowMixin._contains_runtime_marker(
+            text,
+            "heartfc_force_reply_fallback_question_markers",
+        ):
             return ProactiveReactiveFlowMixin._pick_runtime_text(
                 "heartfc_force_reply_fallback_question_texts",
                 text,
             )
-        elif lowered in {"hi", "hello", "hey"} or text in {"你好", "在吗", "在不在"}:
+        elif ProactiveReactiveFlowMixin._matches_runtime_marker(
+            text,
+            "heartfc_force_reply_fallback_greeting_markers",
+            ignore_case=True,
+        ):
             return ProactiveReactiveFlowMixin._pick_runtime_text(
                 "heartfc_force_reply_fallback_greeting_texts",
                 text,
@@ -107,7 +178,7 @@ class ProactiveReactiveFlowMixin:
         return ProactiveReactiveFlowMixin._pick_runtime_text(
             "heartfc_force_reply_fallback_default_texts",
             text,
-            )
+        )
 
     def _build_forced_reply_fallback_response(self, target_message: Any, failure_reason: str) -> Any:
         from src.common.data_models.llm_data_model import LLMGenerationDataModel

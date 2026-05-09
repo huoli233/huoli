@@ -1,0 +1,1895 @@
+[
+  {
+    "module": "interaction_core_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 36,
+      "p1_trigger_policy": 38,
+      "p1_runtime_text": 18,
+      "p2_numeric_nontrivial": 167,
+      "log": 51,
+      "docstring": 17,
+      "ascii_protocol": 489
+    },
+    "examples": [
+      {
+        "line": 93,
+        "category": "p1_runtime_text",
+        "function": "_observe",
+        "text": "降级为观察"
+      },
+      {
+        "line": 142,
+        "category": "p1_trigger_policy",
+        "function": "_run_self_restraint_check",
+        "text": "休息Governor: "
+      },
+      {
+        "line": 148,
+        "category": "p1_trigger_policy",
+        "function": "_run_self_restraint_check",
+        "text": "休息Governor: "
+      },
+      {
+        "line": 154,
+        "category": "p1_trigger_policy",
+        "function": "_run_self_restraint_check",
+        "text": "休息Governor: "
+      },
+      {
+        "line": 316,
+        "category": "p0_prompt_chat",
+        "function": "_send_and_store_reply",
+        "text": "回复发送"
+      },
+      {
+        "line": 376,
+        "category": "p0_prompt_chat",
+        "function": "_send_and_store_reply",
+        "text": "对方"
+      },
+      {
+        "line": 386,
+        "category": "p0_prompt_chat",
+        "function": "_send_and_store_reply",
+        "text": "你对"
+      },
+      {
+        "line": 386,
+        "category": "p0_prompt_chat",
+        "function": "_send_and_store_reply",
+        "text": "进行了回复："
+      },
+      {
+        "line": 428,
+        "category": "p1_trigger_policy",
+        "function": "_mark_user_replied",
+        "text": "闭嘴"
+      },
+      {
+        "line": 428,
+        "category": "p1_trigger_policy",
+        "function": "_mark_user_replied",
+        "text": "滚"
+      },
+      {
+        "line": 428,
+        "category": "p1_trigger_policy",
+        "function": "_mark_user_replied",
+        "text": "别说了"
+      },
+      {
+        "line": 428,
+        "category": "p1_trigger_policy",
+        "function": "_mark_user_replied",
+        "text": "烦死"
+      }
+    ]
+  },
+  {
+    "module": "loop_cycle_core_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 0,
+      "p2_numeric_nontrivial": 0,
+      "log": 0,
+      "docstring": 0,
+      "ascii_protocol": 0
+    },
+    "examples": []
+  },
+  {
+    "module": "loop_flow_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 0,
+      "p2_numeric_nontrivial": 0,
+      "log": 0,
+      "docstring": 0,
+      "ascii_protocol": 0
+    },
+    "examples": []
+  },
+  {
+    "module": "loop_main_driver_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 2,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 73,
+      "p2_numeric_nontrivial": 97,
+      "log": 256,
+      "docstring": 2,
+      "ascii_protocol": 579
+    },
+    "examples": [
+      {
+        "line": 288,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "能量耗尽: "
+      },
+      {
+        "line": 366,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "仅检测到自身消息回流"
+      },
+      {
+        "line": 370,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "仅检测到自身消息回流，跳过完整管线"
+      },
+      {
+        "line": 374,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "仅检测到自身消息回流"
+      },
+      {
+        "line": 409,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "消息未达动态阈值 "
+      },
+      {
+        "line": 415,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "消息未达动态阈值 "
+      },
+      {
+        "line": 415,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "，静默="
+      },
+      {
+        "line": 416,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "s 意愿="
+      },
+      {
+        "line": 469,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "观看态=blackout，仅保留心跳追踪"
+      },
+      {
+        "line": 473,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "观看态=blackout，仅保留心跳追踪"
+      },
+      {
+        "line": 503,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "窥屏态无明显波澜"
+      },
+      {
+        "line": 507,
+        "category": "p1_runtime_text",
+        "function": "_loopbody",
+        "text": "窥屏态观察完成，内心无波澜"
+      }
+    ]
+  },
+  {
+    "module": "loop_phase_transition_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 6,
+      "p1_runtime_text": 8,
+      "p2_numeric_nontrivial": 35,
+      "log": 6,
+      "docstring": 5,
+      "ascii_protocol": 44
+    },
+    "examples": [
+      {
+        "line": 82,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_phase_gate",
+        "text": "待命→活跃：消息到达"
+      },
+      {
+        "line": 116,
+        "category": "p1_trigger_policy",
+        "function": "_handle_dormant_gate",
+        "text": "休息结束被唤醒"
+      },
+      {
+        "line": 118,
+        "category": "p1_trigger_policy",
+        "function": "_handle_dormant_gate",
+        "text": "休息结束被唤醒"
+      },
+      {
+        "line": 120,
+        "category": "p1_trigger_policy",
+        "function": "_handle_dormant_gate",
+        "text": "休息期结束/反悔唤醒"
+      },
+      {
+        "line": 123,
+        "category": "p1_trigger_policy",
+        "function": "_handle_dormant_gate",
+        "text": "休息中仅窥屏 remaining="
+      },
+      {
+        "line": 125,
+        "category": "p1_trigger_policy",
+        "function": "_handle_dormant_gate",
+        "text": "休息中跳过 remaining="
+      },
+      {
+        "line": 154,
+        "category": "p1_runtime_text",
+        "function": "_estimate_dynamic_rest_profile",
+        "text": "疲"
+      },
+      {
+        "line": 154,
+        "category": "p1_runtime_text",
+        "function": "_estimate_dynamic_rest_profile",
+        "text": "累"
+      },
+      {
+        "line": 154,
+        "category": "p1_runtime_text",
+        "function": "_estimate_dynamic_rest_profile",
+        "text": "烦"
+      },
+      {
+        "line": 154,
+        "category": "p1_runtime_text",
+        "function": "_estimate_dynamic_rest_profile",
+        "text": "倦"
+      },
+      {
+        "line": 157,
+        "category": "p1_runtime_text",
+        "function": "_estimate_dynamic_rest_profile",
+        "text": "等会"
+      },
+      {
+        "line": 157,
+        "category": "p1_runtime_text",
+        "function": "_estimate_dynamic_rest_profile",
+        "text": "一会"
+      }
+    ]
+  },
+  {
+    "module": "loop_reply_execution_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 22,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 0,
+      "p2_numeric_nontrivial": 5,
+      "log": 18,
+      "docstring": 2,
+      "ascii_protocol": 123
+    },
+    "examples": [
+      {
+        "line": 71,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": "门控="
+      },
+      {
+        "line": 72,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": "主动="
+      },
+      {
+        "line": 76,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": "准入="
+      },
+      {
+        "line": 77,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": "资源扣="
+      },
+      {
+        "line": 78,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": "关系扣="
+      },
+      {
+        "line": 79,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": "重复扣="
+      },
+      {
+        "line": 212,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": "连续发言="
+      },
+      {
+        "line": 213,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": "话痨惩罚="
+      },
+      {
+        "line": 214,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": "未回应计数="
+      },
+      {
+        "line": 216,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": "行为="
+      },
+      {
+        "line": 221,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": "管线余候选="
+      },
+      {
+        "line": 221,
+        "category": "p0_prompt_chat",
+        "function": "_finalize_reply_settlement",
+        "text": " 余token="
+      }
+    ]
+  },
+  {
+    "module": "loop_resource_feedback_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 1,
+      "p1_runtime_text": 131,
+      "p2_numeric_nontrivial": 232,
+      "log": 119,
+      "docstring": 20,
+      "ascii_protocol": 595
+    },
+    "examples": [
+      {
+        "line": 67,
+        "category": "p1_runtime_text",
+        "function": "_poll_eagerness",
+        "text": "聊天值低("
+      },
+      {
+        "line": 69,
+        "category": "p1_runtime_text",
+        "function": "_poll_eagerness",
+        "text": "活跃度低("
+      },
+      {
+        "line": 71,
+        "category": "p1_runtime_text",
+        "function": "_poll_eagerness",
+        "text": "思考值低("
+      },
+      {
+        "line": 73,
+        "category": "p1_runtime_text",
+        "function": "_poll_eagerness",
+        "text": "烦躁("
+      },
+      {
+        "line": 74,
+        "category": "p1_runtime_text",
+        "function": "_poll_eagerness",
+        "text": "快照状态良好"
+      },
+      {
+        "line": 80,
+        "category": "p1_runtime_text",
+        "function": "_poll_eagerness",
+        "text": "精力充沛"
+      },
+      {
+        "line": 82,
+        "category": "p1_runtime_text",
+        "function": "_poll_eagerness",
+        "text": "精力良好"
+      },
+      {
+        "line": 84,
+        "category": "p1_runtime_text",
+        "function": "_poll_eagerness",
+        "text": "精力一般"
+      },
+      {
+        "line": 86,
+        "category": "p1_runtime_text",
+        "function": "_poll_eagerness",
+        "text": "精力偏低"
+      },
+      {
+        "line": 88,
+        "category": "p1_runtime_text",
+        "function": "_poll_eagerness",
+        "text": "精力严重不足"
+      },
+      {
+        "line": 91,
+        "category": "p1_runtime_text",
+        "function": "_poll_eagerness",
+        "text": "能量模块不可用，默认满意愿"
+      },
+      {
+        "line": 183,
+        "category": "p1_runtime_text",
+        "function": "_sync_runtime_resource_cache_from_d6",
+        "text": "简短"
+      }
+    ]
+  },
+  {
+    "module": "loop_state_flow_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 14,
+      "p1_trigger_policy": 3,
+      "p1_runtime_text": 3,
+      "p2_numeric_nontrivial": 19,
+      "log": 62,
+      "docstring": 12,
+      "ascii_protocol": 132
+    },
+    "examples": [
+      {
+        "line": 79,
+        "category": "p1_trigger_policy",
+        "function": "_apply_attention_transition",
+        "text": "统一状态推进"
+      },
+      {
+        "line": 99,
+        "category": "p0_prompt_chat",
+        "function": "_align_states_with_inner_voice",
+        "text": ":潜水"
+      },
+      {
+        "line": 101,
+        "category": "p0_prompt_chat",
+        "function": "_align_states_with_inner_voice",
+        "text": "内心选择潜水，退回待命"
+      },
+      {
+        "line": 107,
+        "category": "p0_prompt_chat",
+        "function": "_align_states_with_inner_voice",
+        "text": ":想参与"
+      },
+      {
+        "line": 109,
+        "category": "p0_prompt_chat",
+        "function": "_align_states_with_inner_voice",
+        "text": "内心明确想参与"
+      },
+      {
+        "line": 115,
+        "category": "p0_prompt_chat",
+        "function": "_align_states_with_inner_voice",
+        "text": ":先观察"
+      },
+      {
+        "line": 117,
+        "category": "p0_prompt_chat",
+        "function": "_align_states_with_inner_voice",
+        "text": "内心倾向观察"
+      },
+      {
+        "line": 216,
+        "category": "p1_runtime_text",
+        "function": "_apply_unified_flow_snapshot",
+        "text": "统一快照回写"
+      },
+      {
+        "line": 218,
+        "category": "p1_runtime_text",
+        "function": "_apply_unified_flow_snapshot",
+        "text": "统一快照回写"
+      },
+      {
+        "line": 318,
+        "category": "p1_runtime_text",
+        "function": "_run_post_action_side_effects",
+        "text": "被@未回复"
+      },
+      {
+        "line": 333,
+        "category": "p0_prompt_chat",
+        "function": "_apply_planner_state_update",
+        "text": "规划器决定等待"
+      },
+      {
+        "line": 337,
+        "category": "p0_prompt_chat",
+        "function": "_apply_planner_state_update",
+        "text": "规划器决定等待"
+      }
+    ]
+  },
+  {
+    "module": "proactive_context_prompt_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 40,
+      "p1_trigger_policy": 40,
+      "p1_runtime_text": 26,
+      "p2_numeric_nontrivial": 119,
+      "log": 30,
+      "docstring": 15,
+      "ascii_protocol": 396
+    },
+    "examples": [
+      {
+        "line": 69,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "对方"
+      },
+      {
+        "line": 76,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "对方"
+      },
+      {
+        "line": 78,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "对方"
+      },
+      {
+        "line": 81,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "[前情执行块]"
+      },
+      {
+        "line": 81,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "- 当前接话对象: "
+      },
+      {
+        "line": 108,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "关系="
+      },
+      {
+        "line": 109,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "社交="
+      },
+      {
+        "line": 111,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "信任="
+      },
+      {
+        "line": 113,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "烦躁="
+      },
+      {
+        "line": 114,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "- 当前关系底色: "
+      },
+      {
+        "line": 118,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "- 已检索到前情/记忆: "
+      },
+      {
+        "line": 122,
+        "category": "p0_prompt_chat",
+        "function": "_build_context_execution_block",
+        "text": "- 你自己刚才的延续线索: "
+      }
+    ]
+  },
+  {
+    "module": "proactive_execution_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 0,
+      "p2_numeric_nontrivial": 0,
+      "log": 0,
+      "docstring": 0,
+      "ascii_protocol": 0
+    },
+    "examples": []
+  },
+  {
+    "module": "proactive_idle_reply_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 23,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 20,
+      "p2_numeric_nontrivial": 26,
+      "log": 63,
+      "docstring": 6,
+      "ascii_protocol": 152
+    },
+    "examples": [
+      {
+        "line": 80,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": "一般"
+      },
+      {
+        "line": 86,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": "模型内心抗拒='"
+      },
+      {
+        "line": 86,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": "无"
+      },
+      {
+        "line": 86,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": "', 请决定是否接管"
+      },
+      {
+        "line": 116,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": ": 好感"
+      },
+      {
+        "line": 116,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": ", 信任"
+      },
+      {
+        "line": 118,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": ", 烦躁"
+      },
+      {
+        "line": 119,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": "(暂无稳定画像)"
+      },
+      {
+        "line": 120,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": "思考值="
+      },
+      {
+        "line": 120,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": ", 聊天值="
+      },
+      {
+        "line": 122,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": ", 活跃度="
+      },
+      {
+        "line": 150,
+        "category": "p1_runtime_text",
+        "function": "_try_algo_takeover_request",
+        "text": "待机"
+      }
+    ]
+  },
+  {
+    "module": "proactive_reactive_flow_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 11,
+      "p1_trigger_policy": 14,
+      "p1_runtime_text": 40,
+      "p2_numeric_nontrivial": 11,
+      "log": 85,
+      "docstring": 4,
+      "ascii_protocol": 236
+    },
+    "examples": [
+      {
+        "line": 232,
+        "category": "p0_prompt_chat",
+        "function": "_execute_voice_driven_reply",
+        "text": "voice缺少可回复目标"
+      },
+      {
+        "line": 249,
+        "category": "p0_prompt_chat",
+        "function": "_execute_voice_driven_reply",
+        "text": "voice自省拦截:"
+      },
+      {
+        "line": 267,
+        "category": "p0_prompt_chat",
+        "function": "_execute_voice_driven_reply",
+        "text": "内心驱动回复: 欲望等级="
+      },
+      {
+        "line": 281,
+        "category": "p0_prompt_chat",
+        "function": "_execute_voice_driven_reply",
+        "text": "[直接快回] 一句短口语，直接回应当前消息；不做长篇解释，不二次改写，不补充追发。"
+      },
+      {
+        "line": 327,
+        "category": "p0_prompt_chat",
+        "function": "_execute_voice_driven_reply",
+        "text": "[自省闸门约束] 你已经连续说了不少，这次只准一句短话，不展开，不补充，不连发。"
+      },
+      {
+        "line": 336,
+        "category": "p0_prompt_chat",
+        "function": "_execute_voice_driven_reply",
+        "text": "[接管意图] "
+      },
+      {
+        "line": 439,
+        "category": "p0_prompt_chat",
+        "function": "_execute_voice_driven_reply",
+        "text": "voice回复生成失败"
+      },
+      {
+        "line": 465,
+        "category": "p0_prompt_chat",
+        "function": "_execute_voice_driven_reply",
+        "text": "voice回复发送失败"
+      },
+      {
+        "line": 487,
+        "category": "p0_prompt_chat",
+        "function": "_execute_voice_driven_reply",
+        "text": "voice异常:"
+      },
+      {
+        "line": 563,
+        "category": "p1_runtime_text",
+        "function": "_proactive_background_loop",
+        "text": "不回复"
+      },
+      {
+        "line": 563,
+        "category": "p1_runtime_text",
+        "function": "_proactive_background_loop",
+        "text": "强制休息"
+      },
+      {
+        "line": 647,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_proactive_opportunity",
+        "text": "启动保护期"
+      }
+    ]
+  },
+  {
+    "module": "runtime_governor_pipeline_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 0,
+      "p2_numeric_nontrivial": 0,
+      "log": 0,
+      "docstring": 0,
+      "ascii_protocol": 0
+    },
+    "examples": []
+  },
+  {
+    "module": "runtime_integration_lifecycle_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 3,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 28,
+      "p2_numeric_nontrivial": 118,
+      "log": 58,
+      "docstring": 16,
+      "ascii_protocol": 380
+    },
+    "examples": [
+      {
+        "line": 261,
+        "category": "p1_runtime_text",
+        "function": "_integrate_narration_planning",
+        "text": "一般"
+      },
+      {
+        "line": 265,
+        "category": "p1_runtime_text",
+        "function": "_integrate_narration_planning",
+        "text": "积极"
+      },
+      {
+        "line": 267,
+        "category": "p1_runtime_text",
+        "function": "_integrate_narration_planning",
+        "text": "退缩"
+      },
+      {
+        "line": 501,
+        "category": "p0_prompt_chat",
+        "function": "_integrate_post_reply_learning",
+        "text": "持续骚扰/冒犯输入"
+      },
+      {
+        "line": 510,
+        "category": "p0_prompt_chat",
+        "function": "_integrate_post_reply_learning",
+        "text": "低信息重复施压"
+      },
+      {
+        "line": 574,
+        "category": "p0_prompt_chat",
+        "function": "_integrate_post_reply_learning",
+        "text": "印象演化同步"
+      },
+      {
+        "line": 683,
+        "category": "p1_runtime_text",
+        "function": "_register_builtin_skills",
+        "text": "对话回复"
+      },
+      {
+        "line": 689,
+        "category": "p1_runtime_text",
+        "function": "_register_builtin_skills",
+        "text": "深度语义理解"
+      },
+      {
+        "line": 695,
+        "category": "p1_runtime_text",
+        "function": "_register_builtin_skills",
+        "text": "旁白策略规划"
+      },
+      {
+        "line": 701,
+        "category": "p1_runtime_text",
+        "function": "_register_builtin_skills",
+        "text": "消息语义路由"
+      },
+      {
+        "line": 707,
+        "category": "p1_runtime_text",
+        "function": "_register_builtin_skills",
+        "text": "情绪存在追踪"
+      },
+      {
+        "line": 713,
+        "category": "p1_runtime_text",
+        "function": "_register_builtin_skills",
+        "text": "群体模式识别"
+      }
+    ]
+  },
+  {
+    "module": "runtime_sensory_pipeline_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 22,
+      "p1_runtime_text": 7,
+      "p2_numeric_nontrivial": 171,
+      "log": 26,
+      "docstring": 5,
+      "ascii_protocol": 230
+    },
+    "examples": [
+      {
+        "line": 98,
+        "category": "p1_runtime_text",
+        "function": "_integrate_presence_metabolism",
+        "text": "简短"
+      },
+      {
+        "line": 100,
+        "category": "p1_runtime_text",
+        "function": "_integrate_presence_metabolism",
+        "text": "中等"
+      },
+      {
+        "line": 100,
+        "category": "p1_runtime_text",
+        "function": "_integrate_presence_metabolism",
+        "text": "可以长一点"
+      },
+      {
+        "line": 381,
+        "category": "p1_runtime_text",
+        "function": "_integrate_deep_understanding",
+        "text": "吗"
+      },
+      {
+        "line": 381,
+        "category": "p1_runtime_text",
+        "function": "_integrate_deep_understanding",
+        "text": "呢"
+      },
+      {
+        "line": 498,
+        "category": "p1_trigger_policy",
+        "function": "_apply_sensory_gates",
+        "text": "休息门控: "
+      },
+      {
+        "line": 548,
+        "category": "p1_trigger_policy",
+        "function": "_apply_sensory_gates",
+        "text": "理解门控: "
+      },
+      {
+        "line": 548,
+        "category": "p1_trigger_policy",
+        "function": "_apply_sensory_gates",
+        "text": "条消息看不懂"
+      },
+      {
+        "line": 561,
+        "category": "p1_trigger_policy",
+        "function": "_apply_sensory_gates",
+        "text": " | 三态:未看见="
+      },
+      {
+        "line": 561,
+        "category": "p1_trigger_policy",
+        "function": "_apply_sensory_gates",
+        "text": ",扫到不理="
+      },
+      {
+        "line": 561,
+        "category": "p1_trigger_policy",
+        "function": "_apply_sensory_gates",
+        "text": ",深度关注="
+      },
+      {
+        "line": 563,
+        "category": "p1_trigger_policy",
+        "function": "_apply_sensory_gates",
+        "text": ",关注不回="
+      }
+    ]
+  },
+  {
+    "module": "runtime_state_trace_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 4,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 4,
+      "p2_numeric_nontrivial": 13,
+      "log": 0,
+      "docstring": 8,
+      "ascii_protocol": 144
+    },
+    "examples": [
+      {
+        "line": 86,
+        "category": "p0_prompt_chat",
+        "function": "_derive_night_expression_style",
+        "text": "烦"
+      },
+      {
+        "line": 86,
+        "category": "p0_prompt_chat",
+        "function": "_derive_night_expression_style",
+        "text": "恼"
+      },
+      {
+        "line": 86,
+        "category": "p0_prompt_chat",
+        "function": "_derive_night_expression_style",
+        "text": "不爽"
+      },
+      {
+        "line": 86,
+        "category": "p0_prompt_chat",
+        "function": "_derive_night_expression_style",
+        "text": "暴躁"
+      },
+      {
+        "line": 297,
+        "category": "p1_runtime_text",
+        "function": "_admin_force_safety_guard_reason",
+        "text": "骚扰输入"
+      },
+      {
+        "line": 302,
+        "category": "p1_runtime_text",
+        "function": "_admin_force_safety_guard_reason",
+        "text": "情绪拒绝"
+      },
+      {
+        "line": 302,
+        "category": "p1_runtime_text",
+        "function": "_admin_force_safety_guard_reason",
+        "text": "讨厌度屏蔽"
+      },
+      {
+        "line": 302,
+        "category": "p1_runtime_text",
+        "function": "_admin_force_safety_guard_reason",
+        "text": "极端创伤"
+      }
+    ]
+  },
+  {
+    "module": "runtime_subjective_signal_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 12,
+      "p1_runtime_text": 0,
+      "p2_numeric_nontrivial": 167,
+      "log": 5,
+      "docstring": 6,
+      "ascii_protocol": 262
+    },
+    "examples": [
+      {
+        "line": 247,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "普通闲聊氛围"
+      },
+      {
+        "line": 255,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "紧张对峙氛围，情绪可能激烈"
+      },
+      {
+        "line": 265,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "庆祝/欢迎氛围，适合积极互动"
+      },
+      {
+        "line": 269,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "围观/吃瓜氛围，可选择性参与"
+      },
+      {
+        "line": 273,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "安静稀疏氛围，参与门槛较高"
+      },
+      {
+        "line": 277,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "拥挤嘈杂氛围，信息过载"
+      },
+      {
+        "line": 336,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "积极展开，可以主动引导话题"
+      },
+      {
+        "line": 340,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "被动响应，等被cue到再回"
+      },
+      {
+        "line": 347,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "选择性关注，只回高优先级"
+      },
+      {
+        "line": 351,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "最小化参与，能不回就不回"
+      },
+      {
+        "line": 355,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "温暖融入，表达祝福/祝贺"
+      },
+      {
+        "line": 359,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_subjective_situation_interpretation",
+        "text": "谨慎观察，避免卷入冲突"
+      }
+    ]
+  },
+  {
+    "module": "runtime_watch_governor_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 19,
+      "p1_runtime_text": 3,
+      "p2_numeric_nontrivial": 93,
+      "log": 13,
+      "docstring": 5,
+      "ascii_protocol": 164
+    },
+    "examples": [
+      {
+        "line": 96,
+        "category": "p1_trigger_policy",
+        "function": "_apply_governor_watch_transition",
+        "text": "RestGovernor收口:"
+      },
+      {
+        "line": 102,
+        "category": "p1_trigger_policy",
+        "function": "_apply_governor_watch_transition",
+        "text": "RestGovernor退回窥屏:"
+      },
+      {
+        "line": 108,
+        "category": "p1_trigger_policy",
+        "function": "_apply_governor_watch_transition",
+        "text": "BehaviorGovernor拉起窥屏:"
+      },
+      {
+        "line": 113,
+        "category": "p1_trigger_policy",
+        "function": "_apply_governor_watch_transition",
+        "text": "BehaviorGovernor拉起关注:"
+      },
+      {
+        "line": 118,
+        "category": "p1_trigger_policy",
+        "function": "_apply_governor_watch_transition",
+        "text": "BehaviorGovernor拉起参与:"
+      },
+      {
+        "line": 191,
+        "category": "p1_trigger_policy",
+        "function": "_apply_governor_watch_cap",
+        "text": "Governor限幅:"
+      },
+      {
+        "line": 233,
+        "category": "p1_runtime_text",
+        "function": "_should_promote_peek_reflection",
+        "text": "RestGovernor阻断: "
+      },
+      {
+        "line": 235,
+        "category": "p1_runtime_text",
+        "function": "_should_promote_peek_reflection",
+        "text": "BehaviorGovernor阻断生成: "
+      },
+      {
+        "line": 237,
+        "category": "p1_runtime_text",
+        "function": "_should_promote_peek_reflection",
+        "text": "模型选择"
+      },
+      {
+        "line": 263,
+        "category": "p1_trigger_policy",
+        "function": "_integrate_watch_state",
+        "text": "新消息到达"
+      },
+      {
+        "line": 424,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_watch_full_transitions",
+        "text": "低活跃+高环境疲劳+长静默"
+      },
+      {
+        "line": 427,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_watch_full_transitions",
+        "text": "高疲劳+静默"
+      }
+    ]
+  },
+  {
+    "module": "scene_analysis_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 0,
+      "p2_numeric_nontrivial": 0,
+      "log": 0,
+      "docstring": 0,
+      "ascii_protocol": 0
+    },
+    "examples": []
+  },
+  {
+    "module": "scene_bot_lifecycle_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 13,
+      "p1_trigger_policy": 9,
+      "p1_runtime_text": 68,
+      "p2_numeric_nontrivial": 150,
+      "log": 122,
+      "docstring": 14,
+      "ascii_protocol": 447
+    },
+    "examples": [
+      {
+        "line": 72,
+        "category": "p1_runtime_text",
+        "function": "_check_proactive_from_emotion",
+        "text": "情感系统不可用"
+      },
+      {
+        "line": 291,
+        "category": "p1_runtime_text",
+        "function": "_post_proactive_wait_reflect",
+        "text": "等待对主动消息的回复: "
+      },
+      {
+        "line": 294,
+        "category": "p1_runtime_text",
+        "function": "_post_proactive_wait_reflect",
+        "text": "对方回复或互动"
+      },
+      {
+        "line": 302,
+        "category": "p1_runtime_text",
+        "function": "_post_proactive_wait_reflect",
+        "text": "主动发言后进入关注态"
+      },
+      {
+        "line": 326,
+        "category": "p1_runtime_text",
+        "function": "_post_proactive_wait_reflect",
+        "text": "主动说了「"
+      },
+      {
+        "line": 326,
+        "category": "p1_runtime_text",
+        "function": "_post_proactive_wait_reflect",
+        "text": "」后90秒无人回应，反思是否该追问"
+      },
+      {
+        "line": 377,
+        "category": "p1_runtime_text",
+        "function": "_post_proactive_wait_reflect",
+        "text": "追问: "
+      },
+      {
+        "line": 379,
+        "category": "p1_runtime_text",
+        "function": "_post_proactive_wait_reflect",
+        "text": "原消息: "
+      },
+      {
+        "line": 379,
+        "category": "p1_runtime_text",
+        "function": "_post_proactive_wait_reflect",
+        "text": " | 反思: "
+      },
+      {
+        "line": 380,
+        "category": "p1_runtime_text",
+        "function": "_post_proactive_wait_reflect",
+        "text": "引起对方注意或回复"
+      },
+      {
+        "line": 406,
+        "category": "p1_trigger_policy",
+        "function": "_deescalate_watch_after_proactive",
+        "text": "主动无回应，兴趣回落"
+      },
+      {
+        "line": 545,
+        "category": "p1_runtime_text",
+        "function": "_llm_autonomous_decide",
+        "text": "LLM 调用失败: "
+      }
+    ]
+  },
+  {
+    "module": "scene_context_analysis_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 56,
+      "p1_trigger_policy": 15,
+      "p1_runtime_text": 0,
+      "p2_numeric_nontrivial": 47,
+      "log": 34,
+      "docstring": 17,
+      "ascii_protocol": 151
+    },
+    "examples": [
+      {
+        "line": 182,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_content_state_signal",
+        "text": "当前内容信息量偏低，先不重复接话"
+      },
+      {
+        "line": 183,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_content_state_signal",
+        "text": "当前内容正在处理中，避免并行重复回复"
+      },
+      {
+        "line": 184,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_content_state_signal",
+        "text": "这类内容处理次数过多，保持克制"
+      },
+      {
+        "line": 185,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_content_state_signal",
+        "text": "这类内容刚处理过且回应质量足够"
+      },
+      {
+        "line": 190,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_content_state_signal",
+        "text": "内容状态追踪建议跳过: "
+      },
+      {
+        "line": 365,
+        "category": "p1_trigger_policy",
+        "function": "_analyze_group_sense",
+        "text": "未知"
+      },
+      {
+        "line": 377,
+        "category": "p1_trigger_policy",
+        "function": "_analyze_message_preprocessor",
+        "text": "正常"
+      },
+      {
+        "line": 378,
+        "category": "p1_trigger_policy",
+        "function": "_analyze_message_preprocessor",
+        "text": "平稳"
+      },
+      {
+        "line": 401,
+        "category": "p1_trigger_policy",
+        "function": "_analyze_message_preprocessor",
+        "text": "未知用户"
+      },
+      {
+        "line": 501,
+        "category": "p1_trigger_policy",
+        "function": "_filter_messages_by_user_preference",
+        "text": "不感兴趣"
+      },
+      {
+        "line": 502,
+        "category": "p1_trigger_policy",
+        "function": "_filter_messages_by_user_preference",
+        "text": "无聊"
+      },
+      {
+        "line": 503,
+        "category": "p1_trigger_policy",
+        "function": "_filter_messages_by_user_preference",
+        "text": "讨厌"
+      }
+    ]
+  },
+  {
+    "module": "scene_planner_bridge_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 86,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 51,
+      "p2_numeric_nontrivial": 123,
+      "log": 85,
+      "docstring": 21,
+      "ascii_protocol": 350
+    },
+    "examples": [
+      {
+        "line": 148,
+        "category": "p0_prompt_chat",
+        "function": "_invoke_unified_planner",
+        "text": "管理员消息，极速通道跳过规划器"
+      },
+      {
+        "line": 203,
+        "category": "p0_prompt_chat",
+        "function": "_build_group_pattern_hint",
+        "text": "当前群聊正在迎新，适合主动打招呼或表示欢迎。"
+      },
+      {
+        "line": 204,
+        "category": "p0_prompt_chat",
+        "function": "_build_group_pattern_hint",
+        "text": "群里有礼仪性问候在进行，可以自然接一句。"
+      },
+      {
+        "line": 205,
+        "category": "p0_prompt_chat",
+        "function": "_build_group_pattern_hint",
+        "text": "群里正在围观某事，不适合主动插话，更适合旁观。"
+      },
+      {
+        "line": 206,
+        "category": "p0_prompt_chat",
+        "function": "_build_group_pattern_hint",
+        "text": "群里在庆祝什么，氛围好，可以参与但不抢风头。"
+      },
+      {
+        "line": 207,
+        "category": "p0_prompt_chat",
+        "function": "_build_group_pattern_hint",
+        "text": "群里有人在寻求支持，如果关系够近可以考虑回应。"
+      },
+      {
+        "line": 208,
+        "category": "p0_prompt_chat",
+        "function": "_build_group_pattern_hint",
+        "text": "群里讨论很激烈，除非被@否则不要乱插嘴。"
+      },
+      {
+        "line": 209,
+        "category": "p0_prompt_chat",
+        "function": "_build_group_pattern_hint",
+        "text": "群里在吵架，不要卷进去。"
+      },
+      {
+        "line": 210,
+        "category": "p0_prompt_chat",
+        "function": "_build_group_pattern_hint",
+        "text": "冲突升级中，绝对不要介入。"
+      },
+      {
+        "line": 211,
+        "category": "p0_prompt_chat",
+        "function": "_build_group_pattern_hint",
+        "text": "群里在玩梗/刷表情包风暴，可以凑热闹但别太认真。"
+      },
+      {
+        "line": 212,
+        "category": "p0_prompt_chat",
+        "function": "_build_group_pattern_hint",
+        "text": "群里情绪在传染，注意不要被带偏。"
+      },
+      {
+        "line": 213,
+        "category": "p0_prompt_chat",
+        "function": "_build_group_pattern_hint",
+        "text": "群里突然安静了，可能是好事也可能是尴尬时机。"
+      }
+    ]
+  },
+  {
+    "module": "shared_runtime.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 3,
+      "p2_numeric_nontrivial": 22,
+      "log": 9,
+      "docstring": 10,
+      "ascii_protocol": 63
+    },
+    "examples": [
+      {
+        "line": 10,
+        "category": "p1_runtime_text",
+        "function": "",
+        "text": "心流增强"
+      },
+      {
+        "line": 68,
+        "category": "p1_runtime_text",
+        "function": "",
+        "text": "普通"
+      },
+      {
+        "line": 108,
+        "category": "p1_runtime_text",
+        "function": "",
+        "text": "普通"
+      }
+    ]
+  },
+  {
+    "module": "strategy_action_state_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 2,
+      "p1_trigger_policy": 38,
+      "p1_runtime_text": 44,
+      "p2_numeric_nontrivial": 174,
+      "log": 41,
+      "docstring": 10,
+      "ascii_protocol": 310
+    },
+    "examples": [
+      {
+        "line": 106,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "内心独白要求升级"
+      },
+      {
+        "line": 109,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "算法要求深度判断"
+      },
+      {
+        "line": 111,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "行为层建议"
+      },
+      {
+        "line": 113,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "仪表盘裁定"
+      },
+      {
+        "line": 113,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "可回复"
+      },
+      {
+        "line": 115,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "试探性表达条件满足"
+      },
+      {
+        "line": 118,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "烦躁偏高("
+      },
+      {
+        "line": 121,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "压力偏高("
+      },
+      {
+        "line": 126,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "复杂"
+      },
+      {
+        "line": 128,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "中等"
+      },
+      {
+        "line": 130,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "普通"
+      },
+      {
+        "line": 135,
+        "category": "p1_trigger_policy",
+        "function": "_build_decision_runtime",
+        "text": "默认观察"
+      }
+    ]
+  },
+  {
+    "module": "strategy_integration_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 0,
+      "p2_numeric_nontrivial": 0,
+      "log": 0,
+      "docstring": 0,
+      "ascii_protocol": 0
+    },
+    "examples": []
+  },
+  {
+    "module": "strategy_proactive_decision_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 10,
+      "p1_runtime_text": 0,
+      "p2_numeric_nontrivial": 189,
+      "log": 30,
+      "docstring": 1,
+      "ascii_protocol": 202
+    },
+    "examples": [
+      {
+        "line": 403,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_proactive_decision",
+        "text": " | 未回应轮数="
+      },
+      {
+        "line": 405,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_proactive_decision",
+        "text": "未回应轮数="
+      },
+      {
+        "line": 423,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_proactive_decision",
+        "text": "用户负面情绪高("
+      },
+      {
+        "line": 423,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_proactive_decision",
+        "text": ")，抑制主动发言"
+      },
+      {
+        "line": 672,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_proactive_decision",
+        "text": " | 仪表盘硬阻断("
+      },
+      {
+        "line": 673,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_proactive_decision",
+        "text": "不回复"
+      },
+      {
+        "line": 673,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_proactive_decision",
+        "text": "跳过"
+      },
+      {
+        "line": 679,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_proactive_decision",
+        "text": "立即回复"
+      },
+      {
+        "line": 679,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_proactive_decision",
+        "text": "尽快回复"
+      },
+      {
+        "line": 685,
+        "category": "p1_trigger_policy",
+        "function": "_evaluate_proactive_decision",
+        "text": " | 语气建议="
+      }
+    ]
+  },
+  {
+    "module": "strategy_relation_style_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 52,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 21,
+      "p2_numeric_nontrivial": 218,
+      "log": 58,
+      "docstring": 16,
+      "ascii_protocol": 242
+    },
+    "examples": [
+      {
+        "line": 104,
+        "category": "p1_runtime_text",
+        "function": "_compute_relation_metrics",
+        "text": "平静"
+      },
+      {
+        "line": 286,
+        "category": "p1_runtime_text",
+        "function": "_build_meme_injection",
+        "text": "[🎭可用语气调料] 你可以在回复中自然地使用以下网络用语和梗(不必全用，挑合适的1-3个融入):"
+      },
+      {
+        "line": 287,
+        "category": "p1_runtime_text",
+        "function": "_build_meme_injection",
+        "text": "词汇池: "
+      },
+      {
+        "line": 297,
+        "category": "p1_runtime_text",
+        "function": "_build_meme_injection",
+        "text": "[夜间烦躁可用] "
+      },
+      {
+        "line": 307,
+        "category": "p1_runtime_text",
+        "function": "_build_meme_injection",
+        "text": "[轻松友好可用] "
+      },
+      {
+        "line": 310,
+        "category": "p1_runtime_text",
+        "function": "_build_meme_injection",
+        "text": "注意: 这些词要自然融入句子中，不要生硬堆砌。像真人聊天一样顺手用出来。"
+      },
+      {
+        "line": 349,
+        "category": "p0_prompt_chat",
+        "function": "_check_reply_diversity",
+        "text": "[⚠️表达多样性警告] 你最近说的几条消息太相似了: "
+      },
+      {
+        "line": 349,
+        "category": "p0_prompt_chat",
+        "function": "_check_reply_diversity",
+        "text": "。这次必须换一种说法！换个句式、换个角度、或者用不同的语气词。禁止再说类似的内容。"
+      },
+      {
+        "line": 355,
+        "category": "p0_prompt_chat",
+        "function": "_check_reply_diversity",
+        "text": "[💡表达建议] 最近回复有些重复倾向，这次试着换个新鲜的说法,可以用不同的语气词、不同的句式结构、或者从另一个角度回应。"
+      },
+      {
+        "line": 517,
+        "category": "p0_prompt_chat",
+        "function": "_build_scene_reply_matrix",
+        "text": "比较熟悉"
+      },
+      {
+        "line": 517,
+        "category": "p0_prompt_chat",
+        "function": "_build_scene_reply_matrix",
+        "text": "关系亲密"
+      },
+      {
+        "line": 517,
+        "category": "p0_prompt_chat",
+        "function": "_build_scene_reply_matrix",
+        "text": "非常信任"
+      }
+    ]
+  },
+  {
+    "module": "subjective_runtime_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 0,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 0,
+      "p2_numeric_nontrivial": 0,
+      "log": 0,
+      "docstring": 0,
+      "ascii_protocol": 0
+    },
+    "examples": []
+  },
+  {
+    "module": "voice_pipeline_mixin.py",
+    "counts": {
+      "p0_prompt_chat": 84,
+      "p1_trigger_policy": 0,
+      "p1_runtime_text": 41,
+      "p2_numeric_nontrivial": 142,
+      "log": 66,
+      "docstring": 28,
+      "ascii_protocol": 359
+    },
+    "examples": [
+      {
+        "line": 72,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "已回复"
+      },
+      {
+        "line": 72,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "未回复"
+      },
+      {
+        "line": 73,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "结果="
+      },
+      {
+        "line": 74,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "聊天当前="
+      },
+      {
+        "line": 75,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "活跃当前="
+      },
+      {
+        "line": 76,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "社交当前="
+      },
+      {
+        "line": 77,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "思考当前="
+      },
+      {
+        "line": 96,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "社交值="
+      },
+      {
+        "line": 98,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "信赖度="
+      },
+      {
+        "line": 100,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "厌烦度="
+      },
+      {
+        "line": 113,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "好感="
+      },
+      {
+        "line": 114,
+        "category": "p1_runtime_text",
+        "function": "_emit_outcome_summary",
+        "text": "心理压力="
+      }
+    ]
+  }
+]

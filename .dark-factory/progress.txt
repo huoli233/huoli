@@ -639,3 +639,31 @@
 - 工作区内已有 `.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/` 不属于本轮，已避免暂存。
 - Browser Use 插件所需 Node REPL 工具未暴露，本轮使用本机 Chrome headless 远程调试完成 UI 实际渲染验证。
 - 当前分支：`delete/虚假本地聊天室与Mai命名清理`；保留分支仍为 `preserve/full-modules-虚假本地聊天室与Mai命名清理`。
+
+## 2026-05-09T08:44:12+08:00 - Task: enhanced_modules 硬编码深排与强制回复触发词配置化
+
+### What was done:
+- 确认用户指出的 `proactive_reactive_flow_mixin.py` 强制回复兜底链路仍存在触发词硬编码：固定文本触发词、固定 bot 名、问句词、招呼词写在 Python 判断里。
+- 将强制回复触发词迁移到 `runtime_tuning`：`heartfc_force_reply_fallback_daodun_markers`、`heartfc_force_reply_fallback_bot_name_markers`、`heartfc_force_reply_fallback_question_markers`、`heartfc_force_reply_fallback_greeting_markers`。
+- bot 名称触发不再写死具体名称，改为读取 `identity_bot.nickname`、`identity_bot.alias_names`，并兜底读取 `global_config.bot.nickname/alias_names`。
+- 更新 `config/core_config.toml` 与 `template/core_config_template.toml` 的顶层和 profile runtime_tuning 两处配置。
+- 更新 `scripts/heartflow_state_regression.py`，强制回复测试改为读取配置样本，并增加函数体源码契约，防止触发词重新写回业务模块。
+- 生成 enhanced_modules 硬编码审计文件：
+  - `.dark-factory/hardcode_audit_enhanced_modules_2026-05-09.md`
+  - `.dark-factory/hardcode_audit_enhanced_modules_2026-05-09.json`
+
+### Testing:
+- `uv run ruff check src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `python -m json.tool .dark-factory/hardcode_audit_enhanced_modules_2026-05-09.json` 通过。
+- `git diff --check -- ...` 通过。
+- TOML 解析和新增 runtime marker 键检查通过，确认 config/template 顶层和 profile runtime_tuning 均存在新增键。
+- `_rt_str_list(...)` 运行时读取新增 marker 检查通过。
+- `uv run python scripts/config_profile_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `force_reply_markers_configured=true`、`force_reply_bot_name_from_config=true`。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 本轮只治理了强制回复兜底链路中的触发词硬编码；审计显示其它 enhanced_modules 仍存在 P0/P1/P2 硬编码，需要继续按模块拆分治理。
+- 当前分支在提交前为 `delete/状态页假实时轮询移除`。
+- 工作区内已有 `.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/` 不属于本轮，已避免暂存。
