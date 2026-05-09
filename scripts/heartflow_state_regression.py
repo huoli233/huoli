@@ -1276,6 +1276,41 @@ def check_inner_voice_low_info_tone_contract() -> Dict[str, Any]:
     }
 
 
+def check_inner_voice_single_message_dedupe_contract() -> Dict[str, Any]:
+    enhanced_source = (ROOT / "src/chat/heart_flow/heartFC_chat_enhanced.py").read_text(encoding="utf-8")
+    voice_source = (ROOT / "src/chat/heart_flow/enhanced_modules/voice_pipeline_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    loop_source = (ROOT / "src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "_inner_voice_inflight_tasks" in enhanced_source
+    assert "_inner_voice_result_cache" in enhanced_source
+    assert "_inner_voice_intention_ingested" in enhanced_source
+    assert "def _get_voice_trigger_message" in voice_source
+    assert "self._get_latest_human_message(messages or [])" in voice_source
+    assert "def _build_inner_voice_message_key" in voice_source
+    assert "mid:{message_id}" in voice_source
+    assert "asyncio.shield(existing_task)" in voice_source
+    assert "asyncio.shield(task)" in voice_source
+    assert "task.add_done_callback(_finalize_inner_voice_task)" in voice_source
+    assert "self._remember_inner_voice_result(voice_key, verdict, now)" in voice_source
+    assert "def _mark_voice_intention_ingested" in voice_source
+    assert "if self._mark_voice_intention_ingested(voice_key):" in loop_source
+    assert "本轮内心独白意图已写入，跳过重复写入" in loop_source
+    assert "直接快回后台独白意图已由主链写入" in loop_source
+    assert "latest_human = self._get_voice_trigger_message(decision_messages)" in loop_source
+    assert "latest = self._get_voice_trigger_message(messages)" in voice_source
+    assert "latest = messages[-1] if messages else None" not in voice_source
+    return {
+        "single_message_voice_inflight_reused": True,
+        "single_message_voice_cache_reused": True,
+        "single_message_intention_ingest_deduped": True,
+        "voice_trigger_prefers_latest_human": True,
+    }
+
+
 def check_webui_internal_chat_disabled_contract() -> Dict[str, Any]:
     from src.chat.message_receive.chat_stream import (
         LEGACY_WEBUI_LOCAL_GROUP_ID,
@@ -1966,6 +2001,7 @@ def main() -> None:
         "night_cycle_persistence": check_night_cycle_persistence_contract(),
         "night_soul_prompt": check_night_soul_prompt_contract(),
         "inner_voice_low_info_tone": check_inner_voice_low_info_tone_contract(),
+        "inner_voice_single_message_dedupe": check_inner_voice_single_message_dedupe_contract(),
         "webui_internal_chat_disabled": check_webui_internal_chat_disabled_contract(),
         "huoli_naming": check_huoli_naming_contract(),
         "admin_identity": check_admin_identity_not_relationship_contract(),

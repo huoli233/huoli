@@ -125,19 +125,23 @@ class LoopMainDriverMixin:
         self._cached_voice = vval
         self._last_voice_ts = now
         self._align_states_with_inner_voice(vval, source="direct_fastlane_background")
-        try:
-            from src.chat.proactive.intention_pool import get_intention_pool
+        voice_key = self._build_inner_voice_message_key(messages)
+        if self._mark_voice_intention_ingested(voice_key):
+            try:
+                from src.chat.proactive.intention_pool import get_intention_pool
 
-            speaker_id = ""
-            if latest_human is not None:
-                speaker_id = str(getattr(latest_human, "user_id", "") or "").strip()
-            get_intention_pool().ingest_voice_verdict(
-                channel_id=self.stream_id,
-                verdict=vval,
-                speaker_id=speaker_id,
-            )
-        except Exception as exc:
-            logger.debug(f"{self.log_prefix} 直接快回后台意图池写入失败: {exc}")
+                speaker_id = ""
+                if latest_human is not None:
+                    speaker_id = str(getattr(latest_human, "user_id", "") or "").strip()
+                get_intention_pool().ingest_voice_verdict(
+                    channel_id=self.stream_id,
+                    verdict=vval,
+                    speaker_id=speaker_id,
+                )
+            except Exception as exc:
+                logger.debug(f"{self.log_prefix} 直接快回后台意图池写入失败: {exc}")
+        else:
+            logger.debug(f"{self.log_prefix} 直接快回后台独白意图已由主链写入，跳过重复写入")
         logger.debug(f"{self.log_prefix} ⚡ 直接快回后台补感知/独白完成")
 
     async def _loopbody(self):
@@ -1200,21 +1204,26 @@ class LoopMainDriverMixin:
                 if voice_summary.get("log"):
                     logger.info(f"{self.log_prefix} 💭 {voice_summary['log'][:160]}")
                 # 将内心独白意图写入跨轮意图池
-                try:
-                    from src.chat.proactive.intention_pool import (
-                        get_intention_pool,
-                    )
+                voice_key = self._build_inner_voice_message_key(decision_messages)
+                if self._mark_voice_intention_ingested(voice_key):
+                    try:
+                        from src.chat.proactive.intention_pool import (
+                            get_intention_pool,
+                        )
 
-                    _speaker_id = ""
-                    if decision_messages:
-                        _speaker_id = str(getattr(decision_messages[-1], "user_id", "") or "").strip()
-                    get_intention_pool().ingest_voice_verdict(
-                        channel_id=self.stream_id,
-                        verdict=voice_conclusion,
-                        speaker_id=_speaker_id,
-                    )
-                except Exception as _ipool_err:
-                    logger.warning(f"{self.log_prefix} 意图池写入失败: {_ipool_err}")
+                        _speaker_id = ""
+                        latest_human = self._get_voice_trigger_message(decision_messages)
+                        if latest_human is not None:
+                            _speaker_id = str(getattr(latest_human, "user_id", "") or "").strip()
+                        get_intention_pool().ingest_voice_verdict(
+                            channel_id=self.stream_id,
+                            verdict=voice_conclusion,
+                            speaker_id=_speaker_id,
+                        )
+                    except Exception as _ipool_err:
+                        logger.warning(f"{self.log_prefix} 意图池写入失败: {_ipool_err}")
+                else:
+                    logger.debug(f"{self.log_prefix} 本轮内心独白意图已写入，跳过重复写入")
         try:
             from src.core.inner_narration_planner import InnerNarrationPlanner
 

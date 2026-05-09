@@ -77,6 +77,12 @@ class EnhancedHeartFChatting(
         self._cached_awareness = None
         # 最近一次内心独白结论缓存
         self._cached_voice = None
+        self._inner_voice_inflight_tasks: Dict[str, asyncio.Task] = {}
+        self._inner_voice_result_cache: Dict[str, Dict[str, Any]] = {}
+        self._inner_voice_cache_order: deque = deque(maxlen=80)
+        self._inner_voice_cache_ttl_sec = 20.0
+        self._inner_voice_intention_ingested: Set[str] = set()
+        self._inner_voice_intention_order: deque = deque()
         # 连续跳过的增强轮次数（用于自适应节奏）
         self._consecutive_skip_ticks = 0
         # 多维状态系统最近一次决策网关裁定缓存
@@ -694,5 +700,4 @@ class EnhancedHeartFChatting(
 
 
     _SUMMARY_MIN_EVENTS_FOR_PIPELINE = 3
-
 

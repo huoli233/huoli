@@ -738,6 +738,171 @@ class EnhancedVoicePipelineMixin:
         )
         return _model.tier == "large"
 
+    def _get_voice_trigger_message(self, messages: List[Any]) -> Optional[Any]:
+        """内心独白必须围绕最新真人消息，避免把自身上下文当成目标。"""
+        try:
+            latest_human = self._get_latest_human_message(messages or [])
+            if latest_human is not None:
+                return latest_human
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 内心独白触发消息解析异常: {exc}")
+        return messages[-1] if messages else None
+
+    def _build_inner_voice_message_key(self, messages: List[Any]) -> str:
+        """给同一条用户消息生成稳定 key，用于主链/后台/窥屏独白复用。"""
+        latest = self._get_voice_trigger_message(messages)
+        if latest is None:
+            return ""
+        message_id = str(
+            getattr(latest, "message_id", "")
+            or getattr(latest, "msg_id", "")
+            or getattr(latest, "id", "")
+            or ""
+        ).strip()
+        speaker_id = str(getattr(latest, "user_id", "") or "").strip()
+        text = str(
+            getattr(latest, "processed_plain_text", "")
+            or getattr(latest, "plain_text", "")
+            or getattr(latest, "content", "")
+            or ""
+        ).strip()
+        msg_ts = float(getattr(latest, "time", 0.0) or getattr(latest, "timestamp", 0.0) or 0.0)
+        if message_id:
+            return f"{self.stream_id}:mid:{message_id}"
+        return f"{self.stream_id}:msg:{speaker_id}:{int(msg_ts * 1000)}:{text[:80]}"
+
+    def _remember_inner_voice_result(self, voice_key: str, verdict: Any, now: float) -> None:
+        if not voice_key or verdict is None:
+            return
+        cache = getattr(self, "_inner_voice_result_cache", None)
+        order = getattr(self, "_inner_voice_cache_order", None)
+        if not isinstance(cache, dict):
+            self._inner_voice_result_cache = {}
+            cache = self._inner_voice_result_cache
+        if order is None:
+            self._inner_voice_cache_order = deque(maxlen=80)
+            order = self._inner_voice_cache_order
+        cache[voice_key] = {"verdict": verdict, "ts": float(now or time.time())}
+        order.append(voice_key)
+        while len(cache) > 80:
+            old_key = order.popleft() if order else ""
+            if old_key:
+                cache.pop(old_key, None)
+
+    def _get_cached_inner_voice_result(self, voice_key: str, now: float) -> Optional[Any]:
+        if not voice_key:
+            return None
+        cache = getattr(self, "_inner_voice_result_cache", None)
+        if not isinstance(cache, dict):
+            return None
+        item = cache.get(voice_key)
+        if not isinstance(item, dict):
+            return None
+        ttl_sec = float(getattr(self, "_inner_voice_cache_ttl_sec", 20.0) or 20.0)
+        if (float(now or time.time()) - float(item.get("ts", 0.0) or 0.0)) > max(1.0, ttl_sec):
+            cache.pop(voice_key, None)
+            return None
+        verdict = item.get("verdict")
+        if verdict is not None and getattr(verdict, "is_valid", False):
+            return verdict
+        return None
+
+    def _mark_voice_intention_ingested(self, voice_key: str) -> bool:
+        """同一条消息的独白意图只写一次，避免重复污染意图池。"""
+        if not voice_key:
+            return True
+        seen = getattr(self, "_inner_voice_intention_ingested", None)
+        order = getattr(self, "_inner_voice_intention_order", None)
+        if not isinstance(seen, set):
+            self._inner_voice_intention_ingested = set()
+            seen = self._inner_voice_intention_ingested
+        if order is None:
+            self._inner_voice_intention_order = deque()
+            order = self._inner_voice_intention_order
+        if voice_key in seen:
+            return False
+        seen.add(voice_key)
+        order.append(voice_key)
+        while len(order) > 200:
+            old_key = order.popleft()
+            seen.discard(old_key)
+        return True
+
+    async def _generate_inner_voice_once(
+        self,
+        messages: List,
+        awareness,
+        ambient: Optional[Dict[str, Any]],
+        now: float,
+    ):
+        from src.chat.heart_flow.inner_voice import (
+            get_self_dialogue_engine,
+        )
+
+        engine = get_self_dialogue_engine(self.stream_id)
+        # 取最新真人消息作为触发文本，避免上下文尾部的自身消息把 target 带歪。
+        latest = self._get_voice_trigger_message(messages)
+        raw_text = getattr(latest, "processed_plain_text", "") if latest else ""
+        speaker_name = getattr(latest, "user_nickname", "") or "" if latest else ""
+        speaker_id = getattr(latest, "user_id", "") or "" if latest else ""
+        # 复用已有世界快照或补建（避免重复采集）
+        tick_snapshot = getattr(self, "_tick_world_snapshot", None)
+        if tick_snapshot is None or not tick_snapshot.target_user.user_id:
+            try:
+                from src.core.world_snapshot import build_world_snapshot
+
+                tick_snapshot = await build_world_snapshot(self.stream_id, speaker_id)
+                self._tick_world_snapshot = tick_snapshot
+            except Exception as _snap_err:
+                logger.debug(f"{self.log_prefix} 统一快照构建失败，退回独立采集: {_snap_err}")
+        # 从能量和氛围提取参数
+        energy_params = self._extract_voice_energy_params()
+        mood_params = self._extract_voice_mood_params(ambient)
+        # 构建对话历史片段
+        dialogue_fragment = self._build_dialogue_fragment(messages)
+        relation_view = self._resolve_relation_view()
+        # 刷新快照中滞后的实时情绪值（重复回写发生在快照构建后）
+        if tick_snapshot is not None and relation_view:
+            _tu = tick_snapshot.target_user
+            _rv_ann = float(relation_view.get("annoyance_value", 0.0) or 0.0)
+            _rv_prs = float(relation_view.get("psychological_pressure", 0.0) or 0.0)
+            if _rv_ann > _tu.annoyance_value:
+                _tu.annoyance_value = _rv_ann
+            if _rv_prs > _tu.psychological_pressure:
+                _tu.psychological_pressure = _rv_prs
+        voice_context = self._build_inner_voice_context(
+            latest,
+            ambient,
+            relation_snapshot=relation_view,
+            awareness_snapshot=awareness,
+        )
+        phase_label = self._query_flow_phase()
+        verdict = await engine.generate_reflection(
+            heart_state_label=phase_label,
+            raw_text=raw_text,
+            speaker_name=speaker_name,
+            dialogue_history=dialogue_fragment,
+            assurance_score=energy_params.get("assurance", 0.5),
+            involvement_score=energy_params.get("involvement", 0.5),
+            mental_drain=energy_params.get("drain", 0.0),
+            endurance=energy_params.get("endurance", 100.0),
+            irritation=mood_params.get("irritation", 0.0),
+            wound_score=mood_params.get("wound", 0.0),
+            readiness=energy_params.get("readiness", 1.0),
+            speaker_id=speaker_id,
+            world_snapshot=tick_snapshot,
+            extra_context=voice_context,
+            is_admin=self._is_force_wake_admin(self._get_incoming_batch_from_context() or []),
+        )
+        if verdict.is_valid:
+            logger.debug(
+                f"{self.log_prefix} 内心独白: "
+                f"欲望={verdict.reply_desire_level} "
+                f"情绪={verdict.current_mood} "
+                f"意图数={len(verdict.intents)}"
+            )
+        return verdict
+
     async def _invoke_inner_voice(
         self,
         messages: List,
@@ -746,73 +911,47 @@ class EnhancedVoicePipelineMixin:
         now: float,
     ):
         """调用自我对话引擎，生成内心想法；同时构建统一 WorldSnapshot 并缓存供后续阶段复用"""
-        try:
-            from src.chat.heart_flow.inner_voice import (
-                get_self_dialogue_engine,
-            )
+        voice_key = self._build_inner_voice_message_key(messages)
+        cached = self._get_cached_inner_voice_result(voice_key, now)
+        if cached is not None:
+            logger.debug(f"{self.log_prefix} 内心独白复用缓存 key={voice_key[-24:]}")
+            return cached
+        inflight = getattr(self, "_inner_voice_inflight_tasks", None)
+        if not isinstance(inflight, dict):
+            self._inner_voice_inflight_tasks = {}
+            inflight = self._inner_voice_inflight_tasks
+        existing_task = inflight.get(voice_key) if voice_key else None
+        if existing_task is not None and not existing_task.done():
+            logger.debug(f"{self.log_prefix} 内心独白复用进行中任务 key={voice_key[-24:]}")
+            try:
+                return await asyncio.shield(existing_task)
+            except Exception as exc:
+                logger.debug(f"{self.log_prefix} 复用内心独白任务失败: {exc}")
+                return None
 
-            engine = get_self_dialogue_engine(self.stream_id)
-            # 取最新一条消息作为触发文本
-            latest = messages[-1] if messages else None
-            raw_text = getattr(latest, "processed_plain_text", "") if latest else ""
-            speaker_name = getattr(latest, "user_nickname", "") or "" if latest else ""
-            speaker_id = getattr(latest, "user_id", "") or "" if latest else ""
-            # 复用已有世界快照或补建（避免重复采集）
-            tick_snapshot = getattr(self, "_tick_world_snapshot", None)
-            if tick_snapshot is None or not tick_snapshot.target_user.user_id:
+        task = asyncio.create_task(
+            self._generate_inner_voice_once(messages, awareness, ambient, now),
+            name=f"inner_voice_once_{self.stream_id[:8]}",
+        )
+        if voice_key:
+            inflight[voice_key] = task
+
+            def _finalize_inner_voice_task(done_task: asyncio.Task) -> None:
+                if inflight.get(voice_key) is done_task:
+                    inflight.pop(voice_key, None)
                 try:
-                    from src.core.world_snapshot import build_world_snapshot
+                    verdict = done_task.result()
+                except Exception as exc:
+                    logger.debug(f"{self.log_prefix} 内心独白后台任务收尾失败: {exc}")
+                    return
+                if verdict is not None and getattr(verdict, "is_valid", False):
+                    self._remember_inner_voice_result(voice_key, verdict, now)
 
-                    tick_snapshot = await build_world_snapshot(self.stream_id, speaker_id)
-                    self._tick_world_snapshot = tick_snapshot
-                except Exception as _snap_err:
-                    logger.debug(f"{self.log_prefix} 统一快照构建失败，退回独立采集: {_snap_err}")
-            # 从能量和氛围提取参数
-            energy_params = self._extract_voice_energy_params()
-            mood_params = self._extract_voice_mood_params(ambient)
-            # 构建对话历史片段
-            dialogue_fragment = self._build_dialogue_fragment(messages)
-            relation_view = self._resolve_relation_view()
-            # 刷新快照中滞后的实时情绪值（重复回写发生在快照构建后）
-            if tick_snapshot is not None and relation_view:
-                _tu = tick_snapshot.target_user
-                _rv_ann = float(relation_view.get("annoyance_value", 0.0) or 0.0)
-                _rv_prs = float(relation_view.get("psychological_pressure", 0.0) or 0.0)
-                if _rv_ann > _tu.annoyance_value:
-                    _tu.annoyance_value = _rv_ann
-                if _rv_prs > _tu.psychological_pressure:
-                    _tu.psychological_pressure = _rv_prs
-            voice_context = self._build_inner_voice_context(
-                latest,
-                ambient,
-                relation_snapshot=relation_view,
-                awareness_snapshot=awareness,
-            )
-            phase_label = self._query_flow_phase()
-            verdict = await engine.generate_reflection(
-                heart_state_label=phase_label,
-                raw_text=raw_text,
-                speaker_name=speaker_name,
-                dialogue_history=dialogue_fragment,
-                assurance_score=energy_params.get("assurance", 0.5),
-                involvement_score=energy_params.get("involvement", 0.5),
-                mental_drain=energy_params.get("drain", 0.0),
-                endurance=energy_params.get("endurance", 100.0),
-                irritation=mood_params.get("irritation", 0.0),
-                wound_score=mood_params.get("wound", 0.0),
-                readiness=energy_params.get("readiness", 1.0),
-                speaker_id=speaker_id,
-                world_snapshot=tick_snapshot,
-                extra_context=voice_context,
-                is_admin=self._is_force_wake_admin(self._get_incoming_batch_from_context() or []),
-            )
-            if verdict.is_valid:
-                logger.debug(
-                    f"{self.log_prefix} 内心独白: "
-                    f"欲望={verdict.reply_desire_level} "
-                    f"情绪={verdict.current_mood} "
-                    f"意图数={len(verdict.intents)}"
-                )
+            task.add_done_callback(_finalize_inner_voice_task)
+        try:
+            verdict = await asyncio.shield(task)
+            if verdict is not None and getattr(verdict, "is_valid", False):
+                self._remember_inner_voice_result(voice_key, verdict, now)
             return verdict
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 内心独白调用失败: {exc}")

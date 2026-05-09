@@ -1458,3 +1458,28 @@
 - 变更需要重启主程序后生效。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T06:46:00+08:00 - Task: 修复同消息重复内心独白与目标漂移
+
+### What was done:
+- 定位用户日志中同一秒两条“心里想”的原因：同一批消息可能被主链、窥屏升级链或直接快回后台补链同时送进 `_invoke_inner_voice()`，导致独白模型真实调用两次，并向意图池重复写入。
+- 为增强心流实例新增内心独白 in-flight 任务表、短 TTL 结果缓存和意图写入去重集合，同一条用户消息在主链/后台链/窥屏链之间复用同一个独白结果。
+- `_invoke_inner_voice()` 改为优先以最新真人消息作为触发消息，不再直接使用 `messages[-1]`，避免上下文尾部混入机器人自身消息时把目标写成 `bot`。
+- 共享独白任务使用 `asyncio.shield()`，后台补链超时不会取消主链正在等待的独白任务；任务真正完成后再写入缓存并从 in-flight 表移除。
+- 主链和直接快回后台链写入意图池前统一按同一 message key 去重，避免重复意图污染后续情绪、好感、活跃和主动链路。
+- 增加 `inner_voice_single_message_dedupe` 回归契约，锁定同消息独白复用、意图写入去重、触发消息优先真人消息。
+
+### Testing:
+- `uv run ruff check src/chat/heart_flow/heartFC_chat_enhanced.py src/chat/heart_flow/enhanced_modules/voice_pipeline_mixin.py src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `inner_voice_single_message_dedupe=true` 系列断言。
+- `uv run python scripts/webui_smoke_test.py` 通过，确认 `state_monitor_websocket_removed=true`，状态监控 WebSocket 没有恢复。
+- `uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 修复后同一条用户消息最多只会真实生成一次内心独白；其它并发路径会等待或复用缓存结果。
+- 这会减少“复读机式的两个想法互相污染”，也会减少重复意图对情绪/好感/活跃值的干扰。
+- 情绪、好感、活跃值仍然存在并会结算，但之前双独白会把重复观察意图写进去，影响后续判断。
+- 变更需要重启主程序后生效。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
