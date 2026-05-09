@@ -4,10 +4,13 @@ from typing import Any, Dict, Optional, Tuple
 
 from src.chat.heart_flow.heartfc_state_exporter import export_heartfc_state, list_heartfc_chats
 from src.chat.heart_flow.speak_prediction_engine import get_speak_prediction_engine
+from src.common.database.slot_storage import load_slot, save_slot
 from src.webui.services.runtime_state_hub import MONITOR_OVERVIEW_CHANNEL_ID, get_runtime_state_hub
 from src.webui.runtime_config import webui_module_view
 
 _DYNAMIC_TRACE_CACHE: Dict[str, Dict[str, float]] = {}
+_MONITOR_CACHE_OVERVIEW_SLOT = "webui:heartflow_monitor:overview"
+_MONITOR_CACHE_CHANNEL_PREFIX = "webui:heartflow_monitor:channel:"
 _STATE_MONITOR_DEFAULTS: Dict[str, Dict[str, float]] = {
     "emotion": {
         "boredom_show": 0.35,
@@ -117,6 +120,46 @@ def is_channel_monitor_packet(packet: Optional[Dict[str, Any]], channel_id: str 
     if channel_id and str(packet.get("channel_id", "")) != str(channel_id):
         return False
     return all(isinstance(packet.get(key), dict) for key in ("domains", "presentation", "prediction"))
+
+
+def _cache_channel_slot(channel_id: str) -> str:
+    return f"{_MONITOR_CACHE_CHANNEL_PREFIX}{str(channel_id or '')}"
+
+
+def _load_cached_overview() -> Optional[Dict[str, Any]]:
+    cached = load_slot(_MONITOR_CACHE_OVERVIEW_SLOT)
+    if not isinstance(cached, dict):
+        return None
+    channels = cached.get("channels", [])
+    if not isinstance(channels, list) or not channels:
+        return None
+    packet = copy.deepcopy(cached)
+    packet["stale_cache"] = True
+    packet["snapshot_source"] = "persistent_cache"
+    packet["cache_reason"] = "no_in_process_heartflow"
+    return packet
+
+
+def _save_cached_overview(packet: Dict[str, Any]) -> None:
+    channels = packet.get("channels", []) if isinstance(packet, dict) else []
+    if isinstance(channels, list) and channels:
+        save_slot(_MONITOR_CACHE_OVERVIEW_SLOT, packet, ttl_days=7)
+
+
+def _load_cached_channel_packet(channel_id: str) -> Optional[Dict[str, Any]]:
+    cached = load_slot(_cache_channel_slot(channel_id))
+    if not is_channel_monitor_packet(cached, channel_id):
+        return None
+    packet = copy.deepcopy(cached)
+    packet["stale_cache"] = True
+    packet["snapshot_source"] = "persistent_cache"
+    packet["cache_reason"] = "chat_not_in_current_process"
+    return packet
+
+
+def _save_cached_channel_packet(channel_id: str, packet: Dict[str, Any]) -> None:
+    if is_channel_monitor_packet(packet, channel_id):
+        save_slot(_cache_channel_slot(channel_id), packet, ttl_days=7)
 
 
 async def warm_monitor_snapshots(
@@ -2284,6 +2327,17 @@ def _build_presentation(
 async def build_monitor_overview() -> Dict[str, Any]:
     overview = list_heartfc_chats()
     now = time.time()
+    if int(overview.get("active_count", 0) or 0) <= 0:
+        cached = _load_cached_overview()
+        if cached is not None:
+            cached["updated_at"] = now
+            cached["server_time"] = now
+            packet = await get_runtime_state_hub().set_snapshot(
+                MONITOR_OVERVIEW_CHANNEL_ID,
+                cached,
+                reason="monitor_overview_cache",
+            )
+            return packet
     packet = {
         "snapshot_kind": "overview",
         "updated_at": now,
@@ -2294,13 +2348,24 @@ async def build_monitor_overview() -> Dict[str, Any]:
         "channels": overview.get("channels", []),
     }
     packet = await get_runtime_state_hub().set_snapshot(MONITOR_OVERVIEW_CHANNEL_ID, packet, reason="monitor_overview")
+    _save_cached_overview(packet)
     return packet
 
 
 async def build_channel_monitor_state(channel_id: str) -> Optional[Dict[str, Any]]:
     state = await export_heartfc_state(channel_id)
     if state is None:
-        return None
+        cached = _load_cached_channel_packet(str(channel_id))
+        if cached is None:
+            return None
+        now = time.time()
+        cached["updated_at"] = now
+        cached["server_time"] = now
+        return await get_runtime_state_hub().set_snapshot(
+            str(channel_id),
+            cached,
+            reason="monitor_channel_cache",
+        )
     _, chat = _find_active_chat(channel_id)
     dashboard = _build_dashboard_snapshot(chat) if chat is not None else {"available": False, "reason": "chat_not_found"}
     prediction = get_speak_prediction_engine().predict(
@@ -2325,5 +2390,6 @@ async def build_channel_monitor_state(channel_id: str) -> Optional[Dict[str, Any
         "prediction": prediction,
     }
     packet["state_version"] = int(now * 1000)
-    await get_runtime_state_hub().set_snapshot(str(channel_id), packet, reason="monitor_build")
+    packet = await get_runtime_state_hub().set_snapshot(str(channel_id), packet, reason="monitor_build")
+    _save_cached_channel_packet(str(channel_id), packet)
     return packet

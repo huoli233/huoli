@@ -1200,3 +1200,29 @@
 - 这次没有恢复二次 rewrite，也没有重新启用自然化错字；仍保持一次主生成，只减少模板化后处理。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T02:09:48+08:00 - Task: 状态页增加跨进程最近快照缓存
+
+### What was done:
+- 现场排查确认当前机器有多份 `bot.py/main.py` 进程，8001 端口属于其中一个 `bot.py`；如果真正活跃的 Heartflow 在另一个进程，8001 进程内的 `heartflow_chat_list` 就会为空，状态页只能显示“等待会话”。
+- 在 `src/webui/services/state_monitor.py` 增加最近完整快照缓存，使用 Huoli.db 的 `persistence_slot` 保存总览和频道完整监控包。
+- `build_monitor_overview()` 在当前进程没有活跃会话时，会优先读取最近总览快照并写入运行态 hub，不再直接空等新会话。
+- `build_channel_monitor_state()` 在当前进程找不到频道时，会优先读取最近频道完整快照，避免已经计算好的状态因为进程边界丢失。
+- 状态页前端增加 `缓存快速恢复` 状态，并在最后同步卡片显示“来自最近快照”，区分实时内存态和跨进程恢复态。
+- 更新 `scripts/webui_smoke_test.py` 与 `scripts/heartflow_state_regression.py`，锁定状态页缓存恢复契约。
+
+### Testing:
+- `uv run ruff check src/webui/services/state_monitor.py scripts/webui_smoke_test.py scripts/heartflow_state_regression.py` 通过。
+- `Push-Location web/dashboard; npm run build; Pop-Location` 通过，生成新状态页构建产物。
+- `uv run python scripts/webui_smoke_test.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/model_runtime_audit.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过。
+
+### Notes:
+- 当前 8001 API 现场请求出现超时，且机器上同时存在多个 huoli/bot 进程；这说明仅靠当前进程内存无法保证看到真正活跃会话。
+- 本轮通过最近完整快照缓存缓解跨进程状态丢失；彻底一致性仍建议只保留一个主程序/WebUI 监听 8001，避免多个进程争用同一套运行态。
+- 变更需要重启主程序/WebUI 后生效；旧进程不会自动加载新缓存逻辑。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

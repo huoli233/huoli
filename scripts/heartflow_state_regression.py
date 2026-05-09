@@ -1644,7 +1644,7 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "/api/heartflow/monitor/" in dashboard_source
     assert "monitorUrl(" in dashboard_source
     assert 'if (!selectedChannel) {' in dashboard_source
-    assert 'const displayConnectionState = selectedChannel ? connectionState : "waiting";' in dashboard_source
+    assert 'const displayConnectionState = selectedChannel ? (usingCachedSnapshot ? "cached" : connectionState) : "waiting";' in dashboard_source
     assert 'window.addEventListener("blur"' not in dashboard_source
     assert 'document.addEventListener("visibilitychange"' not in dashboard_source
     assert 'window.addEventListener("focus"' not in dashboard_source
@@ -1652,10 +1652,13 @@ def check_webui_contract() -> Dict[str, Any]:
     assert 'connecting: "监听中"' in dashboard_source
     assert 'reconnecting: "续连中"' in dashboard_source
     assert 'live: "API实时同步"' in dashboard_source
+    assert 'cached: "缓存快速恢复"' in dashboard_source
+    assert "来自最近快照" in dashboard_source
     assert "实时通道暂不可用，轮询同步失败" not in dashboard_source
     assert 'polling: "补偿同步"' not in dashboard_source
     assert ".live-pill.is-polling" not in dashboard_style
     assert ".live-pill.is-waiting" in dashboard_style
+    assert ".live-pill.is-cached" in dashboard_style
     assert "下一步发言概率" in dashboard_source
     assert "Number(predictionPercent).toFixed(1)" in dashboard_source
     assert "requestAnimationFrame" in dashboard_source
@@ -1819,6 +1822,8 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
     assert "if not isinstance(existing, dict) or not existing:" in hub_source
     assert "is_channel_monitor_packet" in heartflow_router_source
     assert "warm_monitor_snapshots" in state_monitor_source
+    assert "_MONITOR_CACHE_OVERVIEW_SLOT" in state_monitor_source
+    assert "_load_cached_channel_packet" in state_monitor_source
     assert "requires_refresh" not in hub_source
     assert "def heartbeat(" not in hub_source
     assert "state_monitor_default_interval_seconds" not in core_config_source

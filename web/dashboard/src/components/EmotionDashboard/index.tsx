@@ -500,6 +500,9 @@ type MonitorPacket = {
   updated_at: number;
   server_time?: number;
   state_version?: number;
+  stale_cache?: boolean;
+  snapshot_source?: string;
+  cache_reason?: string;
   domains: {
     circadian_rhythm?: {
       expression_style?: string;
@@ -516,6 +519,9 @@ type OverviewPayload = {
   updated_at: number;
   server_time?: number;
   state_version?: number;
+  stale_cache?: boolean;
+  snapshot_source?: string;
+  cache_reason?: string;
   active_count: number;
   hidden_internal_count?: number;
   channels: OverviewChannel[];
@@ -700,6 +706,7 @@ function connectionLabel(value: string): string {
     waiting: "等待会话",
     connecting: "监听中",
     live: "API实时同步",
+    cached: "缓存快速恢复",
     reconnecting: "续连中",
     error: "同步异常",
   }[value] ?? "连接中";
@@ -842,7 +849,8 @@ export function EmotionDashboard() {
   const selectedScopeLabel = conversationScopeLabel(selectedOverview);
   const predictionPercent =
     prediction?.probability_percent ?? Number(((prediction?.speak_probability ?? 0) * 100).toFixed(1));
-  const displayConnectionState = selectedChannel ? connectionState : "waiting";
+  const usingCachedSnapshot = Boolean(packet?.stale_cache || overview?.stale_cache);
+  const displayConnectionState = selectedChannel ? (usingCachedSnapshot ? "cached" : connectionState) : "waiting";
   const liveEtaLabel = etaText(prediction, serverOffsetMs, clockNowMs);
   const liveSilenceSeconds = Math.max(
     0,
@@ -1051,7 +1059,7 @@ export function EmotionDashboard() {
         <article className="command-card">
           <span>最后同步</span>
           <strong>{packet?.updated_at ? formatClock(packet.updated_at) : "-"}</strong>
-          <p>{connectionLabel(displayConnectionState)} · {selectedScopeLabel}状态实时更新</p>
+          <p>{connectionLabel(displayConnectionState)} · {selectedScopeLabel}状态{usingCachedSnapshot ? "来自最近快照" : "实时更新"}</p>
         </article>
       </section>
 

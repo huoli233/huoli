@@ -234,9 +234,10 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     required_dashboard_fragments = {
         "overview_live_api": "/api/heartflow/monitor/live",
         "channel_live_api": "/api/heartflow/monitor/${encodeURIComponent(selectedChannel)}/live",
-        "waiting_display": 'const displayConnectionState = selectedChannel ? connectionState : "waiting";',
+        "waiting_display": 'const displayConnectionState = selectedChannel ? (usingCachedSnapshot ? "cached" : connectionState) : "waiting";',
         "no_channel_guard": "if (!selectedChannel) {",
         "api_live_label": 'live: "API实时同步"',
+        "cache_restore_label": 'cached: "缓存快速恢复"',
         "connecting_label": 'connecting: "监听中"',
         "reconnecting_label": 'reconnecting: "续连中"',
         "local_clock": "requestAnimationFrame",
@@ -271,6 +272,8 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     assert '"/monitor/{channel_id}/live"' in heartflow_router_source, "状态页频道实时 API 缺失"
     assert "is_channel_monitor_packet" in heartflow_router_source, "频道实时 API 应拒绝半成品运行态快照"
     assert "warm_monitor_snapshots" in state_monitor_source, "状态页应支持后台预热完整快照"
+    assert "_MONITOR_CACHE_OVERVIEW_SLOT" in state_monitor_source, "状态页应持久化最近总览快照"
+    assert "_load_cached_channel_packet" in state_monitor_source, "状态页应支持从最近频道快照恢复"
     assert "if not isinstance(existing, dict) or not existing:" in runtime_hub_source, "运行态增量不应从空状态制造半成品快照"
 
     state_monitor_path = PROJECT_ROOT / "src/webui/routers/websocket/state_monitor.py"
