@@ -830,3 +830,24 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 本轮涉及删除旧本地兜底入口，已建立 `preserve/full-modules-回复本地兜底移除` 保存删除前状态，并在 `delete/回复本地兜底移除` 承载实际删除改动。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-09T15:55:00+08:00 - Task: 修复回复模型单点 Gemini 鉴权失败
+
+### What was done:
+- 排查 15:50 日志，确认 `voice_driven_reply` 失败原因是本地 `config/model_config.toml` 的 `replyer` 只配置了 `gemini-2.5-flash`，该 provider 返回 401 后没有备用模型可切。
+- 修改本地忽略配置 `config/model_config.toml`：`replyer.model_list=["gemini-2.5-flash", "siliconflow-deepseek-v4-flash"]`，`selection_strategy="balance"`，保留 Gemini 优先同时提供跨 provider 兜底。
+- 更新 `template/model_config_template.toml` 的默认回复模型池，避免新部署模板仍是单点回复模型。
+- 更新 `scripts/model_runtime_audit.py`：`replyer` 不再要求单一 DeepSeek 模型，改为要求至少两个模型、包含 `siliconflow-deepseek-v4-flash` 备用、且跨 provider。
+
+### Testing:
+- `uv run python -c "...tomllib..."` 通过，确认本地 `replyer` 为 `['gemini-2.5-flash', 'siliconflow-deepseek-v4-flash']` 且策略为 `balance`。
+- `uv run python -c "from src.config.config import model_config; ..."` 通过，确认运行态加载后两个回复模型分别来自 `GeminiProxy` 与 `SiliconFlow`。
+- `uv run python scripts/model_runtime_audit.py` 通过，审计返回 `replyer` 跨 provider 备用配置。
+- `uv run ruff check scripts/model_runtime_audit.py` 通过。
+- `git diff --check -- scripts/model_runtime_audit.py template/model_config_template.toml` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q scripts/model_runtime_audit.py` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- `config/model_config.toml` 被 `.gitignore` 忽略，属于本地含密钥运行配置，本轮已修本地文件但不会提交。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`src/chat/heart_flow/heartflow.py`、`src/chat/heart_flow/heartflow_message_processor.py`、`src/chat/proactive/session_tracker.py`、`.trae/`。

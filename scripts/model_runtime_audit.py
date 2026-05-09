@@ -13,7 +13,6 @@ TOOL_MODELS = ("qwen3-30b", "qwen3-next-80b")
 NON_TOOL_TASKS = (
     "utils",
     "model_monitor",
-    "replyer",
     "planner",
     "focus_chat",
     "lightweight",
@@ -57,6 +56,20 @@ def check_runtime_model_config() -> dict[str, Any]:
                     f"{rel}:tool_use 模型 {model_name} 未声明 supports_tool_calling=true"
                 )
             route_map["tool_use"] = tool_models
+        models_by_name = {item.get("name"): item for item in data.get("models", []) if isinstance(item, dict)}
+        replyer_models = list(tasks.get("replyer", {}).get("model_list", []))
+        if replyer_models:
+            assert len(replyer_models) >= 2, f"{rel}:replyer 不能只配置单个模型: {replyer_models}"
+            assert TARGET_MODEL in replyer_models, f"{rel}:replyer 必须包含 {TARGET_MODEL} 作为备用: {replyer_models}"
+            providers: set[str] = set()
+            for model_name in replyer_models:
+                model_info = models_by_name.get(model_name)
+                assert model_info, f"{rel}:replyer 引用了未定义模型 {model_name}"
+                provider = str(model_info.get("api_provider", "") or "")
+                assert provider, f"{rel}:replyer 模型 {model_name} 缺少 api_provider"
+                providers.add(provider)
+            assert len(providers) >= 2, f"{rel}:replyer 必须跨provider配置备用模型: {replyer_models}"
+            route_map["replyer"] = replyer_models
         checked[rel] = route_map
     return checked
 
