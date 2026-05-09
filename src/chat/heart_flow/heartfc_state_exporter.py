@@ -221,6 +221,8 @@ def _expression_style_label(value: Any) -> str:
         "normal": "正常",
         "drowsy": "困倦短句",
         "stubborn": "硬撑克制",
+        "irritable": "被扰烦躁",
+        "soft_night": "夜间放轻",
         "arousal": "短时亢奋",
         "burnthrough": "熬穿失衡",
     }.get(str(value or "").strip().lower(), str(value or "") or "正常")
@@ -542,7 +544,8 @@ def _extract_circadian_rhythm(
             or summary.get("system_started_at")
             or summary.get("sync_source")
         )
-        night_cycle = get_night_cycle(channel_id) if (not summary or runtime_has_live_night) else None
+        has_cached_time_band = bool(summary.get("time_band") or summary.get("current_hour") is not None)
+        night_cycle = get_night_cycle(channel_id) if (not summary or runtime_has_live_night or not has_cached_time_band) else None
         if night_cycle is not None:
             energy_ratio = _safe_float(
                 subject.get("energy_ratio", runtime.get("energy_ratio", 1.0)),

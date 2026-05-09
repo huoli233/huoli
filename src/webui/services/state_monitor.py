@@ -181,6 +181,18 @@ def _label_energy_phase(value: Any) -> str:
     }.get(str(value or "").strip().lower(), "未知")
 
 
+def _label_expression_style(value: Any) -> str:
+    return {
+        "normal": "正常",
+        "drowsy": "困倦短句",
+        "stubborn": "硬撑克制",
+        "irritable": "被扰烦躁",
+        "soft_night": "夜间放轻",
+        "arousal": "短时亢奋",
+        "burnthrough": "熬穿失衡",
+    }.get(str(value or "").strip().lower(), str(value or "") or "正常")
+
+
 def _label_scene_heat(value: Any) -> str:
     return {
         "heated": "高热",
@@ -1390,7 +1402,9 @@ def _build_circadian_detail(domains: Dict[str, Any]) -> Dict[str, Any]:
         },
         "body_state_label": str(circadian.get("body_state_label", "正常") or "正常"),
         "mood_hint": str(circadian.get("mood_hint", "") or "状态平稳"),
-        "expression_style_label": str(circadian.get("expression_style_label", "正常") or "正常"),
+        "expression_style_label": _label_expression_style(
+            circadian.get("expression_style_label") or circadian.get("expression_style") or "normal"
+        ),
     }
 
 

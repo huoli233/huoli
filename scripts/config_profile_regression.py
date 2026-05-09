@@ -308,7 +308,6 @@ api_request_limit = 144
 
 [profile_mapping.semantic_domains.webui_websocket]
 auth_max_connections_per_user = 7
-state_monitor_default_interval_seconds = 1.5
 
 [profile_mapping.semantic_domains.webui_git_mirror]
 max_retries = 4
@@ -319,6 +318,11 @@ boredom_show = 0.41
 
 [profile_mapping.semantic_domains.webui_state_monitor_thresholds.prediction]
 probability_high = 0.74
+
+[profile_mapping.semantic_domains.night_cycle_runtime]
+morning_drowsiness_cap = 31.0
+daytime_response_suppression_cap = 0.11
+max_iteration_passes = 4
 
 [profile_mapping.semantic_domains.brain_chat_runtime]
 parallel_action_timeout_seconds = 88.0
@@ -656,6 +660,9 @@ edit_scope = "mixed"
 user_editable_keys = ["emotion", "relationship", "trauma", "memory", "prediction", "scene", "attention", "circadian"]
 system_only_keys = ["autonomy", "pending", "safety"]
 
+[profile_mapping.module_views.night_cycle_runtime]
+semantic_domains = ["night_cycle_runtime"]
+
 [profile_mapping.module_views.brain_chat_runtime]
 semantic_domains = ["brain_chat_runtime"]
 
@@ -944,13 +951,21 @@ def main() -> None:
         assert recall_shuffle.edit_scope == "mixed"
         assert recall_shuffle.user_editable_keys == ("probability", "wrong_word_map", "shuffle_types")
         assert hub.resolve_module_view("webui_rate_limit").values["auth_request_limit"] == 12
-        assert hub.resolve_module_view("webui_websocket").values["auth_max_connections_per_user"] == 7
+        webui_websocket = hub.resolve_module_view("webui_websocket")
+        assert webui_websocket.values["auth_max_connections_per_user"] == 7
+        assert "state_monitor_default_interval_seconds" not in webui_websocket.values
+        assert "state_monitor_min_interval_seconds" not in webui_websocket.values
+        assert "state_monitor_max_interval_seconds" not in webui_websocket.values
         assert hub.resolve_module_view("webui_git_mirror").values["clone_timeout_seconds"] == 420
         webui_thresholds = hub.resolve_module_view("webui_state_monitor_thresholds")
         assert webui_thresholds.values["emotion"]["boredom_show"] == 0.41
         assert webui_thresholds.values["prediction"]["probability_high"] == 0.74
         assert webui_thresholds.edit_scope == "mixed"
         assert webui_thresholds.user_editable_keys == ("emotion", "relationship", "trauma", "memory", "prediction", "scene", "attention", "circadian")
+        night_cycle_runtime = hub.resolve_module_view("night_cycle_runtime")
+        assert night_cycle_runtime.values["morning_drowsiness_cap"] == 31.0
+        assert night_cycle_runtime.values["daytime_response_suppression_cap"] == 0.11
+        assert night_cycle_runtime.values["max_iteration_passes"] == 4
         assert hub.resolve_module_view("brain_chat_runtime").values["parallel_action_timeout_seconds"] == 88.0
         assert hub.resolve_module_view("brain_planner").values["planner_timeout_seconds"] == 22.0
         assert hub.resolve_module_view("brain_pfc_action").values["llm_timeout_seconds"] == 26.0

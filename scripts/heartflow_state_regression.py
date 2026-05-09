@@ -698,12 +698,18 @@ def check_night_status_label_contract() -> Dict[str, Any]:
     assert "def persist_state" in night_source
     assert "_load_persisted_state" in night_source
     assert "_night_state_slot_key" in night_source
+    assert "_apply_daytime_state_calibration" in night_source
+    assert 'resolve_module_view("night_cycle_runtime")' in night_source
+    assert "daytime_drowsiness_cap" in night_source
+    assert "MAX_ITERATION_PASSES" not in night_source
+    assert "CONVERGENCE_EPSILON" not in night_source
     assert "data/night_cycle_state" not in night_source
     assert "is_night=clock_is_night" in night_source
     assert "self._state.in_night_mode = clock_is_night" in night_source
     assert "self._state.last_stimulus_at = now" in night_source
     assert "get_night_cycle(channel_id)" in exporter_source
     assert "runtime_has_live_night" in exporter_source
+    assert "has_cached_time_band" in exporter_source
     assert "evaluate_current(" in exporter_source
     assert '"late_night", "半夜", "睡眠窗口开始"' in night_source
     assert '"midnight", "凌晨", "凌晨反思窗口"' in night_source
@@ -715,6 +721,8 @@ def check_night_status_label_contract() -> Dict[str, Any]:
     assert '"pressure_breakdown"' in exporter_source
     assert '"mechanism_windows"' in exporter_source
     assert '"last_evaluated_at"' in exporter_source
+    assert '"irritable": "被扰烦躁"' in exporter_source
+    assert '"soft_night": "夜间放轻"' in exporter_source
     feedback_source = (ROOT / "src/chat/heart_flow/enhanced_modules/loop_resource_feedback_mixin.py").read_text(
         encoding="utf-8"
     )
@@ -747,6 +755,7 @@ def check_night_status_label_contract() -> Dict[str, Any]:
                 },
                 "sleep_reply_cap": 2,
                 "remaining_sleep_replies": 1,
+                "expression_style": "irritable",
             }
         }
     )
@@ -756,6 +765,7 @@ def check_night_status_label_contract() -> Dict[str, Any]:
     assert detail["last_evaluated_at"] == 1778258282.0
     assert detail["pressure_breakdown"]["interrupt_count"] == 2
     assert detail["reply_quota_label"] == "1/2"
+    assert detail["expression_style_label"] == "被扰烦躁"
     exported = _extract_circadian_rhythm(
         "regression-night",
         {
@@ -782,6 +792,11 @@ def check_night_status_label_contract() -> Dict[str, Any]:
     assert exported["is_pressure_window"] is True
     assert exported["mechanism_windows"]["sleep_window"]["active"] is True
     assert exported["pressure_breakdown"]["chat_minutes"] == 9
+    assert _extract_circadian_rhythm(
+        "regression-night-style",
+        {"cached_night_summary": {"expression_style": "irritable"}},
+        {},
+    )["expression_style_label"] == "被扰烦躁"
     direct_exported = _extract_circadian_rhythm(
         "regression-night-created",
         {},
@@ -793,6 +808,38 @@ def check_night_status_label_contract() -> Dict[str, Any]:
         assert direct_exported["mechanism_windows"]
     finally:
         remove_night_cycle("regression-night-created")
+    daytime = NightCycleSystem("regression-night-daytime")
+    try:
+        from src.core.night_cycle_system import NightPhase
+
+        daytime._state.current_phase = NightPhase.DEEP_SLEEP
+        daytime._state.drowsiness_value = 100.0
+        daytime._state.sleepiness = 100.0
+        daytime._state.half_asleep_level = 1.0
+        daytime._state.body_state_tag = "deep_half_asleep"
+        daytime._state.response_suppression_coef = 0.96
+        daytime._state.last_drowsiness_tick = 0.0
+        daytime._state.pressure_last_tick = 0.0
+        daytime._state.derivative_timestamp = 0.0
+        daytime.evaluate(
+            energy_ratio=1.0,
+            activity_level=35.0,
+            boredom=0.0,
+            social_stimulus=0.0,
+            consecutive_active_minutes=0.0,
+            current_hour=9,
+        )
+        behavior = daytime.night_behavior_summary()
+        assert behavior["current_hour"] == 9
+        assert daytime.state_snapshot.last_evaluated_hour == 9
+        assert behavior["time_band"] == "morning"
+        assert behavior["phase"] == "awake"
+        assert behavior["phase_label"] == "清醒"
+        assert behavior["drowsiness_value"] < 60.0
+        assert behavior["body_state_tag"] != "deep_half_asleep"
+        assert behavior["response_suppression"] < 0.4
+    finally:
+        remove_night_cycle("regression-night-daytime")
     from src.common.database.database_model import PersistenceSlot
     from src.core.night_cycle_system import _night_state_slot_key
 
@@ -825,6 +872,8 @@ def check_night_status_label_contract() -> Dict[str, Any]:
         "night_labels": True,
         "midnight_phase_label": detail["phase_label"],
         "time_band_label": exported["time_band_label"],
+        "daytime_realtime_calibrated": True,
+        "expression_style_label": detail["expression_style_label"],
         "persistent_night_state": True,
     }
 
@@ -1466,6 +1515,12 @@ def check_webui_contract() -> Dict[str, Any]:
     assert 'type: "refresh"' not in dashboard_source
     assert "requires_refresh" not in dashboard_source
     assert "liveEtaLabel" in dashboard_source
+    assert "function expressionStyleLabel" in dashboard_source
+    assert "function circadianExpressionStyle" in dashboard_source
+    assert "irritable: \"被扰烦躁\"" in dashboard_source
+    assert "soft_night: \"夜间放轻\"" in dashboard_source
+    assert "circadianExpressionStyle(packet, circadianDetail)" in dashboard_source
+    assert "<strong>{circadianDetail?.expression_style_label ?? \"正常\"}</strong>" not in dashboard_source
 
     heartflow_router_source = (ROOT / "src/webui/routers/heartflow.py").read_text(encoding="utf-8")
     assert "asyncio.to_thread(build_config_scope_snapshot)" not in heartflow_router_source
@@ -1574,18 +1629,29 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
 
     websocket_source = (ROOT / "src/webui/routers/websocket/state_monitor.py").read_text(encoding="utf-8")
     hub_source = (ROOT / "src/webui/services/runtime_state_hub.py").read_text(encoding="utf-8")
+    core_config_source = (ROOT / "config/core_config.toml").read_text(encoding="utf-8")
+    core_template_source = (ROOT / "template/core_config_template.toml").read_text(encoding="utf-8")
     assert "state_delta" in websocket_source
     assert "state_heartbeat" not in websocket_source
     assert '"refresh"' not in websocket_source
     assert '"type": "state_snapshot"' in websocket_source
     assert "state_overview" not in websocket_source
     assert "subscription.get()" in websocket_source
+    assert "subscription: Optional[asyncio.Queue] = None" in websocket_source
+    assert "await send_snapshot()\n        subscription = await hub.subscribe(channel_id)" in websocket_source
+    assert "await send_snapshot()\n                        await rebuild_subscription(old_channel, channel_id)" in websocket_source
     assert "asyncio.sleep(" not in websocket_source
     assert "asyncio.wait_for(websocket.receive_json(), timeout=interval)" not in websocket_source
     assert "class RuntimeStateHub" in hub_source
     assert "emit_runtime_delta" in hub_source
     assert "requires_refresh" not in hub_source
     assert "def heartbeat(" not in hub_source
+    assert "state_monitor_default_interval_seconds" not in core_config_source
+    assert "state_monitor_min_interval_seconds" not in core_config_source
+    assert "state_monitor_max_interval_seconds" not in core_config_source
+    assert "state_monitor_default_interval_seconds" not in core_template_source
+    assert "state_monitor_min_interval_seconds" not in core_template_source
+    assert "state_monitor_max_interval_seconds" not in core_template_source
     return asyncio.run(_exercise())
 
 

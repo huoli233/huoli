@@ -500,7 +500,13 @@ type MonitorPacket = {
   updated_at: number;
   server_time?: number;
   state_version?: number;
-  domains: Record<string, unknown>;
+  domains: {
+    circadian_rhythm?: {
+      expression_style?: string;
+      expression_style_label?: string;
+    };
+    [key: string]: unknown;
+  };
   presentation: Presentation;
   prediction: Prediction;
 };
@@ -674,6 +680,26 @@ function modelPathLabel(value: string | undefined): string {
     large: "大模型",
     small_fallback: "小模型兜底",
   }[value ?? ""] ?? (value || "未裁定");
+}
+
+function expressionStyleLabel(value: string | undefined): string {
+  return {
+    normal: "正常",
+    drowsy: "困倦短句",
+    stubborn: "硬撑克制",
+    irritable: "被扰烦躁",
+    soft_night: "夜间放轻",
+    arousal: "短时亢奋",
+    burnthrough: "熬穿失衡",
+  }[value ?? ""] ?? (value || "正常");
+}
+
+function circadianExpressionStyle(packet: MonitorPacket | null, detail: CircadianDetail | undefined): string {
+  return expressionStyleLabel(
+    detail?.expression_style_label ??
+      packet?.domains?.circadian_rhythm?.expression_style_label ??
+      packet?.domains?.circadian_rhythm?.expression_style,
+  );
 }
 
 function connectionLabel(value: string): string {
@@ -1126,7 +1152,7 @@ export function EmotionDashboard() {
             </div>
             <div className="metric-tile">
               <span>表达风格</span>
-              <strong>{circadianDetail?.expression_style_label ?? "正常"}</strong>
+              <strong>{circadianExpressionStyle(packet, circadianDetail)}</strong>
               <p>回复抑制 {percent(circadianDetail?.response_suppression)}</p>
             </div>
             <div className="metric-tile">

@@ -142,6 +142,19 @@ IDX_RESERVE = 2
 DIM_3D = 3
 
 _DIM_NAMES = ["drowsiness", "pressure", "reserve"]
+_DEFAULT_NIGHT_CYCLE_RUNTIME: Dict[str, float] = {
+    "daytime_drowsiness_cap": 54.0,
+    "morning_drowsiness_cap": 36.0,
+    "afternoon_slump_drowsiness_cap": 62.0,
+    "daytime_sleepiness_cap": 32.0,
+    "morning_sleepiness_cap": 18.0,
+    "daytime_half_asleep_cap": 0.18,
+    "morning_half_asleep_cap": 0.08,
+    "daytime_response_suppression_cap": 0.12,
+    "max_iteration_passes": 5.0,
+    "convergence_epsilon": 0.003,
+    "convergence_score_epsilon_multiplier": 0.5,
+}
 
 
 class NightPhase(Enum):
@@ -251,6 +264,7 @@ class NightCycleState:
     sleep_debt: float = 0.0
     system_started_at: float = field(default_factory=time.time)
     last_evaluated_at: float = 0.0
+    last_evaluated_hour: int = -1
     last_sleep_quality: float = 1.0
     daily_fatigue: float = 0.0
     daily_fatigue_limit: float = 100.0
@@ -310,7 +324,6 @@ class NightCycleState:
     last_drowsiness_tick: float = field(default_factory=time.time)
     drowsiness_tick_interval: float = 6.0
     drowsiness_pending_delta: float = 0.0
-
     # ── 维度二：熬夜压力 (Overnight Pressure) ──
     overnight_pressure: float = 0.0
     pressure_start_hour: int = 22
@@ -576,6 +589,35 @@ class NightCycleSystem:
         self._last_persist_at = 0.0
         self._load_persisted_state()
 
+    @staticmethod
+    def _night_cycle_runtime_view() -> Dict[str, Any]:
+        try:
+            from src.config.core_config_engine import get_core_config
+
+            return get_core_config().resolve_module_view("night_cycle_runtime").values
+        except Exception:
+            return {}
+
+    @classmethod
+    def _runtime_float(cls, key: str, fallback: float) -> float:
+        try:
+            configured = cls._night_cycle_runtime_view().get(key)
+            if configured is None:
+                configured = _DEFAULT_NIGHT_CYCLE_RUNTIME.get(key, fallback)
+            return float(configured)
+        except (TypeError, ValueError):
+            return float(_DEFAULT_NIGHT_CYCLE_RUNTIME.get(key, fallback))
+
+    @classmethod
+    def _runtime_int(cls, key: str, fallback: int) -> int:
+        try:
+            configured = cls._night_cycle_runtime_view().get(key)
+            if configured is None:
+                configured = _DEFAULT_NIGHT_CYCLE_RUNTIME.get(key, fallback)
+            return int(configured)
+        except (TypeError, ValueError):
+            return int(_DEFAULT_NIGHT_CYCLE_RUNTIME.get(key, fallback))
+
     @property
     def phase(self) -> NightPhase:
         return self._state.current_phase
@@ -695,10 +737,12 @@ class NightCycleSystem:
         force: bool = False,
     ) -> NightPhase:
         """按当前时间推进一次实时评估，供状态导出和重启恢复后校准。"""
+        current_hour = time.localtime().tm_hour
         if (
             not force
             and self._state.last_evaluated_at > 0
             and time.time() - self._state.last_evaluated_at <= 5.0
+            and self._state.last_evaluated_hour == current_hour
         ):
             return self._state.current_phase
         return self.evaluate(
@@ -707,7 +751,7 @@ class NightCycleSystem:
             boredom=boredom,
             social_stimulus=social_stimulus,
             consecutive_active_minutes=consecutive_active_minutes,
-            current_hour=time.localtime().tm_hour,
+            current_hour=current_hour,
         )
 
     def resolve_time_band(self, hour: Optional[int] = None) -> Dict[str, Any]:
@@ -912,6 +956,7 @@ class NightCycleSystem:
         now = time.time()
         self._state.in_night_mode = clock_is_night
         self._state.last_evaluated_at = now
+        self._state.last_evaluated_hour = hour
         if social_phase_active:
             self.update_night_social_energy(
                 stimulus=max(0.0, min(1.0, social_stimulus)) * 8.0,
@@ -943,6 +988,7 @@ class NightCycleSystem:
             energy_ratio=energy_ratio,
             boredom=boredom,
             consecutive_active_minutes=consecutive_active_minutes,
+            current_hour=hour,
         )
         self._update_excitement(
             social_stimulus=social_stimulus,
@@ -1266,10 +1312,10 @@ class NightCycleSystem:
         energy_ratio: float,
         boredom: float,
         consecutive_active_minutes: float,
+        current_hour: Optional[int] = None,
     ) -> None:
         s = self._state
-        now = time.localtime()
-        hour = now.tm_hour
+        hour = time.localtime().tm_hour if current_hour is None else int(current_hour) % 24
         _is_dawn = self._dawn_recover_start <= hour < self._sleep_end_hour
         if _is_dawn:
             s.sleepiness = max(0.0, s.sleepiness - 0.8)
@@ -1286,9 +1332,50 @@ class NightCycleSystem:
             if energy_ratio > 0.7:
                 decay_rate += 0.2
             s.sleepiness = max(0.0, s.sleepiness - decay_rate)
+            self._apply_daytime_state_calibration(hour)
         if consecutive_active_minutes > 90:
             fatigue_push = (consecutive_active_minutes - 90) * 0.02
             s.sleepiness = min(100.0, s.sleepiness + fatigue_push)
+
+    def _apply_daytime_state_calibration(self, hour: int) -> None:
+        """白天导出前按服务端时钟清理夜间残留，避免持久化旧睡眠态污染状态页。
+
+        具体阈值来自 night_cycle_runtime 配置视图，代码只负责执行实时校验。
+        """
+        if self.is_night_hours(hour) or hour >= self._night_social_start:
+            return
+        s = self._state
+        timeline = self.resolve_time_band(hour)
+        time_band = str(timeline.get("key", "") or "")
+        drowsiness_cap = self._runtime_float("daytime_drowsiness_cap", 54.0)
+        sleepiness_cap = self._runtime_float("daytime_sleepiness_cap", 32.0)
+        half_asleep_cap = self._runtime_float("daytime_half_asleep_cap", 0.18)
+        if time_band == "morning":
+            drowsiness_cap = self._runtime_float("morning_drowsiness_cap", 36.0)
+            sleepiness_cap = self._runtime_float("morning_sleepiness_cap", 18.0)
+            half_asleep_cap = self._runtime_float("morning_half_asleep_cap", 0.08)
+        elif time_band == "afternoon":
+            drowsiness_cap = self._runtime_float("afternoon_slump_drowsiness_cap", 62.0)
+        s.drowsiness_value = min(s.drowsiness_value, max(0.0, drowsiness_cap))
+        s.sleepiness = min(s.sleepiness, max(0.0, sleepiness_cap))
+        s.half_asleep_level = min(s.half_asleep_level, max(0.0, min(1.0, half_asleep_cap)))
+        suppression_cap = self._runtime_float("daytime_response_suppression_cap", 0.12)
+        s.response_suppression_coef = min(s.response_suppression_coef, max(0.0, min(1.0, suppression_cap)))
+        s.last_d_value = min(s.last_d_value, s.drowsiness_value)
+        if s.current_phase in (
+            NightPhase.LIGHT_SLEEP,
+            NightPhase.DEEP_SLEEP,
+            NightPhase.DROWSY,
+            NightPhase.MIDNIGHT_REFLECT,
+            NightPhase.QUIET_CONTEMPLATE,
+            NightPhase.DAWN_RECOVER,
+        ):
+            s.current_phase = NightPhase.AWAKE
+            s.phase_entered_at = time.time()
+        s.in_lazy_state = False
+        s.peek_window_open = False
+        s.sleep_started_at = 0.0
+        s.sleep_stage = "awake"
 
     def _update_excitement(
         self,
@@ -1639,7 +1726,19 @@ class NightCycleSystem:
         )
         _3d_status = self.get_3d_engine_status()
         pressure_breakdown = self.get_overnight_pressure_breakdown()
-        time_band = self.resolve_time_band()
+        try:
+            evaluated_hour = int(s.last_evaluated_hour)
+        except (TypeError, ValueError):
+            evaluated_hour = -1
+        if evaluated_hour != time.localtime().tm_hour:
+            self.evaluate_current(force=True)
+            s = self._state
+            try:
+                evaluated_hour = int(s.last_evaluated_hour)
+            except (TypeError, ValueError):
+                evaluated_hour = -1
+        summary_hour = evaluated_hour if 0 <= evaluated_hour <= 23 else None
+        time_band = self.resolve_time_band(summary_hour)
         current_hour = time_band["hour"]
         mechanism_windows = self.mechanism_windows(current_hour)
         clock_is_night = self.is_night_hours(current_hour)
@@ -2042,6 +2141,8 @@ class NightCycleSystem:
             now=now,
             energy_ratio=energy_ratio,
         )
+        if not is_night and hour < self._night_social_start:
+            self._apply_daytime_state_calibration(hour)
         raw_d = max(0.0, s.drowsiness_value)
         raw_p = max(0.0, s.overnight_pressure)
         raw_s = max(1e-6, s.sleep_reserve)
@@ -3393,9 +3494,6 @@ class NightCycleSystem:
     #  耦合矩阵 / 导数感知 / 迭代收敛 / 滞后反馈 / 阈值漂移 / 随机微扰
     # ════════════════════════════════════════════════════════
 
-    MAX_ITERATION_PASSES = 5
-    CONVERGENCE_EPSILON = 0.003
-
     def _build_3d_coupling_template(self) -> List[List[float]]:
         """构建三维耦合矩阵模板(3×3)
 
@@ -3542,16 +3640,19 @@ class NightCycleSystem:
           4. 收敛阻尼：后续轮次修正幅度递减
 
         收敛条件（任一满足即停止）：
-          - delta_bar < CONVERGENCE_EPSILON (0.003)
-          - delta_score < CONVERGENCE_EPSILON * 0.5
-          - 达到最大轮次 MAX_ITERATION_PASSES (5)
+          - delta_bar 低于 night_cycle_runtime.convergence_epsilon
+          - delta_score 低于收敛阈值乘数
+          - 达到 night_cycle_runtime.max_iteration_passes
 
         返回: (final_composite, passes_used, final_delta_bar, final_delta_score)
         """
         s = self._state
         prev_composite = 0.0
         verdict_composite = 0.0
-        for pass_num in range(1, self.MAX_ITERATION_PASSES + 1):
+        max_passes = max(1, self._runtime_int("max_iteration_passes", 5))
+        convergence_epsilon = max(0.0001, self._runtime_float("convergence_epsilon", 0.003))
+        score_multiplier = max(0.01, self._runtime_float("convergence_score_epsilon_multiplier", 0.5))
+        for pass_num in range(1, max_passes + 1):
             convergence_damp = 1.0 / (1.0 + pass_num * 0.35)
             d_eff = self._coupled_dimension_value(
                 IDX_DROWSINESS,
@@ -3618,8 +3719,8 @@ class NightCycleSystem:
             s.last_convergence_delta_bar = delta_bar
             s.last_convergence_delta_score = delta_score
             if (
-                delta_bar < self.CONVERGENCE_EPSILON
-                and delta_score < self.CONVERGENCE_EPSILON * 0.5
+                delta_bar < convergence_epsilon
+                and delta_score < convergence_epsilon * score_multiplier
             ):
                 s.convergence_achieved = True
                 break

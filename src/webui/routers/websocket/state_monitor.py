@@ -34,7 +34,7 @@ async def websocket_state_monitor_endpoint(
 
     logger.debug(f"状态实时事件通道已建立: {session_id}, 会话={channel_id}")
     hub = get_runtime_state_hub()
-    subscription = await hub.subscribe(channel_id)
+    subscription: Optional[asyncio.Queue] = None
     client_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
 
     async def read_client_messages() -> None:
@@ -69,11 +69,13 @@ async def websocket_state_monitor_endpoint(
 
     async def rebuild_subscription(old_channel: Optional[str], target_channel: Optional[str]) -> None:
         nonlocal subscription
-        await hub.unsubscribe(subscription, old_channel)
+        if subscription is not None:
+            await hub.unsubscribe(subscription, old_channel)
         subscription = await hub.subscribe(target_channel)
 
     try:
         await send_snapshot()
+        subscription = await hub.subscribe(channel_id)
         reader_task = asyncio.create_task(read_client_messages())
         while True:
             event_task = asyncio.create_task(subscription.get())
@@ -114,8 +116,8 @@ async def websocket_state_monitor_endpoint(
                             continue
                         old_channel = channel_id
                         channel_id = target_channel
-                        await rebuild_subscription(old_channel, channel_id)
                         await send_snapshot()
+                        await rebuild_subscription(old_channel, channel_id)
                     else:
                         await websocket.send_json({"type": "echo", "data": data})
                 elif event_task in done:
@@ -126,7 +128,8 @@ async def websocket_state_monitor_endpoint(
     finally:
         if "reader_task" in locals():
             reader_task.cancel()
-        await hub.unsubscribe(subscription, channel_id)
+        if subscription is not None:
+            await hub.unsubscribe(subscription, channel_id)
         logger.debug(f"状态实时事件通道已断开: {session_id}")
 
 

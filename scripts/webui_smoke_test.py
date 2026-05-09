@@ -247,6 +247,8 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     state_monitor_source = (PROJECT_ROOT / "src/webui/routers/websocket/state_monitor.py").read_text(
         encoding="utf-8"
     )
+    core_config_source = (PROJECT_ROOT / "config/core_config.toml").read_text(encoding="utf-8")
+    core_template_source = (PROJECT_ROOT / "template/core_config_template.toml").read_text(encoding="utf-8")
 
     required_dashboard_fragments = {
         "channel_gate": "const shouldSyncRealtime = Boolean(selectedChannel);",
@@ -291,9 +293,18 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     assert "channel_id required" in state_monitor_source, "状态监控 WebSocket 应拒绝未指定会话的总览订阅"
     assert "build_monitor_overview" not in state_monitor_source, "状态监控 WebSocket 不应再构建总览快照"
     assert "subscription.get()" in state_monitor_source, "状态监控 WebSocket 应订阅运行态事件"
+    assert (
+        "await send_snapshot()\n        subscription = await hub.subscribe(channel_id)" in state_monitor_source
+    ), "状态监控 WebSocket 应先直发快照再订阅后续事件，避免初始快照重复"
     assert "state_heartbeat" not in state_monitor_source, "状态监控 WebSocket 不应固定间隔推送心跳"
     assert "asyncio.sleep(" not in state_monitor_source, "状态监控 WebSocket 不应使用定时 sleep 推送状态"
     assert "interval:" not in state_monitor_source, "状态监控 WebSocket 不应保留 interval 轮询参数"
+    assert "state_monitor_default_interval_seconds" not in core_config_source, "状态页实时通道不应保留固定间隔配置"
+    assert "state_monitor_min_interval_seconds" not in core_config_source, "状态页实时通道不应保留固定间隔配置"
+    assert "state_monitor_max_interval_seconds" not in core_config_source, "状态页实时通道不应保留固定间隔配置"
+    assert "state_monitor_default_interval_seconds" not in core_template_source, "状态页模板不应保留固定间隔配置"
+    assert "state_monitor_min_interval_seconds" not in core_template_source, "状态页模板不应保留固定间隔配置"
+    assert "state_monitor_max_interval_seconds" not in core_template_source, "状态页模板不应保留固定间隔配置"
 
     return {
         "activation_gate": True,

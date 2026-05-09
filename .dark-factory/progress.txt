@@ -763,3 +763,30 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 本轮不是删除类改动，没有新增删除分支。
 - 当前分支为 `delete/状态页假实时轮询移除`，本轮只精确暂存心流回复生成与回归脚本；工作区仍存在非本轮改动/删除。
+
+## 2026-05-09T09:48:58+08:00 - Task: 状态页时间线实时校验与中文展示修复
+
+### What was done:
+- 排查状态页“时间线状态”字段来源，确认展示链路为 `heartfc_state_exporter` 导出 `circadian_rhythm`，`state_monitor` 聚合为 `presentation.circadian_detail`，前端只展示后端结果。
+- 修复夜间状态持久化导致上午仍显示深睡/半梦半醒/困意 100 的问题：`NightCycleSystem.evaluate_current()` 会在服务端小时变化时重新评估，`night_behavior_summary()` 会用最新评估小时生成时段。
+- 新增白天状态实时校验：非睡眠窗口会按 `night_cycle_runtime` 配置上限清理夜间残留的困意、睡意、半梦半醒、回复抑制和睡眠阶段。
+- 新增 `night_cycle_runtime` 配置视图，将白天/上午/午后困意校验上限、半梦半醒上限、回复抑制上限、CDE 迭代轮数和收敛阈值放入 `core_config.toml` 与模板。
+- 移除 `webui_websocket` 中状态页旧的 `state_monitor_*_interval_seconds` 固定间隔配置，避免误导为状态页仍按固定间隔轮询。
+- 补齐 `irritable`、`soft_night` 表达风格中文映射，后端导出和状态页聚合层都不再把英文枚举直接暴露给前端；前端也加了兜底中文化。
+- 修复状态页 WebSocket 初始快照重复推送：先直发一次当前快照，再订阅后续运行态事件，避免 `set_snapshot()` 发布的初始事件又被同连接收到。
+- 重新构建状态页静态资源，旧 hash 资源 `index-CEZGdhd_.js` 被新构建产物 `index-B6pJ8c5O.js` 替换。
+
+### Testing:
+- `uv run ruff check src\core\night_cycle_system.py src\chat\heart_flow\heartfc_state_exporter.py src\webui\services\state_monitor.py src\webui\routers\websocket\state_monitor.py scripts\heartflow_state_regression.py scripts\config_profile_regression.py scripts\webui_smoke_test.py` 通过。
+- `uv run python scripts\config_profile_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，覆盖上午 9 点深睡旧状态校验、表达风格中文化、实时通道无固定间隔配置、初始快照不重复订阅。
+- `cd web\dashboard && npm run build` 通过，生成 `web/dashboard/dist/assets/index-B6pJ8c5O.js`。
+- `uv run python scripts\webui_smoke_test.py` 通过，HTTP 80 项 ok、WebSocket 路由通过、状态监控无固定 heartbeat/refresh/interval。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src\webui src\core src\chat scripts` 通过。
+- `git diff --check` 针对本轮文件通过。
+- Chrome headless 打开本地 `http://127.0.0.1:8765/dashboard` 通过，DOM 渲染出 `机器人实时状态栏`、`时间线状态`，并加载新包 `index-B6pJ8c5O.js`；验证后已清理临时 uvicorn 进程和 DOM 文件。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前分支为 `delete/状态页假实时轮询移除`，已有保留分支 `preserve/full-modules-状态页假实时轮询移除`。
+- 本轮只提交状态页时间线/实时通道相关文件、配置、回归脚本、状态页构建产物和进度记录；无关脏文件仍保留在工作区：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
