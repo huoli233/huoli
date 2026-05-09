@@ -1058,3 +1058,24 @@
 - `config/model_config.toml` 被 `.gitignore` 忽略，本地运行已生效但不会进入 Git 提交。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-09T23:21:00+08:00 - Task: 修复 GeminiProxy 2.5 Flash 接口协议
+
+### What was done:
+- 定位日志中的 `gemini-2.5-flash` 鉴权失败不是模型名错误，而是运行配置把 OpenAI 兼容代理按 Gemini SDK 协议调用。
+- 按截图中的预览地址修正本地运行配置：`GeminiProxy.base_url` 改为 `http://23.251.34.69:3003/v1`，使 OpenAI 客户端请求 `/v1/chat/completions`。
+- 将本地运行配置中 `gemini-2.5-flash` 的模型级 `client_type` 改为 `openai`，不再覆盖 provider 的 OpenAI 兼容客户端。
+- 更新 `scripts/model_runtime_audit.py`，增加 GeminiProxy/OpenAI 兼容契约：OpenAI provider 下的 `gemini-2.5-flash` 不能再写成 `client_type="gemini"`，本地 GeminiProxy 地址必须带 `/v1`。
+
+### Testing:
+- TOML 解析确认 `GeminiProxy.base_url=http://23.251.34.69:3003/v1`，provider 和 `gemini-2.5-flash` 均使用 `client_type=openai`。
+- `uv run ruff check scripts/model_runtime_audit.py` 通过。
+- `uv run python scripts/model_runtime_audit.py` 通过，确认 `gemini-2.5-flash` 路由和 OpenAI 兼容客户端契约有效。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过。
+
+### Notes:
+- `config/model_config.toml` 被 `.gitignore` 忽略，本地运行已修正但不会进入 Git 提交。
+- 修复后需要重启服务，已创建的模型客户端缓存才会重新按 `openai` 客户端和 `/v1` 地址初始化。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

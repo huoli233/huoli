@@ -41,6 +41,33 @@ def _assert_no_blocked_runtime_model_text(rel: str, path: Path) -> None:
     assert not blocked, f"{rel} 仍包含非指定 Gemini 配置: {blocked}"
 
 
+def _assert_target_model_client_contract(rel: str, data: dict[str, Any]) -> None:
+    providers = {
+        str(provider.get("name")): provider
+        for provider in data.get("api_providers", [])
+        if isinstance(provider, dict) and provider.get("name")
+    }
+    models = [item for item in data.get("models", []) if isinstance(item, dict)]
+    for model in models:
+        if model.get("name") != TARGET_MODEL:
+            continue
+        provider_name = str(model.get("api_provider", "") or "")
+        provider = providers.get(provider_name)
+        assert provider, f"{rel}:{TARGET_MODEL} 引用了未定义 provider {provider_name}"
+        provider_client_type = str(provider.get("client_type", "") or "").strip().lower()
+        model_client_type = str(model.get("client_type", "") or "").strip().lower()
+        if provider_client_type == "openai":
+            assert model_client_type in {"", "openai"}, (
+                f"{rel}:{TARGET_MODEL} 使用 OpenAI 兼容 provider={provider_name}，"
+                f"模型级 client_type 不能覆盖为 {model_client_type!r}"
+            )
+        if rel == "config/model_config.toml" and provider_name == "GeminiProxy":
+            base_url = str(provider.get("base_url", "") or "").rstrip("/")
+            assert base_url.endswith("/v1"), (
+                f"{rel}:GeminiProxy 是 OpenAI 兼容地址，base_url 必须带 /v1: {base_url}"
+            )
+
+
 def check_runtime_model_config() -> dict[str, Any]:
     checked: dict[str, Any] = {}
     for rel in (
@@ -53,6 +80,7 @@ def check_runtime_model_config() -> dict[str, Any]:
             continue
         _assert_no_blocked_runtime_model_text(rel, path)
         data = _load_toml(path)
+        _assert_target_model_client_contract(rel, data)
         tasks = data.get("model_task_config", {})
         route_map: dict[str, list[str]] = {}
         for task_name, task_config in tasks.items():
