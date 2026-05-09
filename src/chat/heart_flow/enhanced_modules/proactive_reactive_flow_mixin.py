@@ -28,7 +28,9 @@ from src.common.data_models.heartflow_models import FlowPhase, UnifiedFlowSnapsh
 from src.chat.heart_flow.enhanced_modules.shared_runtime import (
     logger,
     _rng,
+    _rt_int,
     _rt_float,
+    _rt_str_list,
     _parallel_stage_timeout,
     _llm_upgrade_timeout,
     _TICK_FLOOR_SEC,
@@ -52,6 +54,15 @@ if TYPE_CHECKING:
 
 class ProactiveReactiveFlowMixin:
     @staticmethod
+    def _pick_runtime_text(key: str, seed_text: str) -> str:
+        candidates = _rt_str_list(key)
+        if not candidates:
+            logger.warning(f"runtime_tuning.{key} 缺失，强制回复兜底无法生成配置话术")
+            return ""
+        index = sum(ord(ch) for ch in str(seed_text or "")) % len(candidates)
+        return candidates[index]
+
+    @staticmethod
     def _build_forced_reply_fallback_text(target_message: Any) -> str:
         raw_text = (
             getattr(target_message, "processed_plain_text", "")
@@ -61,46 +72,42 @@ class ProactiveReactiveFlowMixin:
         )
         text = re.sub(r"\s+", " ", str(raw_text or "")).strip()
         if not text:
-            return "看到了。"
+            return ProactiveReactiveFlowMixin._pick_runtime_text(
+                "heartfc_force_reply_fallback_empty_texts",
+                text,
+            )
         lowered = text.lower()
         if "刀盾" in text:
-            candidates = (
-                "刀盾又到了，你想让我接哪句？",
-                "还在刀盾，换个说法我才好接。",
-                "刀盾我看见了，别只丢这四个字。",
+            return ProactiveReactiveFlowMixin._pick_runtime_text(
+                "heartfc_force_reply_fallback_daodun_texts",
+                text,
             )
         elif "爱丽丝" in text:
-            candidates = (
-                "在。",
-                "叫我干嘛？",
-                "听着呢，说事。",
+            return ProactiveReactiveFlowMixin._pick_runtime_text(
+                "heartfc_force_reply_fallback_bot_name_texts",
+                text,
             )
         elif any(marker in text for marker in ("?", "？", "什么", "怎么", "为啥", "为什么")):
-            candidates = (
-                "你这句问得太短了，补半句。",
-                "我看见问题了，你具体指哪块？",
-                "说清楚点，我再接。",
+            return ProactiveReactiveFlowMixin._pick_runtime_text(
+                "heartfc_force_reply_fallback_question_texts",
+                text,
             )
         elif lowered in {"hi", "hello", "hey"} or text in {"你好", "在吗", "在不在"}:
-            candidates = (
-                "在。",
-                "嗯，在听。",
-                "说吧。",
+            return ProactiveReactiveFlowMixin._pick_runtime_text(
+                "heartfc_force_reply_fallback_greeting_texts",
+                text,
             )
-        elif len(text) <= 6:
-            candidates = (
-                f"{text}，然后呢？",
-                "就这几个字？补一句。",
-                "看到了，你想让我怎么接？",
+        short_text_max_chars = _rt_int("heartfc_force_reply_fallback_short_text_max_chars")
+        if len(text) <= short_text_max_chars:
+            template = ProactiveReactiveFlowMixin._pick_runtime_text(
+                "heartfc_force_reply_fallback_short_texts",
+                text,
             )
-        else:
-            candidates = (
-                "看到了，你继续说。",
-                "收到，这句我先记着。",
-                "嗯，我看见了。",
+            return template.format(text=text)
+        return ProactiveReactiveFlowMixin._pick_runtime_text(
+            "heartfc_force_reply_fallback_default_texts",
+            text,
             )
-        index = sum(ord(ch) for ch in text) % len(candidates)
-        return candidates[index]
 
     def _build_forced_reply_fallback_response(self, target_message: Any, failure_reason: str) -> Any:
         from src.common.data_models.llm_data_model import LLMGenerationDataModel
@@ -202,6 +209,24 @@ class ProactiveReactiveFlowMixin:
             if force_generation_fallback:
                 extra_info_parts.append("[直接快回] 一句短口语，直接回应当前消息；不做长篇解释，不二次改写，不补充追发。")
                 self._inject_fallback_soul_state(extra_info_parts)
+                self_reference_parts = self._build_self_reference_parts(target_message)
+                if self_reference_parts.get("self_memory"):
+                    extra_info_parts.append(self_reference_parts["self_memory"])
+                if self_reference_parts.get("continuity_context"):
+                    extra_info_parts.append(self_reference_parts["continuity_context"])
+                decision_context_packet = self._build_decision_context_packet(
+                    list(incoming_batch),
+                    repetition_signal=self._analyze_repetition_pressure(incoming_batch),
+                )
+                context_execution_block = self._build_context_execution_block(
+                    target_message=target_message,
+                    voice_conclusion=voice_conclusion,
+                    repetition_signal=self._analyze_repetition_pressure(incoming_batch),
+                    decision_context_packet=decision_context_packet,
+                    relation_snapshot=relation_view,
+                )
+                if context_execution_block:
+                    extra_info_parts.append(context_execution_block)
             else:
                 decision_context_packet = self._build_decision_context_packet(
                     list(incoming_batch),
@@ -300,9 +325,9 @@ class ProactiveReactiveFlowMixin:
             from src.chat.heart_flow.reply_coordinator import acquire_reply_coordinator
 
             generation_failure_reason = "voice_generation_failed"
-            force_reply_timeout = _rt_float("heartfc_force_reply_generation_timeout_seconds", 35.0)
+            force_reply_timeout = _rt_float("heartfc_force_reply_generation_timeout_seconds")
             if force_generation_fallback:
-                force_reply_timeout = _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds", 8.0)
+                force_reply_timeout = _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds")
                 logger.debug(f"{self.log_prefix} ⚡ 直接快回生成预算={force_reply_timeout:.1f}s")
             reply_generation = acquire_reply_coordinator().generate_reply(
                 channel_id=self.stream_id,
@@ -410,11 +435,27 @@ class ProactiveReactiveFlowMixin:
           - 深度评估（含LLM调用）：仅在评估通过后触发
           - 冷却期：主动发言后30-60秒内不再主动触发
         """
-        _base_interval = _rt_float("heartfc_background_proactive_base_interval_seconds", 12.0)
-        _min_interval = _rt_float("heartfc_background_proactive_min_interval_seconds", 6.0)
-        _max_interval = _rt_float("heartfc_background_proactive_max_interval_seconds", 30.0)
-        _cooldown_min = _rt_float("heartfc_background_proactive_success_cooldown_min_seconds", 90.0)
-        _cooldown_max = _rt_float("heartfc_background_proactive_success_cooldown_max_seconds", 180.0)
+        _base_interval = _rt_float("heartfc_background_proactive_base_interval_seconds")
+        _min_interval = _rt_float("heartfc_background_proactive_min_interval_seconds")
+        _max_interval = _rt_float("heartfc_background_proactive_max_interval_seconds")
+        _cooldown_min = _rt_float("heartfc_background_proactive_success_cooldown_min_seconds")
+        _cooldown_max = _rt_float("heartfc_background_proactive_success_cooldown_max_seconds")
+        _cooldown_poll = _rt_float("heartfc_background_proactive_cooldown_poll_seconds")
+        _low_energy_threshold = _rt_float("heartfc_background_proactive_low_energy_threshold")
+        _high_energy_threshold = _rt_float("heartfc_background_proactive_high_energy_threshold")
+        _low_energy_interval_multiplier = _rt_float("heartfc_background_proactive_low_energy_interval_multiplier")
+        _high_energy_interval_multiplier = _rt_float("heartfc_background_proactive_high_energy_interval_multiplier")
+        _base_interval_increase = _rt_float("heartfc_background_proactive_interval_increase_seconds")
+        _base_interval_decrease = _rt_float("heartfc_background_proactive_interval_decrease_seconds")
+        _dashboard_backoff_multiplier = _rt_float("heartfc_background_proactive_dashboard_backoff_multiplier")
+        _short_silence_skip_seconds = _rt_float("heartfc_background_proactive_short_silence_skip_seconds")
+        _short_silence_skip_after_loops = _rt_int("heartfc_background_proactive_short_silence_skip_after_loops")
+        _short_silence_sleep_multiplier = _rt_float("heartfc_background_proactive_short_silence_sleep_multiplier")
+        _post_bot_reply_guard_seconds = _rt_float("heartfc_background_proactive_post_bot_reply_guard_seconds")
+        _post_bot_reply_sleep_multiplier = _rt_float("heartfc_background_proactive_post_bot_reply_sleep_multiplier")
+        _fail_backoff_threshold = _rt_int("heartfc_background_proactive_fail_backoff_threshold")
+        _fail_backoff_unit_seconds = _rt_float("heartfc_background_proactive_fail_backoff_unit_seconds")
+        _fail_backoff_max_seconds = _rt_float("heartfc_background_proactive_fail_backoff_max_seconds")
         _cooldown_until = 0.0
         _consecutive_fails = 0
         _loop_count = 0
@@ -424,20 +465,20 @@ class ProactiveReactiveFlowMixin:
                 _loop_count += 1
                 _now_loop = time.time()
                 if _now_loop < _cooldown_until:
-                    await asyncio.sleep(min(2.0, _cooldown_until - _now_loop))
+                    await asyncio.sleep(min(_cooldown_poll, _cooldown_until - _now_loop))
                     continue
                 _energy_mod = 1.0
                 _ms = getattr(self, "_cached_metabolism_state", None)
                 if _ms:
                     _er = float(getattr(_ms, "energy_ratio", getattr(_ms, "chat_energy_ratio", 1.0)) or 1.0)
-                    if _er < 0.3:
-                        _energy_mod = 2.5
-                        _base_interval = min(_max_interval, _base_interval + 1.0)
-                    elif _er > 0.8:
-                        _energy_mod = 0.7
-                        _base_interval = max(_min_interval, _base_interval - 0.5)
+                    if _er < _low_energy_threshold:
+                        _energy_mod = _low_energy_interval_multiplier
+                        _base_interval = min(_max_interval, _base_interval + _base_interval_increase)
+                    elif _er > _high_energy_threshold:
+                        _energy_mod = _high_energy_interval_multiplier
+                        _base_interval = max(_min_interval, _base_interval - _base_interval_decrease)
                 else:
-                    _base_interval = _rt_float("heartfc_background_proactive_base_interval_seconds", 12.0)
+                    _base_interval = _rt_float("heartfc_background_proactive_base_interval_seconds")
                 _interval = max(
                     _min_interval,
                     min(_max_interval, _base_interval * _energy_mod),
@@ -449,7 +490,7 @@ class ProactiveReactiveFlowMixin:
                         await asyncio.sleep(_interval)
                         continue
                     if _dv_urgency in ("不回复", "强制休息"):
-                        await asyncio.sleep(_interval * 1.5)
+                        await asyncio.sleep(_interval * _dashboard_backoff_multiplier)
                         continue
                 except Exception as _exc:
                     logger.debug(f"非关键异常: {_exc}")
@@ -462,11 +503,11 @@ class ProactiveReactiveFlowMixin:
                     _silence = get_quiet_monitor().measure_silence_sec(self.stream_id)
                 except Exception as _exc:
                     logger.debug(f"非关键异常: {_exc}")
-                if _silence < 3.0 and _loop_count > 3:
-                    await asyncio.sleep(_interval * 0.5)
+                if _silence < _short_silence_skip_seconds and _loop_count > _short_silence_skip_after_loops:
+                    await asyncio.sleep(_interval * _short_silence_sleep_multiplier)
                     continue
-                if (time.time() - self._last_bot_reply_ts) < 5.0:
-                    await asyncio.sleep(_interval * 0.3)
+                if (time.time() - self._last_bot_reply_ts) < _post_bot_reply_guard_seconds:
+                    await asyncio.sleep(_interval * _post_bot_reply_sleep_multiplier)
                     continue
                 _should_act = False
                 _act_reason = ""
@@ -495,15 +536,15 @@ class ProactiveReactiveFlowMixin:
                             max(_cooldown_min, _cooldown_max),
                         )
                         _consecutive_fails = 0
-                        _base_interval = max(_min_interval, _base_interval - 1.0)
+                        _base_interval = max(_min_interval, _base_interval - _base_interval_increase)
                     else:
                         _consecutive_fails += 1
-                        _base_interval = min(_max_interval, _base_interval + 0.5)
+                        _base_interval = min(_max_interval, _base_interval + _base_interval_decrease)
                 except Exception as exc:
                     logger.warning(f"{self.log_prefix} 主动通道执行失败: {exc}")
                     _consecutive_fails += 1
-                if _consecutive_fails >= 3:
-                    _backoff = min(30.0, 5.0 * _consecutive_fails)
+                if _consecutive_fails >= _fail_backoff_threshold:
+                    _backoff = min(_fail_backoff_max_seconds, _fail_backoff_unit_seconds * _consecutive_fails)
                     logger.debug(f"{self.log_prefix} 主动通道连续{_consecutive_fails}次失败，退避{_backoff:.0f}s")
                     await asyncio.sleep(_backoff)
                     _consecutive_fails = 0
@@ -533,13 +574,13 @@ class ProactiveReactiveFlowMixin:
             startup_guard_until = float(getattr(self, "_proactive_startup_grace_until", 0.0) or 0.0)
             if now < startup_guard_until:
                 return False, "启动保护期"
-            _min_silence = _rt_float("heartfc_background_proactive_min_silence_seconds", 45.0)
+            _min_silence = _rt_float("heartfc_background_proactive_min_silence_seconds")
             if silence_sec < _min_silence:
                 return False, f"静默不足({silence_sec:.0f}s/{_min_silence:.0f}s)"
         _cooldown = (
             self._IDLE_PROACTIVE_COOLDOWN_SEC
             if not is_background
-            else _rt_float("heartfc_background_proactive_cooldown_seconds", 90.0)
+            else _rt_float("heartfc_background_proactive_cooldown_seconds")
         )
         if (now - self._last_idle_proactive_ts) < _cooldown:
             return False, "冷却中"
@@ -565,7 +606,8 @@ class ProactiveReactiveFlowMixin:
                     try:
                         _d6 = EnergyChainDimension.get_instance()
                         _nm = _d6._get_night_mode(self.stream_id)
-                        if _nm and _nm.prob_multiplier < 0.3:
+                        _sleep_peek_prob_floor = _rt_float("heartfc_background_proactive_sleep_peek_probability_floor")
+                        if _nm and _nm.prob_multiplier < _sleep_peek_prob_floor:
                             return False, "浅睡无窥屏窗"
                     except Exception as _exc:
                         logger.debug(f"非关键异常: {_exc}")
@@ -575,7 +617,9 @@ class ProactiveReactiveFlowMixin:
             from src.modules.trauma.trauma_system import get_trauma_system
 
             _ts = get_trauma_system().get_state()
-            if _ts.stress_accumulation > 8.0 or _ts.inner_chaos_level > 8.0:
+            _stress_limit = _rt_float("heartfc_background_proactive_trauma_stress_limit")
+            _chaos_limit = _rt_float("heartfc_background_proactive_inner_chaos_limit")
+            if _ts.stress_accumulation > _stress_limit or _ts.inner_chaos_level > _chaos_limit:
                 return False, f"压力过高(stress={_ts.stress_accumulation:.1f})"
         except Exception as _e:
             logger.debug(f"异常: {_e}")
@@ -597,7 +641,8 @@ class ProactiveReactiveFlowMixin:
                 self._last_background_event = _scheduled_event
                 _event_type = str(_scheduled_event.get("type", "") or "")
                 _event_priority = float(_scheduled_event.get("priority", 0.0) or 0.0)
-                if _event_priority >= 0.18:
+                _event_priority_floor = _rt_float("heartfc_background_proactive_event_priority_floor")
+                if _event_priority >= _event_priority_floor:
                     return True, f"后台事件触发:{_event_type}(priority={_event_priority:.2f})"
         # 优先尝试 IntegrationHub (async，在此处 await)
         _hub_succeeded = False
@@ -740,7 +785,7 @@ class ProactiveReactiveFlowMixin:
             elif isinstance(voice_conclusion, str):
                 thought_text = voice_conclusion
         if not thought_text:
-            thought_text = "感觉有点想说话"
+            thought_text = self._pick_runtime_text("heartfc_background_proactive_default_thought_texts", str(now_act))
 
         # ── 流程规划器决策：是否适合主动发言 + 发言策略 ──
         _proactive_plan = None
@@ -758,13 +803,19 @@ class ProactiveReactiveFlowMixin:
             # 从最近的 bot 发言和频道氛围构建真实话题上下文
             _bot_recent = self._recent_bot_texts()
             if _bot_recent:
-                _recent_topic = _bot_recent[-1][:100]
-            elif thought_text and thought_text != "感觉有点想说话":
-                _recent_topic = thought_text[:100]
+                _topic_chars = _rt_int("heartfc_background_proactive_recent_topic_max_chars")
+                _recent_topic = _bot_recent[-1][:_topic_chars]
+            elif thought_text:
+                _default_thoughts = set(_rt_str_list("heartfc_background_proactive_default_thought_texts"))
+                if thought_text not in _default_thoughts:
+                    _topic_chars = _rt_int("heartfc_background_proactive_recent_topic_max_chars")
+                    _recent_topic = thought_text[:_topic_chars]
             # 构建 bot 最近发言摘要，让规划器知道之前聊了什么
             _bot_context = ""
             if _bot_recent:
-                _ctx_lines = [f"- {t[:80]}" for t in _bot_recent[-3:]]
+                _bot_context_count = _rt_int("heartfc_background_proactive_bot_context_count")
+                _bot_context_chars = _rt_int("heartfc_background_proactive_bot_context_line_max_chars")
+                _ctx_lines = [f"- {t[:_bot_context_chars]}" for t in _bot_recent[-_bot_context_count:]]
                 _bot_context = "你最近说过的话:\n" + "\n".join(_ctx_lines)
             # 从内心独白导出最近的观察记忆（看过什么、想过什么、为什么沉默）
             _observation_ctx = ""
@@ -780,12 +831,15 @@ class ProactiveReactiveFlowMixin:
             # 构建近期对话记录（带用户名），让规划器知道群里谁说了什么
             _dialogue_lines = []
             _recent_msgs = []
+            _dialogue_window_sec = _rt_float("heartfc_background_proactive_dialogue_window_seconds")
+            _dialogue_limit = _rt_int("heartfc_background_proactive_dialogue_limit")
+            _dialogue_line_chars = _rt_int("heartfc_background_proactive_dialogue_line_max_chars")
             try:
                 _recent_msgs = message_api.get_messages_by_time_in_chat(
                     chat_id=self.stream_id,
-                    start_time=time.time() - 600,
+                    start_time=time.time() - _dialogue_window_sec,
                     end_time=time.time(),
-                    limit=15,
+                    limit=_dialogue_limit,
                     limit_mode="latest",
                 )
                 for _rm in _recent_msgs:
@@ -799,7 +853,7 @@ class ProactiveReactiveFlowMixin:
                         getattr(_rm, "processed_plain_text", "") or getattr(_rm, "plain_text", "") or ""
                     ).strip()
                     if _rm_text:
-                        _dialogue_lines.append(f"{_rm_nick}: {_rm_text[:120]}")
+                        _dialogue_lines.append(f"{_rm_nick}: {_rm_text[:_dialogue_line_chars]}")
             except Exception as _exc:
                 logger.debug(f"非关键异常: {_exc}")
             _recent_dialogue = "\n".join(_dialogue_lines) if _dialogue_lines else ""
@@ -812,13 +866,17 @@ class ProactiveReactiveFlowMixin:
                 _vex = float(ambient_info.get("vexation", 0) or 0)
                 _cat = str(ambient_info.get("category", "未知") or "未知")
                 _atmosphere_parts.append(f"频道氛围类型: {_cat}")
-                if _vit > 60:
+                _vitality_active_threshold = _rt_float("heartfc_background_proactive_vitality_active_threshold")
+                _vitality_quiet_threshold = _rt_float("heartfc_background_proactive_vitality_quiet_threshold")
+                _weariness_threshold = _rt_float("heartfc_background_proactive_weariness_threshold")
+                _vexation_threshold = _rt_float("heartfc_background_proactive_vexation_threshold")
+                if _vit > _vitality_active_threshold:
                     _atmosphere_parts.append("群里气氛挺活跃的")
-                elif _vit < 25:
+                elif _vit < _vitality_quiet_threshold:
                     _atmosphere_parts.append("群里比较冷清")
-                if _wear > 50:
+                if _wear > _weariness_threshold:
                     _atmosphere_parts.append("大家似乎有点疲倦")
-                if _vex > 40:
+                if _vex > _vexation_threshold:
                     _atmosphere_parts.append("气氛有些烦躁")
             # 统计近期活跃用户
             _active_users = {}
@@ -852,21 +910,21 @@ class ProactiveReactiveFlowMixin:
                         _r_parts = []
                         if _r_blocked:
                             _r_parts.append("已屏蔽")
-                        elif _r_intimacy > 60:
+                        elif _r_intimacy > _rt_float("heartfc_background_proactive_intimacy_close_threshold"):
                             _r_parts.append("很熟")
-                        elif _r_intimacy > 30:
+                        elif _r_intimacy > _rt_float("heartfc_background_proactive_intimacy_known_threshold"):
                             _r_parts.append("有一定了解")
                         else:
                             _r_parts.append("不太熟")
-                        if _r_fondness > 50:
+                        if _r_fondness > _rt_float("heartfc_background_proactive_fondness_like_threshold"):
                             _r_parts.append("挺喜欢他的")
-                        elif _r_fondness < -20:
+                        elif _r_fondness < _rt_float("heartfc_background_proactive_fondness_dislike_threshold"):
                             _r_parts.append("不太喜欢他")
-                        if _r_annoy > 60:
+                        if _r_annoy > _rt_float("heartfc_background_proactive_annoyance_high_threshold"):
                             _r_parts.append("最近对他很烦")
-                        elif _r_annoy > 30:
+                        elif _r_annoy > _rt_float("heartfc_background_proactive_annoyance_medium_threshold"):
                             _r_parts.append("有点烦他")
-                        if _r_trust > 40:
+                        if _r_trust > _rt_float("heartfc_background_proactive_trust_threshold"):
                             _r_parts.append("比较信任")
                         _relationship_parts.append(
                             f"{_nick}: {'，'.join(_r_parts)}" if _r_parts else f"{_nick}: 印象一般"
@@ -882,22 +940,23 @@ class ProactiveReactiveFlowMixin:
             if _ws is not None:
                 _res = getattr(_ws, "self_resources", None)
                 if _res is not None:
-                    _chat_pct = int(getattr(_res, "chat_ratio", lambda: 0.5)() * 100)
-                    _think_pct = int(getattr(_res, "thinking_ratio", lambda: 0.5)() * 100)
+                    _ratio_to_percent = _rt_float("heartfc_background_proactive_ratio_to_percent")
+                    _chat_pct = int(getattr(_res, "chat_ratio", lambda: 0.5)() * _ratio_to_percent)
+                    _think_pct = int(getattr(_res, "thinking_ratio", lambda: 0.5)() * _ratio_to_percent)
                     _boredom = float(getattr(_res, "boredom", 0) or 0)
                     _loneliness = float(getattr(_res, "loneliness", 0) or 0)
                     _social_desire = float(getattr(_res, "social_desire", 0) or 0)
                     _consec = int(getattr(_res, "consecutive_replies", 0) or 0)
                     _self_state_parts.append(f"聊天精力: {_chat_pct}%，思考精力: {_think_pct}%")
-                    if _boredom > 50:
+                    if _boredom > _rt_float("heartfc_background_proactive_boredom_hint_threshold"):
                         _self_state_parts.append("你现在挺无聊的")
-                    if _loneliness > 50:
+                    if _loneliness > _rt_float("heartfc_background_proactive_loneliness_hint_threshold"):
                         _self_state_parts.append("你有点孤独，想找人聊天")
-                    if _social_desire > 60:
+                    if _social_desire > _rt_float("heartfc_background_proactive_social_desire_high_threshold"):
                         _self_state_parts.append("社交欲望很强")
-                    elif _social_desire < 20:
+                    elif _social_desire < _rt_float("heartfc_background_proactive_social_desire_low_threshold"):
                         _self_state_parts.append("不太想社交")
-                    if _consec > 3:
+                    if _consec > _rt_int("heartfc_background_proactive_consecutive_reply_warn_threshold"):
                         _self_state_parts.append(f"你已经连续主动说了{_consec}次，可能该歇歇了")
             _self_state_ctx = "\n".join(_self_state_parts) if _self_state_parts else ""
             _proactive_plan = await acquire_flow_planner().generate_proactive_plan(
@@ -929,9 +988,9 @@ class ProactiveReactiveFlowMixin:
             logger.debug(f"{self.log_prefix} 流程规划器异常(降级): {_fp_exc}")
 
         # 从内心独白提取实际 desire，不再硬编码
-        _actual_desire = 5
+        _actual_desire = _rt_int("heartfc_background_proactive_default_desire_level")
         if voice_conclusion is not None:
-            _actual_desire = int(getattr(voice_conclusion, "reply_desire_level", 5) or 5)
+            _actual_desire = int(getattr(voice_conclusion, "reply_desire_level", _actual_desire) or _actual_desire)
         # 从规划器结果提取话题和情绪
         _proactive_topic = ""
         _proactive_emotion = ""
@@ -963,11 +1022,13 @@ class ProactiveReactiveFlowMixin:
         # 收集近期消息供执行器定位引用目标
         _proactive_incoming = []
         try:
+            _incoming_window_sec = _rt_float("heartfc_background_proactive_incoming_window_seconds")
+            _incoming_limit = _rt_int("heartfc_background_proactive_incoming_limit")
             _proactive_incoming = message_api.get_messages_by_time_in_chat(
                 chat_id=self.stream_id,
-                start_time=time.time() - 600,
+                start_time=time.time() - _incoming_window_sec,
                 end_time=time.time(),
-                limit=15,
+                limit=_incoming_limit,
                 limit_mode="latest",
             )
         except Exception as _exc:
@@ -995,11 +1056,14 @@ class ProactiveReactiveFlowMixin:
                     mention_user_name=_mention_user_name,
                     reference_user_name=_reference_user_name,
                 ),
-                timeout=120.0,
+                timeout=_rt_float("heartfc_background_proactive_reply_timeout_seconds"),
             )
         except asyncio.TimeoutError:
             acted = False
-            logger.error(f"{self.log_prefix} ⚠️ 后台主动回复超时(120s)")
+            logger.error(
+                f"{self.log_prefix} ⚠️ 后台主动回复超时"
+                f"({_rt_float('heartfc_background_proactive_reply_timeout_seconds'):.0f}s)"
+            )
         if acted:
             self._last_idle_proactive_ts = now_act
             self._last_background_event = {}

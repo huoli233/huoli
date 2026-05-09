@@ -1,5 +1,6 @@
 import random
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Dict, List
 
 from src.common.logger import get_logger
@@ -10,6 +11,8 @@ logger = get_logger("心流增强")
 
 # 独立随机数生成器实例，避免 random.seed() 污染全局状态
 _rng = random.Random()
+_RT_MISSING = object()
+_RUNTIME_TUNING_FILE_CACHE: Dict[str, Any] | None = None
 
 
 @dataclass
@@ -139,16 +142,97 @@ _WATCH_LEVEL_BY_RANK = {
 }
 
 
-def _rt_float(key: str, default: float) -> float:
-    """从 runtime_tuning 读取浮点参数，失败时返回默认值"""
+def _load_runtime_tuning_file_defaults() -> Dict[str, Any]:
+    global _RUNTIME_TUNING_FILE_CACHE
+    if _RUNTIME_TUNING_FILE_CACHE is not None:
+        return dict(_RUNTIME_TUNING_FILE_CACHE)
+    values: Dict[str, Any] = {}
+    try:
+        import tomllib
+
+        project_root = Path(__file__).resolve().parents[4]
+        for rel_path in ("template/core_config_template.toml", "config/core_config.toml"):
+            path = project_root / rel_path
+            if not path.exists():
+                continue
+            with path.open("rb") as fh:
+                data = tomllib.load(fh)
+            top_level = data.get("runtime_tuning", {})
+            if isinstance(top_level, dict):
+                values.update(top_level)
+            profile_values = (
+                data.get("profile_mapping", {})
+                .get("semantic_domains", {})
+                .get("runtime_tuning", {})
+            )
+            if isinstance(profile_values, dict):
+                values.update(profile_values)
+    except Exception as exc:
+        logger.debug(f"读取 runtime_tuning 文件默认值失败: {exc}")
+    _RUNTIME_TUNING_FILE_CACHE = dict(values)
+    return values
+
+
+def _rt_value(key: str, default: Any = _RT_MISSING) -> Any:
+    """从 runtime_tuning 读取任意类型参数，失败时返回默认值。"""
     try:
         from src.config.core_config_engine import get_core_config
 
-        val = get_core_config().resolve_module_view("runtime_tuning").values.get(key, default)
-        return float(val)
+        values = get_core_config().resolve_module_view("runtime_tuning").values
+        if key in values:
+            return values[key]
     except Exception as exc:
         logger.debug(f"读取运行时配置 {key} 失败: {exc}")
+    file_defaults = _load_runtime_tuning_file_defaults()
+    if key in file_defaults:
+        return file_defaults[key]
+    if default is not _RT_MISSING:
         return default
+    return None
+
+
+def _rt_float(key: str, default: Any = _RT_MISSING) -> float:
+    """从 runtime_tuning 读取浮点参数，失败时返回默认值。"""
+    try:
+        return float(_rt_value(key, default))
+    except (TypeError, ValueError):
+        if default is not _RT_MISSING:
+            try:
+                return float(default)
+            except (TypeError, ValueError):
+                pass
+        logger.debug(f"运行时配置 {key} 不是合法浮点数，使用默认值 {default}")
+        return 0.0
+
+
+def _rt_int(key: str, default: Any = _RT_MISSING) -> int:
+    """从 runtime_tuning 读取整数参数，失败时返回默认值。"""
+    try:
+        return int(_rt_value(key, default))
+    except (TypeError, ValueError):
+        if default is not _RT_MISSING:
+            try:
+                return int(default)
+            except (TypeError, ValueError):
+                pass
+        logger.debug(f"运行时配置 {key} 不是合法整数，使用默认值 {default}")
+        return 0
+
+
+def _rt_str_list(key: str, default: Any = _RT_MISSING) -> List[str]:
+    """从 runtime_tuning 读取字符串列表，失败或为空时返回默认列表。"""
+    raw = _rt_value(key, default)
+    if isinstance(raw, str):
+        items = [raw]
+    elif isinstance(raw, (list, tuple, set)):
+        items = [str(item) for item in raw if str(item).strip()]
+    else:
+        items = []
+    if items:
+        return items
+    if default is not _RT_MISSING and isinstance(default, (list, tuple, set)):
+        return [str(item) for item in default if str(item).strip()]
+    return []
 
 
 def _task_provider_timeout(task_name: str, default: float = 10.0) -> float:

@@ -513,6 +513,28 @@
 - 本轮不删除历史 `data/night_cycle_state/*.json`，仅继续沿用上一轮 DB 写入和旧 JSON 只读兼容策略。
 - 工作区内已有文档删除、`.gitmessage-cn.txt` 删除、`.trae/`、`dashboard-status-smoke.png`、`src/memory_system/memory_consolidator.py` 不属于本轮。
 
+## 2026-05-09T08:16:02+08:00 - Task: 排查并治理主动/被动流硬编码
+
+### What was done:
+- 排查 `src/chat/heart_flow/enhanced_modules` 的硬编码来源，确认问题主要来自 HeartFC 拆分成 mixin 后只迁移了部分公共阈值，主动循环、强制回复兜底、社交阈值和上下文窗口仍散在业务流程中。
+- 为 `shared_runtime.py` 增加 `_rt_value`、`_rt_int`、`_rt_str_list`，并支持从 `config/core_config.toml` / `template/core_config_template.toml` 读取 runtime_tuning 文件默认值，避免业务模块继续携带数字/列表默认值。
+- 将 `proactive_reactive_flow_mixin.py` 中强制回复本地兜底话术、短文本阈值、强制回复超时、后台主动通道间隔/冷却/退避、能量阈值、静默窗口、压力阈值、事件优先级、规划上下文窗口、社交关系阈值和主动回复执行超时迁入 `runtime_tuning`。
+- 同步更新 `config/core_config.toml` 与 `template/core_config_template.toml`，让当前运行配置和新部署模板都包含这些配置项。
+
+### Testing:
+- `uv run ruff check src/chat/heart_flow/enhanced_modules/shared_runtime.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py` 通过。
+- TOML 解析与 required runtime_tuning 配置键检查通过，确认当前配置和模板均包含新增强制回复/后台主动通道配置。
+- `uv run python scripts/config_profile_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过。
+- `uv run ruff check src/chat/heart_flow/enhanced_modules/shared_runtime.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py scripts/config_profile_regression.py scripts/heartflow_state_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX = "$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check -- src/chat/heart_flow/enhanced_modules/shared_runtime.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py config/core_config.toml template/core_config_template.toml` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此本轮不能更新任务 passes/completedAt。
+- 工作区内已有 `.gitmessage-cn.txt` 删除、多个 docs 删除、脚本/WebUI/其他 HeartFC 文件修改、`.trae/`、dashboard dist 变动不属于本轮，已避免暂存。
+- `proactive_reactive_flow_mixin.py` 中剩余数字主要是日志截断、切片、模型协议字段、枚举/状态值或对象默认空值，不属于本轮迁移的运行调优参数；更大范围的 `enhanced_modules` 全量参数化需要继续按模块分批处理。
+
 ## 2026-05-09T06:37:14+08:00 - Task: 修复管理员权限污染与核心状态 JSON 写入割裂
 
 ### What was done:
