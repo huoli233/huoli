@@ -68,15 +68,15 @@ class LoopReplyExecutionMixin:
         pre_chatterbox = float(getattr(self, "_chatterbox_penalty", 0.0) or 0.0)
         pre_unanswered = int(getattr(self, "_unanswered_bot_turns", 0) or 0)
         settlement_parts = [
-            f"门控={getattr(self, '_last_legacy_gate', 'allow')}",
+            f"门控={getattr(self, '_last_gateway_gate', 'allow')}",
             f"主动={1 if proactive_reply else 0}",
         ]
-        legacy_breakdown = getattr(self, "_last_legacy_breakdown", None)
-        if did_reply and isinstance(legacy_breakdown, dict) and legacy_breakdown:
-            settlement_parts.append(f"准入={legacy_breakdown.get('reply_readiness', 0):.1f}")
-            settlement_parts.append(f"资源扣={legacy_breakdown.get('resource_penalty', 0):.1f}")
-            settlement_parts.append(f"关系扣={legacy_breakdown.get('relation_penalty', 0):.1f}")
-            settlement_parts.append(f"重复扣={legacy_breakdown.get('repeat_penalty', 0):.1f}")
+        gateway_breakdown = getattr(self, "_last_gateway_breakdown", None)
+        if did_reply and isinstance(gateway_breakdown, dict) and gateway_breakdown:
+            settlement_parts.append(f"准入={gateway_breakdown.get('reply_readiness', 0):.1f}")
+            settlement_parts.append(f"资源扣={gateway_breakdown.get('resource_penalty', 0):.1f}")
+            settlement_parts.append(f"关系扣={gateway_breakdown.get('relation_penalty', 0):.1f}")
+            settlement_parts.append(f"重复扣={gateway_breakdown.get('repeat_penalty', 0):.1f}")
         self._sync_interest_level_from_desire()
         await self._apply_reply_drain_dynamic(incoming_batch, relation_result)
         await self._update_social_metrics(
@@ -181,7 +181,7 @@ class LoopReplyExecutionMixin:
 
             _adapter = get_panel_adapter()
             _trace_brief = self._decision_trace_brief()
-            _reasoning_text = str(getattr(self, "_last_legacy_gate", "") or "")
+            _reasoning_text = str(getattr(self, "_last_gateway_gate", "") or "")
             if _trace_brief:
                 _reasoning_text = f"{_reasoning_text} | {_trace_brief}" if _reasoning_text else _trace_brief
             _action_result = {
@@ -271,8 +271,8 @@ class LoopReplyExecutionMixin:
             logger.info(f"{self.log_prefix} 规划器要求回复，但当前没有可回复目标")
             return False
 
-        legacy_gate = str(getattr(self, "_last_legacy_gate", "allow") or "allow")
-        force_bypass = bool(force_reply_message is not None or legacy_gate == "force_reply")
+        gateway_gate = str(getattr(self, "_last_gateway_gate", "allow") or "allow")
+        force_bypass = bool(force_reply_message is not None or gateway_gate == "force_reply")
         targeted_to_bot = bool(force_bypass or getattr(self, "_cached_targeted_to_bot", False))
         restraint = await self._run_self_restraint_check(
             decision_messages,
@@ -297,7 +297,7 @@ class LoopReplyExecutionMixin:
             reply_reason = acquire_reply_coordinator().compose_reply_reason(
                 base_reason=getattr(planner_decision, "reason", "统一规划器决定回复") or "统一规划器决定回复",
                 content_plan=content_plan,
-                legacy_gate=legacy_gate,
+                gateway_gate=gateway_gate,
             )
 
             if repetition_signal is None:
@@ -331,7 +331,7 @@ class LoopReplyExecutionMixin:
             )
             if context_execution_block:
                 extra_parts.append(context_execution_block)
-            if legacy_gate == "hesitate":
+            if gateway_gate == "hesitate":
                 extra_parts.append(
                     "[低可回复度约束] 当前只允许一句短回复，优先澄清、确认、轻量接话；"
                     "不要长篇展开，不要主动延伸新话题，不要输出高情绪高承诺表达。"

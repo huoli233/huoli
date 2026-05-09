@@ -105,8 +105,8 @@ class ProactiveReactiveFlowMixin:
                 logger.info(f"{self.log_prefix} 💭 内心驱动回复缺少目标消息，转为观察")
                 return False
 
-            legacy_gate = str(getattr(self, "_last_legacy_gate", "allow") or "allow")
-            force_bypass = bool(force_reply_message is not None or legacy_gate == "force_reply")
+            gateway_gate = str(getattr(self, "_last_gateway_gate", "allow") or "allow")
+            force_bypass = bool(force_reply_message is not None or gateway_gate == "force_reply")
             targeted_to_bot = bool(force_bypass or getattr(self, "_cached_targeted_to_bot", False))
             restraint = await self._run_self_restraint_check(
                 incoming_batch,

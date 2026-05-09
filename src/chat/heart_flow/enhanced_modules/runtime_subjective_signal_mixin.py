@@ -527,11 +527,11 @@ class RuntimeSubjectiveSignalMixin:
                         _result["confidence"] += 0.28
                         _pattern_changed = True
         # T3: 连续否定检测
-        _legacy_hits = getattr(self, "_legacy_constraint_hits", 0)
-        if _legacy_hits >= 3:
+        _gateway_hits = getattr(self, "_gateway_constraint_hits", 0)
+        if _gateway_hits >= 3:
             _result["should_learn"] = True
             _result["trigger_types"].append("T3_repeated_constraints")
-            _result["confidence"] += min(0.40, _legacy_hits * 0.10)
+            _result["confidence"] += min(0.40, _gateway_hits * 0.10)
         # T4: 关系阶跃检测
         _rel_snap_g = self._normalize_relation_snapshot(getattr(self, "_last_relation_snapshot", None) or {})
         _aff_now = float(_rel_snap_g.get("affection", 0.0) or 0.0)

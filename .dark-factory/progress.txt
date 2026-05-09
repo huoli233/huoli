@@ -988,3 +988,27 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 本轮只清理旧注释、旧兜底和未使用初始化字段；未迁移仍在现役决策链中使用的 `legacy_gate` 内部命名。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-09T17:03:53+08:00 - Task: 清理心流网关旧命名与废弃配置
+
+### What was done:
+- 按删除分支规则确认 `preserve/full-modules-心流网关旧命名清理` 已存在，并在 `delete/心流网关旧命名清理` 上执行本轮清理。
+- 将心流增强链路中现役维度网关状态从 `legacy_gate/_last_legacy_*` 迁移为 `gateway_gate/_last_gateway_*`。
+- 将决策 trace、执行阶段、source_votes、回复原因拼接、WebUI 阶段标签统一改为 `gateway_*` 命名。
+- 删除 `config/core_config.toml` 中不再被现役代码读取的 `heartfc_legacy_gate_*` 配置残留。
+- 更新 `scripts/heartflow_state_regression.py`，增加心流网关命名契约，防止旧网关命名和旧配置块回流。
+
+### Testing:
+- 静态搜索 `rg "heartfc_legacy_gate|legacy_gate|_last_legacy|legacy_constraint|legacy_block|legacy_high_desire|legacy_breakdown|legacy_hits|legacy_penalty|legacy_reason" src/chat/heart_flow src/webui scripts config template` 无命中。
+- `uv run ruff check scripts/heartflow_state_regression.py src/chat/heart_flow/heartFC_chat_enhanced.py src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py src/chat/heart_flow/enhanced_modules/loop_reply_execution_mixin.py src/chat/heart_flow/enhanced_modules/loop_resource_feedback_mixin.py src/chat/heart_flow/enhanced_modules/loop_state_flow_mixin.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py src/chat/heart_flow/enhanced_modules/runtime_state_trace_mixin.py src/chat/heart_flow/enhanced_modules/runtime_subjective_signal_mixin.py src/chat/heart_flow/enhanced_modules/runtime_watch_governor_mixin.py src/chat/heart_flow/enhanced_modules/scene_bot_lifecycle_mixin.py src/chat/heart_flow/enhanced_modules/strategy_action_state_mixin.py src/chat/heart_flow/enhanced_modules/voice_pipeline_mixin.py src/chat/heart_flow/reply_coordinator.py src/webui/services/state_monitor.py` 通过。
+- `uv run ruff check` 全仓检查已执行，但被本轮未触碰的历史未使用 import/变量等 117 个问题阻塞；本轮 touched 文件专项 ruff 已通过。
+- `uv run python scripts/model_runtime_audit.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `heartflow_gateway_naming` 契约返回全 true。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- `src/config/config_profile.py` 的 `legacy_blocks` 属于配置迁移兼容结构，不属于本轮心流网关旧命名残留。
+- `legacy_relationship_label`、`legacy_name`、`to_legacy_dict()` 等仍是面板契约/迁移兼容或信号导出字段，本轮未删除。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

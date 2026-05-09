@@ -158,12 +158,12 @@ class EnhancedHeartFChatting(
         self._last_status_log_ts = 0.0
         self._status_log_interval = 10.0
         # 决策网关缓存
-        self._legacy_constraint_hits = 0
-        self._last_legacy_constraint_ts = 0.0
-        self._last_legacy_penalty = 0.0
-        self._last_legacy_reason = ""
-        self._last_legacy_breakdown: Dict[str, Any] = {}
-        self._last_legacy_gate = "allow"
+        self._gateway_constraint_hits = 0
+        self._last_gateway_constraint_ts = 0.0
+        self._last_gateway_penalty = 0.0
+        self._last_gateway_reason = ""
+        self._last_gateway_breakdown: Dict[str, Any] = {}
+        self._last_gateway_gate = "allow"
         # 最近一次统一交互状态快照
         self._last_relation_snapshot: Dict[str, Any] = {}
         # 核心模块集成缓存

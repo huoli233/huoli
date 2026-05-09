@@ -342,38 +342,6 @@ heartfc_voice_cooldown_sec = 6.0
 heartfc_energy_drain_floor = 0.08
 # 消息后重试间隔（秒）
 heartfc_post_message_retry_sec = 2.0
-# legacy gate：block 阈值
-heartfc_legacy_gate_block_threshold = 32.0
-# legacy gate：hesitate 阈值
-heartfc_legacy_gate_hesitate_threshold = 58.0
-# legacy gate：force_reply 阈值
-heartfc_legacy_gate_force_threshold = 82.0
-# legacy gate：基础分
-heartfc_legacy_gate_base_score = 42.0
-# legacy gate：问句加分
-heartfc_legacy_gate_question_bonus = 10.0
-# legacy gate：显著性系数
-heartfc_legacy_gate_salience_factor = 6.5
-# legacy gate：关系正向系数
-heartfc_legacy_gate_rapport_factor = 0.12
-# legacy gate：聊天资源惩罚系数
-heartfc_legacy_gate_resource_chat_factor = 1.1
-# legacy gate：活跃资源惩罚系数
-heartfc_legacy_gate_resource_activity_factor = 0.55
-# legacy gate：厌烦惩罚系数
-heartfc_legacy_gate_relation_annoyance_factor = 0.9
-# legacy gate：心理压力惩罚系数
-heartfc_legacy_gate_relation_pressure_factor = 0.75
-# legacy gate：重复压力惩罚系数
-heartfc_legacy_gate_repeat_pressure_factor = 48.0
-# legacy gate：重复轮次惩罚系数
-heartfc_legacy_gate_repeat_round_factor = 6.0
-# legacy gate：骚扰惩罚系数
-heartfc_legacy_gate_harass_factor = 55.0
-# legacy gate：不信任惩罚
-heartfc_legacy_gate_distrust_penalty = 16.0
-# legacy gate：深度不信任惩罚
-heartfc_legacy_gate_deep_distrust_penalty = 10.0
 # 强制回复生成超时（秒）
 heartfc_force_reply_generation_timeout_seconds = 35.0
 # 后台主动通道节奏与退避

@@ -115,28 +115,28 @@ class EnhancedVoicePipelineMixin:
                 outcome_parts.append(f"心理压力={rel_pressure:.1f}")
             if rel_trauma > 0 and not any(part.startswith("创伤=") for part in outcome_parts):
                 outcome_parts.append(f"创伤={rel_trauma:.1f}")
-            if self._legacy_constraint_hits > 0:
-                outcome_parts.append(f"硬约束次数={self._legacy_constraint_hits}")
-            if self._last_legacy_penalty > 0:
-                outcome_parts.append(f"硬约束惩罚={self._last_legacy_penalty:.1f}")
+            if self._gateway_constraint_hits > 0:
+                outcome_parts.append(f"硬约束次数={self._gateway_constraint_hits}")
+            if self._last_gateway_penalty > 0:
+                outcome_parts.append(f"硬约束惩罚={self._last_gateway_penalty:.1f}")
             quiet_left = max(0.0, self._planner_quiet_until - time.time())
             if quiet_left > 0:
                 outcome_parts.append(f"冷却剩余={quiet_left:.0f}s")
-            if self._last_legacy_reason:
-                outcome_parts.append(f"硬约束因子={self._last_legacy_reason[:40]}")
-            legacy_breakdown = getattr(self, "_last_legacy_breakdown", None)
-            if did_reply and isinstance(legacy_breakdown, dict) and legacy_breakdown:
-                outcome_parts.append(f"结算可回复度={legacy_breakdown.get('reply_readiness', 0):.1f}")
-                outcome_parts.append(f"结算基础分={legacy_breakdown.get('base', 0):.1f}")
-                outcome_parts.append(f"结算提及加分={legacy_breakdown.get('mention_bonus', 0):.1f}")
-                outcome_parts.append(f"结算问句加分={legacy_breakdown.get('question_bonus', 0):.1f}")
-                outcome_parts.append(f"结算显著性加分={legacy_breakdown.get('salience_bonus', 0):.1f}")
-                outcome_parts.append(f"结算关系加分={legacy_breakdown.get('rapport_bonus', 0):.1f}")
-                outcome_parts.append(f"结算资源惩罚={legacy_breakdown.get('resource_penalty', 0):.1f}")
-                outcome_parts.append(f"结算关系惩罚={legacy_breakdown.get('relation_penalty', 0):.1f}")
-                outcome_parts.append(f"结算重复惩罚={legacy_breakdown.get('repeat_penalty', 0):.1f}")
-                outcome_parts.append(f"结算骚扰惩罚={legacy_breakdown.get('harass_penalty', 0):.1f}")
-                outcome_parts.append(f"结算不信任惩罚={legacy_breakdown.get('distrust_penalty', 0):.1f}")
+            if self._last_gateway_reason:
+                outcome_parts.append(f"硬约束因子={self._last_gateway_reason[:40]}")
+            gateway_breakdown = getattr(self, "_last_gateway_breakdown", None)
+            if did_reply and isinstance(gateway_breakdown, dict) and gateway_breakdown:
+                outcome_parts.append(f"结算可回复度={gateway_breakdown.get('reply_readiness', 0):.1f}")
+                outcome_parts.append(f"结算基础分={gateway_breakdown.get('base', 0):.1f}")
+                outcome_parts.append(f"结算提及加分={gateway_breakdown.get('mention_bonus', 0):.1f}")
+                outcome_parts.append(f"结算问句加分={gateway_breakdown.get('question_bonus', 0):.1f}")
+                outcome_parts.append(f"结算显著性加分={gateway_breakdown.get('salience_bonus', 0):.1f}")
+                outcome_parts.append(f"结算关系加分={gateway_breakdown.get('rapport_bonus', 0):.1f}")
+                outcome_parts.append(f"结算资源惩罚={gateway_breakdown.get('resource_penalty', 0):.1f}")
+                outcome_parts.append(f"结算关系惩罚={gateway_breakdown.get('relation_penalty', 0):.1f}")
+                outcome_parts.append(f"结算重复惩罚={gateway_breakdown.get('repeat_penalty', 0):.1f}")
+                outcome_parts.append(f"结算骚扰惩罚={gateway_breakdown.get('harass_penalty', 0):.1f}")
+                outcome_parts.append(f"结算不信任惩罚={gateway_breakdown.get('distrust_penalty', 0):.1f}")
 
             # 保护态/屏蔽态
             target_uid = getattr(self, "_last_user_id", "")

@@ -402,7 +402,7 @@ class ReplyCoordinator:
         *,
         base_reason: str,
         content_plan: str = "",
-        legacy_gate: str = "",
+        gateway_gate: str = "",
         voice_reason: str = "",
     ) -> str:
         reason = str(base_reason or "").strip() or "回复"
@@ -410,7 +410,7 @@ class ReplyCoordinator:
             reason = f"{reason} | 内容规划: {content_plan[:100]}"
         if voice_reason:
             reason = f"{reason} | {voice_reason[:140]}"
-        if legacy_gate == "hesitate":
+        if gateway_gate == "hesitate":
             reason = f"{reason} | 当前处于低可回复度，只允许简短澄清或低风险短回"
         return reason
 

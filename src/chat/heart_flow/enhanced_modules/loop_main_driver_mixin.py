@@ -573,7 +573,7 @@ class LoopMainDriverMixin:
             self._chatterbox_penalty = max(0.0, _old_penalty - 1.0)
             logger.debug(f"{self.log_prefix} 用户消息，话痨惩罚回落 {_old_penalty:.1f}->{self._chatterbox_penalty:.1f}")
         if has_user_message:
-            self._legacy_constraint_hits = max(0, self._legacy_constraint_hits - 1)
+            self._gateway_constraint_hits = max(0, self._gateway_constraint_hits - 1)
 
         # 更新用户消息累积追踪器
         now_ts = time.time()
@@ -1414,30 +1414,30 @@ class LoopMainDriverMixin:
                 repetition_signal=repetition_signal,
                 harassment_signal=harassment_signal,
             )
-        legacy_gate = "allow"
-        legacy_constraint = {"should_skip": False, "gate": "allow", "reason": ""}
+        gateway_gate = "allow"
+        gateway_constraint = {"should_skip": False, "gate": "allow", "reason": ""}
         _is_admin_forced = False
         if gateway_result is not None:
             _gw_gate = str(gateway_result.get("gate", "allow") or "allow")
-            legacy_gate = _gw_gate
-            legacy_constraint["gate"] = _gw_gate
-            legacy_constraint["should_skip"] = bool(gateway_result.get("should_skip", False))
-            legacy_constraint["reason"] = str(gateway_result.get("reason", "") or "维度网关裁定")
-            self._last_legacy_gate = _gw_gate
-            self._update_decision_trace(legacy_gate=_gw_gate)
+            gateway_gate = _gw_gate
+            gateway_constraint["gate"] = _gw_gate
+            gateway_constraint["should_skip"] = bool(gateway_result.get("should_skip", False))
+            gateway_constraint["reason"] = str(gateway_result.get("reason", "") or "维度网关裁定")
+            self._last_gateway_gate = _gw_gate
+            self._update_decision_trace(gateway_gate=_gw_gate)
             logger.info(
                 f"{self.log_prefix} [维度网关主决策] gate={_gw_gate} "
-                f"skip={legacy_constraint['should_skip']} "
-                f"reason={legacy_constraint['reason'][:80]}"
+                f"skip={gateway_constraint['should_skip']} "
+                f"reason={gateway_constraint['reason'][:80]}"
             )
         else:
-            legacy_gate = "allow"
-            legacy_constraint = {"should_skip": False, "gate": "allow", "reason": "维度网关不可用，默认放行"}
-            self._update_decision_trace(legacy_gate="allow")
+            gateway_gate = "allow"
+            gateway_constraint = {"should_skip": False, "gate": "allow", "reason": "维度网关不可用，默认放行"}
+            self._update_decision_trace(gateway_gate="allow")
             logger.warning(f"{self.log_prefix} 维度网关不可用，默认放行")
 
         if self._is_force_wake_admin(incoming_batch, pinged_msg):
-            _orig_gate = legacy_gate
+            _orig_gate = gateway_gate
             _admin_force_guard_reason = self._admin_force_safety_guard_reason(
                 gateway_result=gateway_result,
                 relation_result=relation_result,
@@ -1453,24 +1453,24 @@ class LoopMainDriverMixin:
             else:
                 _is_admin_forced = True
                 _admin_gate = self._resolve_admin_force_gate(_orig_gate)
-                legacy_gate = _admin_gate
-                legacy_constraint = {
+                gateway_gate = _admin_gate
+                gateway_constraint = {
                     "should_skip": False,
                     "gate": _admin_gate,
                     "reason": "管理员强制唤醒-无视维度网关",
                 }
-                self._last_legacy_gate = _admin_gate
-                self._update_decision_trace(legacy_gate=_admin_gate)
+                self._last_gateway_gate = _admin_gate
+                self._update_decision_trace(gateway_gate=_admin_gate)
                 logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-覆盖网关裁定: {_orig_gate}→{_admin_gate}")
 
         # 低信息复读不应触发任何强制回复旁路（管理员强制唤醒除外）
-        if _low_info_repeat_block and legacy_gate == "force_reply" and not _is_admin_forced:
-            legacy_gate = "hesitate"
-            legacy_constraint["gate"] = "hesitate"
-            legacy_constraint["should_skip"] = False
-            legacy_constraint["reason"] = "低信息重复：降级force_reply旁路"
-            self._last_legacy_gate = "hesitate"
-            self._update_decision_trace(legacy_gate="hesitate")
+        if _low_info_repeat_block and gateway_gate == "force_reply" and not _is_admin_forced:
+            gateway_gate = "hesitate"
+            gateway_constraint["gate"] = "hesitate"
+            gateway_constraint["should_skip"] = False
+            gateway_constraint["reason"] = "低信息重复：降级force_reply旁路"
+            self._last_gateway_gate = "hesitate"
+            self._update_decision_trace(gateway_gate="hesitate")
             logger.info(f"{self.log_prefix} 🔕 低信息复读: force_reply旁路降级为hesitate")
 
         # ── 多维信号融合辅助裁决（仅对非强制情况提供风格建议，不硬拦截） ──
@@ -1479,31 +1479,31 @@ class LoopMainDriverMixin:
             _hf_judgment is not None
             and not _hf_judgment["should_respond"]
             and not _force_direct_ping
-            and legacy_gate in ("allow", "hesitate")
+            and gateway_gate in ("allow", "hesitate")
         ):
             _hf_cert = _hf_judgment.get("certainty", "")
             if _hf_cert in ("FIRM", "RESOLUTE"):
                 # 心流否决降级为 hesitate 风格约束，不硬拦截
-                legacy_gate = "hesitate"
-                legacy_constraint["gate"] = "hesitate"
-                legacy_constraint["should_skip"] = False
-                legacy_constraint["reason"] = (
+                gateway_gate = "hesitate"
+                gateway_constraint["gate"] = "hesitate"
+                gateway_constraint["should_skip"] = False
+                gateway_constraint["reason"] = (
                     f"心流信号否决(cert={_hf_cert}, "
                     f"comp={_hf_judgment.get('composite', 0):.2f}): "
                     f"{_hf_judgment.get('rationale', '')[:60]}"
                 )
-                self._last_legacy_gate = legacy_gate
-                self._update_decision_trace(legacy_gate=legacy_gate)
+                self._last_gateway_gate = gateway_gate
+                self._update_decision_trace(gateway_gate=gateway_gate)
                 logger.info(
                     f"{self.log_prefix} [心流辅助] 六维信号否决→降级为hesitate风格约束 | "
                     f"composite={_hf_judgment.get('composite', 0):.2f}"
                 )
-            if self._is_force_wake_admin(incoming_batch, pinged_msg) and legacy_gate != "block":
-                legacy_gate = "allow"
-                legacy_constraint["should_skip"] = False
-                legacy_constraint["gate"] = "allow"
-                self._last_legacy_gate = "allow"
-                self._update_decision_trace(legacy_gate="allow")
+            if self._is_force_wake_admin(incoming_batch, pinged_msg) and gateway_gate != "block":
+                gateway_gate = "allow"
+                gateway_constraint["should_skip"] = False
+                gateway_constraint["gate"] = "allow"
+                self._last_gateway_gate = "allow"
+                self._update_decision_trace(gateway_gate="allow")
                 _is_admin_forced = True
                 logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-无视心流否决裁决")
         self._is_admin_forced = _is_admin_forced
@@ -1557,7 +1557,7 @@ class LoopMainDriverMixin:
         if (
             autonomy_guard["should_skip"]
             and _admin_force_active
-            and legacy_gate != "block"
+            and gateway_gate != "block"
         ):
             logger.info(f"{self.log_prefix} 👑 管理员测试通道已绕过不回复限制: {autonomy_guard['reason']}")
 
@@ -1578,13 +1578,13 @@ class LoopMainDriverMixin:
                     logger.debug(f"{self.log_prefix} 🧊 存在态=不情愿，欲望≥5→降为4")
         self._last_desire_level = float(desire_level or 5.0)
         # 独白降级为风格/紧迫度层：除明确提及外，不再单独决定是否直发
-        if legacy_gate == "block":
+        if gateway_gate == "block":
             voice_driven_reply = False
             logger.info(f"{self.log_prefix} 门控=拦截，禁止独白强驱动穿透")
-        elif legacy_gate == "hesitate":
+        elif gateway_gate == "hesitate":
             # hesitate 不禁止独白驱动回复，只作为风格约束标记
             logger.info(f"{self.log_prefix} 门控=犹豫，独白保留但注入短回复风格约束")
-        elif legacy_gate == "force_reply":
+        elif gateway_gate == "force_reply":
             # 被@/间接提及/维度强制触发：默认回复
             voice_driven_reply = True
             logger.info(f"{self.log_prefix} 💭 维度网关force_reply，默认执行回复")
@@ -1638,12 +1638,12 @@ class LoopMainDriverMixin:
             voice_action=str(_voice_action or ""),
             model_should_reply=_model_should_reply,
         )
-        _is_gateway_force = legacy_gate == "force_reply"
+        _is_gateway_force = gateway_gate == "force_reply"
         _strong_force_reply = bool(_is_admin_forced or _force_direct_ping or _is_gateway_force)
         _decision_runtime = self._build_decision_runtime(
             now=now,
             source="reactive",
-            legacy_gate=legacy_gate,
+            gateway_gate=gateway_gate,
             llm_call_level=int(_llm_call_level or 0),
             tentative=bool(_tentative),
             voice_conclusion=voice_conclusion,
@@ -1830,18 +1830,18 @@ class LoopMainDriverMixin:
         planner_decision = None
         _pact = ""
 
-        if legacy_gate == "block":
+        if gateway_gate == "block":
             llm_triggered = False
             _decision_runtime = self._persist_decision_runtime(
                 dataclass_replace(
                     _decision_runtime,
                     should_reply=False,
                     next_action="observe",
-                    decision_stage="legacy_block",
+                    decision_stage="gateway_block",
                     decision_reason="门控明确阻断回复",
                     model_path="skip",
                     blocking_factors=self._merge_runtime_labels(_decision_runtime.blocking_factors, "门控明确阻断回复"),
-                    source_votes={**dict(_decision_runtime.source_votes or {}), "legacy_gate_blocked": True},
+                    source_votes={**dict(_decision_runtime.source_votes or {}), "gateway_gate_blocked": True},
                 )
             )
         # hesitate 不再关闭决策，只作为风格约束传递到回复生成阶段
@@ -1901,7 +1901,7 @@ class LoopMainDriverMixin:
             should_act=should_act,
             voice_conclusion=voice_conclusion,
             pinged_msg=force_reply_message,
-            legacy_gate=legacy_gate,
+            gateway_gate=gateway_gate,
             planner_decision=planner_decision,
             is_admin_forced=_is_admin_forced,
         )
@@ -1948,7 +1948,7 @@ class LoopMainDriverMixin:
                 return True
 
             planner_decision = None
-            if legacy_gate in {"allow", "force_reply", "hesitate"}:
+            if gateway_gate in {"allow", "force_reply", "hesitate"}:
                 try:
                     planner_decision = await asyncio.wait_for(
                         self._invoke_unified_planner(
@@ -2014,7 +2014,7 @@ class LoopMainDriverMixin:
                         cooldown = max(_POST_MESSAGE_RETRY_SEC, min(cooldown, 30.0))
                         self._planner_quiet_until = now + cooldown
                 logger.info(
-                    f"{self.log_prefix} 规划器决策={_pact} 门控={legacy_gate} 应行动={bool(_decision_runtime.should_reply)}"
+                    f"{self.log_prefix} 规划器决策={_pact} 门控={gateway_gate} 应行动={bool(_decision_runtime.should_reply)}"
                 )
 
         _decision_runtime = self._apply_execution_verdict_correction(
@@ -2022,7 +2022,7 @@ class LoopMainDriverMixin:
             planner_decision=planner_decision,
             voice_conclusion=voice_conclusion,
             force_reply_message=force_reply_message,
-            legacy_gate=legacy_gate,
+            gateway_gate=gateway_gate,
             is_admin_forced=_is_admin_forced,
             force_direct_ping=_force_direct_ping,
             voice_driven_reply=voice_driven_reply,

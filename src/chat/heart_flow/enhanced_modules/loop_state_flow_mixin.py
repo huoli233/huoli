@@ -391,9 +391,9 @@ class LoopStateFlowMixin:
         try:
             self._update_decision_trace(final_decision=final_decision)
             if stage == "final_decision" and not (self._last_decision_trace.get("winner_layer") or ""):
-                if str(getattr(self, "_last_legacy_gate", "") or "") == "block" and final_decision != "reply":
+                if str(getattr(self, "_last_gateway_gate", "") or "") == "block" and final_decision != "reply":
                     self._mark_decision_winner("gateway_block")
-                elif str(getattr(self, "_last_legacy_gate", "") or "") == "force_reply" and final_decision == "reply":
+                elif str(getattr(self, "_last_gateway_gate", "") or "") == "force_reply" and final_decision == "reply":
                     self._mark_decision_winner("gateway_force")
                 elif final_decision == "reply":
                     self._mark_decision_winner("algo_reply")
@@ -452,7 +452,7 @@ class LoopStateFlowMixin:
         should_act: bool,
         voice_conclusion,
         pinged_msg,
-        legacy_gate: str,
+        gateway_gate: str,
         planner_decision,
         is_admin_forced: bool,
     ) -> bool:
@@ -462,7 +462,7 @@ class LoopStateFlowMixin:
         voice_desire = int(getattr(voice_conclusion, "reply_desire_level", 5) or 5)
         voice_should_reply = getattr(voice_conclusion, "should_reply", None)
         voice_action = str(getattr(voice_conclusion, "next_action", "") or "").strip().lower()
-        strong_force = bool(is_admin_forced or pinged_msg is not None or legacy_gate == "force_reply")
+        strong_force = bool(is_admin_forced or pinged_msg is not None or gateway_gate == "force_reply")
         if voice_action in {"rest", "disengage", "lurk", "observe", "wait"}:
             self._last_flow_blocker = f"主体意愿={voice_action}"
             return False if not strong_force else should_act

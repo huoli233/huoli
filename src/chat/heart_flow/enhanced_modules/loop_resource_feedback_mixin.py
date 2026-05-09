@@ -1570,35 +1570,35 @@ class LoopResourceFeedbackMixin:
                     verdict_parts.append(f"上次发言={gap_since_speak / 60:.1f}min前")
             if confidence >= 0:
                 verdict_parts.append(f"置信={confidence:.2f}")
-            if self._legacy_constraint_hits > 0:
-                verdict_parts.append(f"硬约束次数={self._legacy_constraint_hits}")
-            if self._last_legacy_penalty > 0:
-                verdict_parts.append(f"硬约束惩罚={self._last_legacy_penalty:.1f}")
+            if self._gateway_constraint_hits > 0:
+                verdict_parts.append(f"硬约束次数={self._gateway_constraint_hits}")
+            if self._last_gateway_penalty > 0:
+                verdict_parts.append(f"硬约束惩罚={self._last_gateway_penalty:.1f}")
             if quiet_left > 0:
                 verdict_parts.append(f"冷却剩余={quiet_left:.0f}s")
-            if self._last_legacy_reason and verdict_action in {
-                "legacy_constraint",
+            if self._last_gateway_reason and verdict_action in {
+                "gateway_constraint",
                 "autonomy_block",
                 "early_exit",
                 "no_action",
                 "no_reply",
             }:
-                verdict_parts.append(f"硬约束因子={self._last_legacy_reason[:40]}")
-            legacy_breakdown = getattr(self, "_last_legacy_breakdown", None)
+                verdict_parts.append(f"硬约束因子={self._last_gateway_reason[:40]}")
+            gateway_breakdown = getattr(self, "_last_gateway_breakdown", None)
             if (
                 ("reply" in verdict_action or "proactive" in verdict_action)
-                and isinstance(legacy_breakdown, dict)
-                and legacy_breakdown
+                and isinstance(gateway_breakdown, dict)
+                and gateway_breakdown
             ):
                 summary = (
-                    f"R={legacy_breakdown.get('reply_readiness', 0):.1f} "
-                    f"B={legacy_breakdown.get('base', 0):.0f} "
-                    f"+M={legacy_breakdown.get('mention_bonus', 0):.0f} "
-                    f"+Q={legacy_breakdown.get('question_bonus', 0):.0f} "
-                    f"+S={legacy_breakdown.get('salience_bonus', 0):.0f} "
-                    f"-Res={legacy_breakdown.get('resource_penalty', 0):.0f} "
-                    f"-Rel={legacy_breakdown.get('relation_penalty', 0):.0f} "
-                    f"-Rep={legacy_breakdown.get('repeat_penalty', 0):.0f}"
+                    f"R={gateway_breakdown.get('reply_readiness', 0):.1f} "
+                    f"B={gateway_breakdown.get('base', 0):.0f} "
+                    f"+M={gateway_breakdown.get('mention_bonus', 0):.0f} "
+                    f"+Q={gateway_breakdown.get('question_bonus', 0):.0f} "
+                    f"+S={gateway_breakdown.get('salience_bonus', 0):.0f} "
+                    f"-Res={gateway_breakdown.get('resource_penalty', 0):.0f} "
+                    f"-Rel={gateway_breakdown.get('relation_penalty', 0):.0f} "
+                    f"-Rep={gateway_breakdown.get('repeat_penalty', 0):.0f}"
                 )
                 verdict_parts.append(summary)
             verdict_parts.append(f"管线耗时={pipeline_elapsed:.2f}s")

@@ -103,7 +103,7 @@ class SceneBotLifecycleMixin:
                 self._reactive_reply_timeline = self._reactive_reply_timeline[-50:]
         self._last_bot_reply_ts = _now_sent
         self._update_dynamic_ratio(_now_sent)
-        self._legacy_constraint_hits = 0
+        self._gateway_constraint_hits = 0
         # F27：递增每小时回复计数
         self._roll_hourly_reply_window(_now_sent)
         self._hourly_reply_count += 1

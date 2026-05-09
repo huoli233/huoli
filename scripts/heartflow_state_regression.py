@@ -1408,6 +1408,50 @@ def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     }
 
 
+def check_heartflow_gateway_naming_contract() -> Dict[str, Any]:
+    heartflow_files = [
+        ROOT / "src/chat/heart_flow/heartFC_chat_enhanced.py",
+        ROOT / "src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py",
+        ROOT / "src/chat/heart_flow/enhanced_modules/loop_reply_execution_mixin.py",
+        ROOT / "src/chat/heart_flow/enhanced_modules/loop_resource_feedback_mixin.py",
+        ROOT / "src/chat/heart_flow/enhanced_modules/loop_state_flow_mixin.py",
+        ROOT / "src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py",
+        ROOT / "src/chat/heart_flow/enhanced_modules/runtime_state_trace_mixin.py",
+        ROOT / "src/chat/heart_flow/enhanced_modules/runtime_subjective_signal_mixin.py",
+        ROOT / "src/chat/heart_flow/enhanced_modules/runtime_watch_governor_mixin.py",
+        ROOT / "src/chat/heart_flow/enhanced_modules/scene_bot_lifecycle_mixin.py",
+        ROOT / "src/chat/heart_flow/enhanced_modules/strategy_action_state_mixin.py",
+        ROOT / "src/chat/heart_flow/enhanced_modules/voice_pipeline_mixin.py",
+        ROOT / "src/chat/heart_flow/reply_coordinator.py",
+        ROOT / "src/webui/services/state_monitor.py",
+    ]
+    merged_source = "\n".join(path.read_text(encoding="utf-8") for path in heartflow_files)
+    core_config_source = (ROOT / "config/core_config.toml").read_text(encoding="utf-8")
+
+    banned_tokens = [
+        "legacy" + "_gate",
+        "_last_" + "legacy",
+        "legacy" + "_constraint",
+        "legacy" + "_block",
+        "legacy" + "_high_desire",
+        "legacy" + "_breakdown",
+        "legacy" + "_hits",
+        "legacy" + "_penalty",
+        "legacy" + "_reason",
+    ]
+    for token in banned_tokens:
+        assert token not in merged_source
+    assert ("heartfc_" + "legacy" + "_gate") not in core_config_source
+    assert "_last_gateway_gate" in merged_source
+    assert "gateway_gate" in merged_source
+    assert "gateway_block" in merged_source
+    return {
+        "heartflow_gateway_old_names_removed": True,
+        "heartflow_gateway_runtime_names_preserved": True,
+        "core_config_old_gateway_block_removed": True,
+    }
+
+
 def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     msg = type(
         "FakeMessage",
@@ -1757,6 +1801,7 @@ def main() -> None:
         "db_backed_json_storage": check_db_backed_json_storage_contract(),
         "memoir_channel_key": check_memoir_channel_key_contract(),
         "heartflow_startup_prewarm": check_heartflow_startup_no_channel_prewarm_contract(),
+        "heartflow_gateway_naming": check_heartflow_gateway_naming_contract(),
         "force_reply_generation_failure": check_force_reply_generation_failure_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),

@@ -252,7 +252,7 @@ class RuntimeWatchGovernorMixin:
             and behavior_verdict.interrupt_level in {"skim", "engage"}
             and rest_verdict.interruption_policy == "allow"
         ):
-            return (True, f"legacy_high_desire: {behavior_summary}")
+            return (True, f"gateway_high_desire: {behavior_summary}")
         return (False, f"peek_governor_hold: {behavior_summary} | {rest_summary}")
 
     def _integrate_watch_state(self, now: float, has_messages: bool = False) -> None:

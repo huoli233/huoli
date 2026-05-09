@@ -68,7 +68,7 @@ class StrategyActionStateMixin:
         *,
         now: float,
         source: str,
-        legacy_gate: str,
+        gateway_gate: str,
         llm_call_level: int,
         tentative: bool,
         voice_conclusion: Any,
@@ -96,7 +96,7 @@ class StrategyActionStateMixin:
         annoyance_value = float((relation_view or {}).get("annoyance_value", 0.0) or 0.0)
         pressure_value = float((relation_view or {}).get("psychological_pressure", 0.0) or 0.0)
         blocked = bool((relation_view or {}).get("is_user_blocked", False))
-        force = bool(admin_forced or direct_ping or gateway_force or legacy_gate == "force_reply")
+        force = bool(admin_forced or direct_ping or gateway_force or gateway_gate == "force_reply")
 
         driving: List[str] = []
         blocking: List[str] = []
@@ -224,7 +224,7 @@ class StrategyActionStateMixin:
                 "voice_desire": voice_desire,
                 "voice_needs_upgrade": voice_upgrade,
                 "llm_call_level": llm_call_level,
-                "legacy_gate": legacy_gate,
+                "gateway_gate": gateway_gate,
                 "behavior_reply_mode": behavior_mode,
                 "behavior_allow_generation": behavior_allow,
                 "dashboard_urgency": dashboard_urgency,
@@ -398,7 +398,7 @@ class StrategyActionStateMixin:
         planner_decision: Any,
         voice_conclusion: Any,
         force_reply_message: Any,
-        legacy_gate: str,
+        gateway_gate: str,
         is_admin_forced: bool,
         force_direct_ping: bool,
         voice_driven_reply: bool,
@@ -459,7 +459,7 @@ class StrategyActionStateMixin:
             force_direct_ping or planner_decision is not None or voice_driven_reply or is_admin_forced
         )
 
-        if not should_reply and legacy_gate in {"allow", "force_reply"}:
+        if not should_reply and gateway_gate in {"allow", "force_reply"}:
             if voice_reluctant:
                 mark_skip("post_voice_reluctant", "门控放行但内心独白明确抗拒")
             elif not has_strong_reply_evidence:
@@ -529,7 +529,7 @@ class StrategyActionStateMixin:
                             mark_skip("post_psychology_block", f"表层伪装过高({surface_mask:.1f})", "表层伪装过高")
                         elif submission >= 8.0:
                             mark_skip("post_psychology_block", f"顺从度过高({submission:.1f})", "顺从度过高")
-                        elif shyness >= 85.0 and legacy_gate != "force_reply":
+                        elif shyness >= 85.0 and gateway_gate != "force_reply":
                             mark_skip("post_psychology_block", f"害羞值过高({shyness:.1f})", "害羞值过高")
             except Exception as psych_exc:
                 logger.debug(f"{self.log_prefix} 心理特征修正异常: {psych_exc}")

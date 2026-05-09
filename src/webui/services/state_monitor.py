@@ -405,7 +405,7 @@ def _label_execution_stage(value: Any) -> str:
         "voice_action_rest": "内心要求休息",
         "voice_action_disengage": "内心要求放下会话",
         "voice_action_lurk": "内心要求潜水观察",
-        "legacy_block": "门控明确阻断",
+        "gateway_block": "门控明确阻断",
         "llm_autonomous_allow": "自主大模型放行",
         "llm_autonomous_hold": "自主大模型保持观察",
         "inner_voice_priority": "内心优先规则修正",

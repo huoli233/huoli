@@ -128,7 +128,7 @@ class RuntimeStateTraceMixin:
             "narration_should_reply": None,
             "narration_action_intent": "",
             "narration_reply_strategy": "",
-            "legacy_gate": "",
+            "gateway_gate": "",
             "autonomy_guard_reason": "",
             "voice_action": "",
             "model_should_reply": None,
@@ -170,8 +170,8 @@ class RuntimeStateTraceMixin:
         _narr_should = _trace.get("narration_should_reply", None)
         if _narr_should is not None:
             _parts.append(f"narr={'reply' if _narr_should else 'hold'}")
-        if _trace.get("legacy_gate"):
-            _parts.append(f"gate={_trace['legacy_gate']}")
+        if _trace.get("gateway_gate"):
+            _parts.append(f"gate={_trace['gateway_gate']}")
         if _trace.get("voice_action"):
             _parts.append(f"voice={_trace['voice_action']}")
         _model_should = _trace.get("model_should_reply", None)
