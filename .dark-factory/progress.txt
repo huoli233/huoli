@@ -1036,3 +1036,25 @@
 - `config/model_config.toml` 被 `.gitignore` 忽略，已按运行需要直接修改但不会进入提交；提交只包含模板、审计脚本和 Gemini 客户端兼容修复。
 - 如果运行中仍出现 `siliconflow-deepseek-v4-flash` 的 `self_dialogue` 日志，说明进程还没重启或仍在用旧加载缓存，需要重启服务重新加载模型配置。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-09T17:31:00+08:00 - Task: 修正 Gemini 指定模型为 2.5 Flash
+
+### What was done:
+- 纠正上一轮误把目标模型写成 `gemini-3-flash` 的配置，按用户指定统一改为 `gemini-2.5-flash`。
+- 将本地运行配置 `config/model_config.toml` 的 `utils/replyer/planner/model_monitor/focus_chat/lightweight/lpmm_*` 以及 `vlm/voice` 路由统一到 `gemini-2.5-flash`。
+- 从本地运行配置移除 `gemini-3.1-flash-lite-preview` 和 `gemini-2.5-flash-lite` 模型定义，只保留指定的 `gemini-2.5-flash` Gemini 主模型。
+- 同步更新 `template/model_config_template.toml`、`template/compare/model_config_template.toml` 和模型审计脚本，禁止任务路由重新混入 Gemini 3 或 Gemini 2.5 lite。
+
+### Testing:
+- TOML 解析确认本地运行配置所有 Gemini 任务路由均为 `gemini-2.5-flash`。
+- 静态搜索确认 `config/model_config.toml`、模板和审计脚本中不再出现 `gemini-3` 或 `gemini-2.5-flash-lite` 运行路由。
+- `uv run ruff check scripts/model_runtime_audit.py scripts/config_profile_regression.py src/llm_models/model_client/gemini_client.py` 通过。
+- `uv run python scripts/model_runtime_audit.py` 通过，输出确认 `utils/replyer/planner/model_monitor/focus_chat/lightweight/lpmm_*` 以及 `vlm` 均使用 `gemini-2.5-flash`。
+- `uv run python scripts/config_profile_regression.py` 通过，确认 Gemini 2.5 Flash 显式 `thinking_budget=0` 时不会回退自动思考。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过。
+
+### Notes:
+- `config/model_config.toml` 被 `.gitignore` 忽略，本地运行已生效但不会进入 Git 提交。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

@@ -69,13 +69,6 @@ api_provider = "AggAPI"
 price_in = 0.0
 price_out = 0.0
 
-[[models]] # Gemini 3 Flash - 聊天主力/图像识别
-model_identifier = "gemini-3-flash"
-name = "gemini-3-flash"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
 [[models]] # Grok 4.20 推理 - 深度推理/图像识别
 model_identifier = "grok-4.20-0309-reasoning"
 name = "grok-4.20-reasoning"
@@ -182,8 +175,8 @@ max_tokens = 1024
 slow_threshold = 15.0
 selection_strategy = "random"
 
-[model_task_config.vlm]  # 图像识别模型 - 使用支持视觉的Gemini和Grok系列
-model_list = ["gemini-2.5-flash", "gemini-3-flash", "grok-4.20-reasoning", "grok-4.20-chat"]
+[model_task_config.vlm]  # 图像识别模型 - 按指定只使用 Gemini 2.5 Flash
+model_list = ["gemini-2.5-flash"]
 max_tokens = 1024
 slow_threshold = 20.0
 selection_strategy = "random"
@@ -218,14 +211,14 @@ selection_strategy = "random"
 # 混合使用所有可用模型
 
 [model_task_config.replyer]  # 首要回复模型，还用于表达方式学习
-model_list = ["gemini-3-flash", "glm5", "glm4.7", "kimi-k2.5", "minimax-m2.7", "deepseek-v3.2", "qwen3.5-122b", "gemma-4-31b", "gemma-4-26b", "gemma-3-27b", "gemma-3-12b"]
+model_list = ["gemini-2.5-flash"]
 temperature = 0.3
 max_tokens = 2048
 slow_threshold = 30.0
 selection_strategy = "random"
 
-[model_task_config.focus_chat]  # 专注聊天模型配置 - 所有聊天模型轮询
-model_list = ["gemini-2.5-flash", "gemini-3-flash", "glm5", "glm4.7", "kimi-k2.5", "minimax-m2.7", "deepseek-v3.2", "qwen3.5-122b", "gemma-4-31b", "gemma-4-26b", "gemma-3-27b", "gemma-3-12b"]
+[model_task_config.focus_chat]  # 专注聊天模型配置
+model_list = ["gemini-2.5-flash"]
 temperature = 0.7
 max_tokens = 1024
 slow_threshold = 60.0

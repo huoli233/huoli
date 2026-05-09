@@ -8,8 +8,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-TARGET_MODEL = "gemini-3-flash"
-BLOCKED_REPLYER_MODELS = {"gemini-2.5-flash"}
+TARGET_MODEL = "gemini-2.5-flash"
+BLOCKED_REPLYER_MODELS: set[str] = set()
+BLOCKED_RUNTIME_MODEL_TEXT = ("gemini-3", "gemini-2.5-flash-lite")
 TOOL_MODELS = ("qwen3-30b", "qwen3-next-80b")
 NON_TOOL_TASKS = (
     "utils",
@@ -26,6 +27,20 @@ def _load_toml(path: Path) -> dict[str, Any]:
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
+def _blocked_runtime_models(model_list: list[str]) -> list[str]:
+    return sorted(
+        model_name
+        for model_name in model_list
+        if any(blocked in model_name for blocked in BLOCKED_RUNTIME_MODEL_TEXT)
+    )
+
+
+def _assert_no_blocked_runtime_model_text(rel: str, path: Path) -> None:
+    source = path.read_text(encoding="utf-8")
+    blocked = [token for token in BLOCKED_RUNTIME_MODEL_TEXT if token in source]
+    assert not blocked, f"{rel} 仍包含非指定 Gemini 配置: {blocked}"
+
+
 def check_runtime_model_config() -> dict[str, Any]:
     checked: dict[str, Any] = {}
     for rel in (
@@ -36,9 +51,16 @@ def check_runtime_model_config() -> dict[str, Any]:
         path = ROOT / rel
         if not path.exists():
             continue
+        _assert_no_blocked_runtime_model_text(rel, path)
         data = _load_toml(path)
         tasks = data.get("model_task_config", {})
         route_map: dict[str, list[str]] = {}
+        for task_name, task_config in tasks.items():
+            if not isinstance(task_config, dict):
+                continue
+            model_list = list(task_config.get("model_list", []))
+            blocked = _blocked_runtime_models(model_list)
+            assert not blocked, f"{rel}:{task_name} 不能再路由到 Gemini 3/非指定 Gemini 变体: {blocked}"
         for task_name in NON_TOOL_TASKS:
             if task_name not in tasks:
                 continue
@@ -72,13 +94,27 @@ def check_runtime_model_config() -> dict[str, Any]:
         checked[rel] = route_map
     compare_path = ROOT / "template/compare/model_config_template.toml"
     if compare_path.exists():
+        _assert_no_blocked_runtime_model_text("template/compare/model_config_template.toml", compare_path)
         data = _load_toml(compare_path)
         tasks = data.get("model_task_config", {})
+        compare_routes: dict[str, list[str]] = {}
+        for task_name, task_config in tasks.items():
+            if not isinstance(task_config, dict):
+                continue
+            model_list = list(task_config.get("model_list", []))
+            blocked = _blocked_runtime_models(model_list)
+            assert not blocked, (
+                "template/compare/model_config_template.toml:"
+                f"{task_name} 不能再路由到 Gemini 3/非指定 Gemini 变体: {blocked}"
+            )
+            if task_name in {"vlm", "replyer", "focus_chat"}:
+                compare_routes[task_name] = model_list
         replyer_models = list(tasks.get("replyer", {}).get("model_list", []))
         if replyer_models:
             blocked = sorted(set(replyer_models) & BLOCKED_REPLYER_MODELS)
             assert not blocked, f"template/compare/model_config_template.toml:replyer 不应再包含鉴权失败模型: {blocked}"
-            checked["template/compare/model_config_template.toml"] = {"replyer": replyer_models}
+            compare_routes["replyer"] = replyer_models
+        checked["template/compare/model_config_template.toml"] = compare_routes
     return checked
 
 
@@ -190,7 +226,7 @@ def audit_reasoning_effort_policy() -> dict[str, Any]:
     request = LLMRequest(TaskConfig(model_list=[TARGET_MODEL]), request_type="audit")
     default_model = ModelInfo(
         name=TARGET_MODEL,
-        model_identifier="gemini-3-flash",
+        model_identifier="gemini-2.5-flash",
         api_provider="Google",
         client_type="gemini",
         suppress_reasoning=True,
