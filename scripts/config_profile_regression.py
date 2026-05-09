@@ -116,9 +116,18 @@ def _check_llm_routing_runtime_contract() -> dict[str, object]:
     assert request._retry_budget(openai_provider, RequestType.RESPONSE) == 1
     assert request._retry_budget(openai_provider, RequestType.EMBEDDING) == 2
     assert request._retry_sleep_seconds(openai_provider, RequestType.RESPONSE) == 1.25
+    from src.llm_models.model_client.gemini_client import GeminiClient
+
+    include_thoughts, thinking_budget = GeminiClient.resolve_thinking_config(
+        {"enable_thinking": False, "include_thoughts": False, "thinking_budget": 0},
+        "gemini-3-flash",
+    )
+    assert include_thoughts is False
+    assert thinking_budget == 0
     return {
         "default_no_thinking": True,
         "gemini_thinking_budget": gemini_params["thinking_budget"],
+        "gemini3_thinking_budget": thinking_budget,
         "reasoning_effort_minimal_mapped": explicit_effort_params["reasoning_effort"],
         "response_timeout": request._request_timeout_budget(openai_provider, RequestType.RESPONSE),
         "response_retry": request._retry_budget(openai_provider, RequestType.RESPONSE),

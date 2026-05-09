@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-TARGET_MODEL = "siliconflow-deepseek-v4-flash"
+TARGET_MODEL = "gemini-3-flash"
 BLOCKED_REPLYER_MODELS = {"gemini-2.5-flash"}
 TOOL_MODELS = ("qwen3-30b", "qwen3-next-80b")
 NON_TOOL_TASKS = (
@@ -187,21 +187,22 @@ def audit_reasoning_effort_policy() -> dict[str, Any]:
     from src.config.api_ada_configs import ModelInfo, TaskConfig
     from src.llm_models.utils_model import LLMRequest
 
-    request = LLMRequest(TaskConfig(model_list=["siliconflow-deepseek-v4-flash"]), request_type="audit")
+    request = LLMRequest(TaskConfig(model_list=[TARGET_MODEL]), request_type="audit")
     default_model = ModelInfo(
-        name="siliconflow-deepseek-v4-flash",
-        model_identifier="deepseek-ai/DeepSeek-V4-Flash",
-        api_provider="SiliconFlow",
-        client_type="openai",
+        name=TARGET_MODEL,
+        model_identifier="gemini-3-flash",
+        api_provider="Google",
+        client_type="gemini",
         suppress_reasoning=True,
     )
     default_params = request._effective_extra_params(default_model)
     assert default_params["enable_thinking"] is False
-    assert default_params["chat_template_kwargs"]["enable_thinking"] is False
+    assert default_params["include_thoughts"] is False
+    assert default_params["thinking_budget"] == 0
     assert "reasoning_effort" not in default_params
 
     explicit_model = ModelInfo(
-        name="siliconflow-deepseek-v4-flash",
+        name=TARGET_MODEL,
         model_identifier="deepseek-ai/DeepSeek-V4-Flash",
         api_provider="SiliconFlow",
         client_type="openai",

@@ -49,6 +49,20 @@ price_out = 8.0                    # 输出价格（用于API调用统计，单�
 # force_stream_mode = true          # 强制流式输出模式（若模型不支持非流式输出，请取消该注释，启用强制流式输出，若无该字段，默认值为false）
 
 [[models]]
+model_identifier = "gemini-3-flash"
+name = "gemini-3-flash"
+api_provider = "Google"
+client_type = "gemini"
+price_in = 0
+price_out = 0
+supports_tool_calling = true
+suppress_reasoning = true
+[models.extra_params]
+enable_thinking = false
+include_thoughts = false
+thinking_budget = 0
+
+[[models]]
 model_identifier = "deepseek-ai/DeepSeek-V3.2-Exp"
 name = "siliconflow-deepseek-v3.2"
 api_provider = "SiliconFlow"
@@ -147,7 +161,7 @@ price_out = 0
 
 
 [model_task_config.utils] # 活力组件使用的基础模型，例如表情包模块、取名模块、关系模块、情绪变化等
-model_list = ["siliconflow-deepseek-v4-flash"] # 统一使用硅基流动 DeepSeek V4 Flash，避免本地模型加载失败
+model_list = ["gemini-3-flash"] # 内心独白/通用组件使用 Gemini，避免 SiliconFlow 独白超时
 temperature = 0.2                        # 模型温度，新V3建议0.1-0.3
 max_tokens = 4096                         # 最大输出token数
 slow_threshold = 15.0                     # 慢请求阈值（秒），模型等待回复时间超过此值会输出警告日志
@@ -161,14 +175,14 @@ slow_threshold = 10.0
 selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
 [model_task_config.replyer] # 首要回复模型，还用于表达方式学习
-model_list = ["siliconflow-deepseek-v4-flash"]
+model_list = ["gemini-3-flash"]
 temperature = 0.3                        # 模型温度，新V3建议0.1-0.3
 max_tokens = 2048
 slow_threshold = 25.0
 selection_strategy = "random"            # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
 [model_task_config.planner] # 决策：负责决定活力什么时候回复的模型
-model_list = ["siliconflow-deepseek-v4-flash"]
+model_list = ["gemini-3-flash"]
 temperature = 0.3
 max_tokens = 800
 slow_threshold = 12.0
@@ -194,14 +208,14 @@ selection_strategy = "random"           # 模型选择策略：balance（负载�
 # ------------LPMM知识库模型------------
 
 [model_task_config.lpmm_entity_extract] # 实体提取模型
-model_list = ["siliconflow-deepseek-v4-flash"]
+model_list = ["gemini-3-flash"]
 temperature = 0.2
 max_tokens = 800
 slow_threshold = 20.0
 selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
 [model_task_config.lpmm_rdf_build] # RDF构建模型
-model_list = ["siliconflow-deepseek-v4-flash"]
+model_list = ["gemini-3-flash"]
 temperature = 0.2
 max_tokens = 800
 slow_threshold = 20.0

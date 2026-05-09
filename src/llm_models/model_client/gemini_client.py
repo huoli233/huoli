@@ -609,6 +609,16 @@ class GeminiClient(BaseClient):
         logger.warning(f"模型 {model_id} 未在 THINKING_BUDGET_LIMITS 中定义，已启用模型自动预算兼容")
         return THINKING_BUDGET_AUTO
 
+    @staticmethod
+    def resolve_thinking_config(extra_params: dict[str, Any] | None, model_id: str) -> tuple[bool, int]:
+        """解析 Gemini thinking 配置，显式关闭时优先尊重配置。"""
+        params = extra_params or {}
+        enable_thinking = bool(params.get("enable_thinking", False))
+        include_thoughts = bool(params.get("include_thoughts", enable_thinking))
+        if not enable_thinking and int(params.get("thinking_budget", 0) or 0) == THINKING_BUDGET_DISABLED:
+            return False, THINKING_BUDGET_DISABLED
+        return include_thoughts, GeminiClient.clamp_thinking_budget(params, model_id)
+
     async def get_response(
         self,
         model_info: ModelInfo,
@@ -662,9 +672,7 @@ class GeminiClient(BaseClient):
         # 将tool_options转换为Gemini API所需的格式
         tools = _convert_tool_options(tool_options) if tool_options else None
         # 解析并裁剪 thinking_budget
-        tb = self.clamp_thinking_budget(extra_params, model_info.model_identifier)
-        enable_thinking = bool((extra_params or {}).get("enable_thinking", False))
-        include_thoughts = bool((extra_params or {}).get("include_thoughts", enable_thinking))
+        include_thoughts, tb = self.resolve_thinking_config(extra_params, model_info.model_identifier)
         # 检测是否为带 -search 的模型
         enable_google_search = False
         model_identifier = model_info.model_identifier
@@ -835,9 +843,7 @@ class GeminiClient(BaseClient):
         :return: 转录响应
         """
         # 解析并裁剪 thinking_budget
-        tb = self.clamp_thinking_budget(extra_params, model_info.model_identifier)
-        enable_thinking = bool((extra_params or {}).get("enable_thinking", False))
-        include_thoughts = bool((extra_params or {}).get("include_thoughts", enable_thinking))
+        include_thoughts, tb = self.resolve_thinking_config(extra_params, model_info.model_identifier)
 
         # 构造 prompt + 音频输入
         prompt = "Generate a transcript of the speech. The language of the transcript should **match the language of the speech**."

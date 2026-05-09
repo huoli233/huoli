@@ -1012,3 +1012,27 @@
 - `src/config/config_profile.py` 的 `legacy_blocks` 属于配置迁移兼容结构，不属于本轮心流网关旧命名残留。
 - `legacy_relationship_label`、`legacy_name`、`to_legacy_dict()` 等仍是面板契约/迁移兼容或信号导出字段，本轮未删除。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-09T17:18:17+08:00 - Task: 切换独白模型到 Gemini 并关闭思考
+
+### What was done:
+- 确认内心独白主路径使用 `model_task_config.focus_chat`，兜底路径使用 `model_task_config.utils`，不是 `replyer`。
+- 将本地运行配置 `config/model_config.toml` 中 `utils/focus_chat/replyer/planner/model_monitor/lightweight/lpmm_*` 路由切换到 `gemini-3-flash`，`tool_use` 保留 Qwen 工具模型，`embedding` 保留 BGE。
+- 为本地 Gemini 模型补充 `suppress_reasoning=true`、`enable_thinking=false`、`include_thoughts=false`、`thinking_budget=0`。
+- 更新 `template/model_config_template.toml`，补充 `gemini-3-flash` 模型定义和关闭思考参数，并将默认非工具文本任务指向 Gemini。
+- 修正 Gemini 客户端 thinking 配置解析：显式关闭思考时，即使 Gemini 3 未在预算表中，也尊重 `thinking_budget=0`，不回退自动思考预算。
+- 更新 `scripts/model_runtime_audit.py` 和 `scripts/config_profile_regression.py`，锁定 Gemini 路由和 Gemini 3 关闭思考契约。
+
+### Testing:
+- TOML 解析确认 `config/model_config.toml` 的 `utils/focus_chat/replyer/planner/model_monitor/lightweight/lpmm_*` 均为 `gemini-3-flash`。
+- 静态搜索确认 `config/model_config.toml`、`template/model_config_template.toml`、`scripts/model_runtime_audit.py`、`inner_voice.py` 中不再存在 `model_list = ["siliconflow-deepseek-v4-flash"]`。
+- `uv run ruff check scripts/model_runtime_audit.py scripts/config_profile_regression.py src/llm_models/model_client/gemini_client.py` 通过。
+- `uv run python scripts/model_runtime_audit.py` 通过。
+- `uv run python scripts/config_profile_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过。
+
+### Notes:
+- `config/model_config.toml` 被 `.gitignore` 忽略，已按运行需要直接修改但不会进入提交；提交只包含模板、审计脚本和 Gemini 客户端兼容修复。
+- 如果运行中仍出现 `siliconflow-deepseek-v4-flash` 的 `self_dialogue` 日志，说明进程还没重启或仍在用旧加载缓存，需要重启服务重新加载模型配置。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
