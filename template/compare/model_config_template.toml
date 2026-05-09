@@ -218,7 +218,7 @@ selection_strategy = "random"
 # 混合使用所有可用模型
 
 [model_task_config.replyer]  # 首要回复模型，还用于表达方式学习
-model_list = ["gemini-2.5-flash", "gemini-3-flash", "glm5", "glm4.7", "kimi-k2.5", "minimax-m2.7", "deepseek-v3.2", "qwen3.5-122b", "gemma-4-31b", "gemma-4-26b", "gemma-3-27b", "gemma-3-12b"]
+model_list = ["gemini-3-flash", "glm5", "glm4.7", "kimi-k2.5", "minimax-m2.7", "deepseek-v3.2", "qwen3.5-122b", "gemma-4-31b", "gemma-4-26b", "gemma-3-27b", "gemma-3-12b"]
 temperature = 0.3
 max_tokens = 2048
 slow_threshold = 30.0

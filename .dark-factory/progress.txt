@@ -892,3 +892,28 @@
 - 这轮没有改变 `ChatStream` 的持久化 ID 规则：同一平台同一群号仍复用同一个 `stream_id`。
 - 服务进程重启后 `HeartflowChat` 运行实例会重新启动，这是内存运行对象，不是新建持久聊天室。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-09T16:31:48+08:00 - Task: 清理重复回复日志与旧后台自主代理残留
+
+### What was done:
+- 按删除分支规则建立 `preserve/full-modules-自主代理旧后台移除` 保存删除前完整模块，并在 `delete/自主代理旧后台移除` 上执行删除。
+- 删除旧后台自主代理模块 `src/core/autonomous_core/`，移除心流启动/关闭/频道注册中对旧后台代理的日志和钩子。
+- 从 `src/common/constants.py` 移除 `AUTONOMOUS_STATE_DIR`，旧后台代理状态目录常量不再暴露。
+- 群聊自动回复生成成功后不再走自然化错字与二次 LLM rewrite，只保留困意反向回复拦截等必要护栏。
+- 将本地 `config/model_config.toml` 的 replyer 池改为 `siliconflow-deepseek-v4-flash` 单模型随机策略，模板与 compare 模板 replyer 池移除 `gemini-2.5-flash`。
+- 更新 `scripts/model_runtime_audit.py` 与 `scripts/heartflow_state_regression.py`，锁定 replyer 不含坏 Gemini、旧后台代理入口清空、自动后处理不再二次调用 LLM。
+
+### Testing:
+- `uv run ruff check scripts\model_runtime_audit.py scripts\heartflow_state_regression.py src\chat\heart_flow\heartflow.py src\chat\heart_flow\enhanced_modules\interaction_core_mixin.py src\chat\replyer\group_generator.py src\common\constants.py` 通过。
+- `uv run python scripts\model_runtime_audit.py` 通过，确认 replyer 运行配置与模板不再包含 `gemini-2.5-flash`。
+- `uv run python scripts\heartflow_state_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check -- ...` 针对本轮文件通过。
+- 静态搜索 `src.core.autonomous_core|get_background_orchestrator|独立自主代理已停用|独立自主代理已移出|AUTONOMOUS_STATE_DIR` 在 `src scripts config template` 中无命中。
+- TOML 检查确认 `config/model_config.toml`、`template/model_config_template.toml`、`template/compare/model_config_template.toml` 的 replyer 池均不含 `gemini-2.5-flash`。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 保留 `src/chat/heart_flow/llm_autonomous_planner.py`、`AutonomousDecision` 与 `inner_voice.autonomous_reflection`，它们属于当前增强主循环主动判断链路，不属于旧后台自主代理。
+- `config/model_config.toml` 是本地忽略配置，本轮已同步修正但不会提交该含密钥文件。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

@@ -73,7 +73,6 @@ USERS_DIR: Final[str] = "data/users"
 
 # 存储路径
 SOCIAL_STORAGE_DIR: Final[str] = "data/huoli/social"
-AUTONOMOUS_STATE_DIR: Final[str] = "data/huoli/autonomous_state"
 GROUP_PERSONA_DIR: Final[str] = "data/group_persona"
 MEMOIR_VAULT_DIR: Final[str] = "data/memoir_vault"
 EMBEDDING_DIR: Final[str] = "data/embedding"
@@ -155,7 +154,6 @@ __all__ = [
     "TEMP_DIR",
     "USERS_DIR",
     "SOCIAL_STORAGE_DIR",
-    "AUTONOMOUS_STATE_DIR",
     "GROUP_PERSONA_DIR",
     "MEMOIR_VAULT_DIR",
     "EMBEDDING_DIR",

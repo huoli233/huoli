@@ -972,13 +972,6 @@ class DefaultReplyer:
         # chat_id 与 stream_id 语义完全相同：chat_id 是数据库 ThinkingBack 表的字段名，
         # stream_id 是 ChatStream 对象的属性名，两者指向同一标识符
         stream_id = chat_id
-        user_id = ""
-        expression_habits_block = ""
-        reply_style_context = ""
-        if reply_message:
-            user_id = getattr(reply_message, "user_id", "") or ""
-        if not user_id and extra_info:
-            user_id = getattr(extra_info, "target_user_id", "") or getattr(extra_info, "user_id", "") or ""
         if available_actions is None:
             available_actions = {}
 
@@ -1104,19 +1097,7 @@ class DefaultReplyer:
                 except Exception as e:
                     logger.warning(f"输出日志时出错: {e}")
 
-                if fast_path:
-                    logger.info("[fast_path] 跳过自然化错字和二次改写")
-                else:
-                    content = self._apply_adaptive_recall(content, chat_id, user_id)
-
-                    content = await self._apply_rewrite_if_needed(
-                        content,
-                        chat_id,
-                        user_id,
-                        expression_habits_block=expression_habits_block,
-                        reply_reason=reply_reason or "",
-                        reply_style_context=reply_style_context,
-                    )
+                logger.info("[reply_postprocess] 跳过自然化错字和二次改写")
                 content = self._apply_sleepy_fast_reply_guard(
                     content=content or "",
                     extra_info=extra_info,

@@ -9,6 +9,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 TARGET_MODEL = "siliconflow-deepseek-v4-flash"
+BLOCKED_REPLYER_MODELS = {"gemini-2.5-flash"}
 TOOL_MODELS = ("qwen3-30b", "qwen3-next-80b")
 NON_TOOL_TASKS = (
     "utils",
@@ -59,18 +60,25 @@ def check_runtime_model_config() -> dict[str, Any]:
         models_by_name = {item.get("name"): item for item in data.get("models", []) if isinstance(item, dict)}
         replyer_models = list(tasks.get("replyer", {}).get("model_list", []))
         if replyer_models:
-            assert len(replyer_models) >= 2, f"{rel}:replyer 不能只配置单个模型: {replyer_models}"
-            assert TARGET_MODEL in replyer_models, f"{rel}:replyer 必须包含 {TARGET_MODEL} 作为备用: {replyer_models}"
-            providers: set[str] = set()
+            blocked = sorted(set(replyer_models) & BLOCKED_REPLYER_MODELS)
+            assert not blocked, f"{rel}:replyer 不应再包含鉴权失败模型: {blocked}"
+            assert TARGET_MODEL in replyer_models, f"{rel}:replyer 必须包含 {TARGET_MODEL}: {replyer_models}"
             for model_name in replyer_models:
                 model_info = models_by_name.get(model_name)
                 assert model_info, f"{rel}:replyer 引用了未定义模型 {model_name}"
                 provider = str(model_info.get("api_provider", "") or "")
                 assert provider, f"{rel}:replyer 模型 {model_name} 缺少 api_provider"
-                providers.add(provider)
-            assert len(providers) >= 2, f"{rel}:replyer 必须跨provider配置备用模型: {replyer_models}"
             route_map["replyer"] = replyer_models
         checked[rel] = route_map
+    compare_path = ROOT / "template/compare/model_config_template.toml"
+    if compare_path.exists():
+        data = _load_toml(compare_path)
+        tasks = data.get("model_task_config", {})
+        replyer_models = list(tasks.get("replyer", {}).get("model_list", []))
+        if replyer_models:
+            blocked = sorted(set(replyer_models) & BLOCKED_REPLYER_MODELS)
+            assert not blocked, f"template/compare/model_config_template.toml:replyer 不应再包含鉴权失败模型: {blocked}"
+            checked["template/compare/model_config_template.toml"] = {"replyer": replyer_models}
     return checked
 
 

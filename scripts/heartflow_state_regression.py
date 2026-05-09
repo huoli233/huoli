@@ -1451,8 +1451,9 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "[直接快回]" in flow_source
     assert "fast_path: bool = False" in coordinator_source
     assert "fast_path: bool = False" in generator_source
-    assert "if fast_path:" in group_reply_source
-    assert "跳过自然化错字和二次改写" in group_reply_source
+    assert "[reply_postprocess] 跳过自然化错字和二次改写" in group_reply_source
+    assert "_apply_adaptive_recall(content" not in group_reply_source
+    assert "await self._apply_rewrite_if_needed(" not in group_reply_source
     assert "跳过补充回复判断" in group_reply_source
     assert "管理员强制快回" not in group_reply_source
     assert "直接快回通道" in group_reply_source

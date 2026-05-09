@@ -84,10 +84,6 @@ class Heartflow:
             logger.info(f"[心流] 启动校准完成: {summary.level}, 亲密度变化{summary.intimacy_delta:+.1f}")
         except Exception as exc:
             logger.warning(f"[心流] 启动校准异常: {exc}")
-        try:
-            logger.info("[心流] 独立自主代理已移出启动路径，统一由增强主链决策")
-        except Exception as exc:
-            logger.warning(f"[心流] 自主代理启动异常: {exc}")
         # 注册多维独立状态系统的所有维度到调度器
         try:
             from src.chat.heart_flow.dimension_bootstrap import (
@@ -121,10 +117,6 @@ class Heartflow:
                 await self._cleanup_task
             except asyncio.CancelledError:
                 pass
-        try:
-            logger.info("[心流] 独立自主代理已移出关闭路径")
-        except Exception as _e:
-            logger.warning(f"[心流] 关闭日志记录异常: {_e}")
         # 关闭多维状态调度器
         if self._dimension_dispatcher is not None:
             try:
@@ -301,15 +293,6 @@ class Heartflow:
             await new_chat.start()
             self.heartflow_chat_list[chat_id] = new_chat
             self._active_since[chat_id] = _tm.time()
-            # 向自主运行器注册新频道
-            try:
-                from src.core.autonomous_core.autonomous_runner import (
-                    get_background_orchestrator,
-                )
-
-                get_background_orchestrator().register_channel(str(chat_id))
-            except Exception as _e:
-                logger.debug(f"{self.log_prefix} 异常: {_e}")
             logger.info(
                 f"[心流] 启动频道运行实例 {chat_id}, "
                 f"绑定已存在聊天流, 类型={'群聊' if chat_stream.group_info else '私聊'}"
@@ -339,14 +322,6 @@ class Heartflow:
         if chat is None:
             return
         self._flush_channel_state(chat_id)
-        try:
-            from src.core.autonomous_core.autonomous_runner import (
-                get_background_orchestrator,
-            )
-
-            get_background_orchestrator().unregister_channel(str(chat_id))
-        except Exception as _e:
-            logger.debug(f"异常: {_e}")
         try:
             if hasattr(chat, "stop"):
                 await chat.stop()
