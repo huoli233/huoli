@@ -1551,3 +1551,25 @@
 - 数据库建表日志是新库首次启动的正常现象，不属于本轮修复范围。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T07:54:30+08:00 - Task: 修复直接快回超时仍拖慢整轮
+
+### What was done:
+- 定位日志中直接快回 8 秒超时但整轮耗时 48.99 秒的原因：短超时只包住最终回复生成，前面的上下文执行块、自我记忆、决策包、灵魂摘要等构建仍在同步慢路径中执行。
+- 直接快回路径不再构建慢上下文执行块、不再读自我引用记忆、不再生成决策上下文包，只保留当前消息、短回复约束和兜底灵魂状态。
+- 直接快回后台补感知/独白从“回复前排队”改为“回复成功后排队”；快回失败时不再让后台独白继续跑完并写入意图池。
+- 给直接快回整段执行增加整体预算：使用 `heartfc_direct_fast_reply_generation_timeout_seconds + 2s`，防止前置构建或下游异常把快回拖成几十秒。
+- 更新心流回归脚本，锁定直接快回跳过慢上下文构建、成功后再补后台独白、整体超时出口。
+
+### Testing:
+- `uv run ruff check src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，确认直接快回整体超时、慢上下文跳过、成功后后台补链断言。
+- `uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 预期效果：直接快回不再出现“开始执行后十几秒才进入模型生成”的情况；如果模型或前置异常拖慢，会在约 10 秒内取消，而不是 49 秒后失败。
+- 直接快回失败不会再继续产生迟到的后台独白日志，如 `草饲我。` 这类失败轮次补链输出。
+- 完整深思路径不受影响，复杂问题仍走 deep_think。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

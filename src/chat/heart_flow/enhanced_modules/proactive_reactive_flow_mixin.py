@@ -156,24 +156,15 @@ class ProactiveReactiveFlowMixin:
             if direct_fast_reply_generation:
                 extra_info_parts.append("[直接快回] 一句短口语，直接回应当前消息；不做长篇解释，不二次改写，不补充追发。")
                 self._inject_fallback_soul_state(extra_info_parts)
-                self_reference_parts = self._build_self_reference_parts(target_message)
-                if self_reference_parts.get("self_memory"):
-                    extra_info_parts.append(self_reference_parts["self_memory"])
-                if self_reference_parts.get("continuity_context"):
-                    extra_info_parts.append(self_reference_parts["continuity_context"])
-                decision_context_packet = self._build_decision_context_packet(
-                    list(incoming_batch),
-                    repetition_signal=self._analyze_repetition_pressure(incoming_batch),
-                )
-                context_execution_block = self._build_context_execution_block(
-                    target_message=target_message,
-                    voice_conclusion=voice_conclusion,
-                    repetition_signal=self._analyze_repetition_pressure(incoming_batch),
-                    decision_context_packet=decision_context_packet,
-                    relation_snapshot=relation_view,
-                )
-                if context_execution_block:
-                    extra_info_parts.append(context_execution_block)
+                target_text = str(
+                    getattr(target_message, "processed_plain_text", "")
+                    or getattr(target_message, "plain_text", "")
+                    or getattr(target_message, "content", "")
+                    or ""
+                ).strip()
+                if target_text:
+                    extra_info_parts.append(f"[当前消息] {target_text[:120]}")
+                logger.debug(f"{self.log_prefix} ⚡ 直接快回跳过慢上下文构建")
             else:
                 decision_context_packet = self._build_decision_context_packet(
                     list(incoming_batch),

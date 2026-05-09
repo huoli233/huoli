@@ -261,6 +261,28 @@ class LoopMainDriverMixin:
             logger.debug(f"{self.log_prefix} 直接快回后台独白意图已由主链写入，跳过重复写入")
         logger.debug(f"{self.log_prefix} ⚡ 直接快回后台补感知/独白完成")
 
+    def _queue_direct_fastlane_inner_state_refresh(
+        self,
+        decision_messages: List[Any],
+        ambient_info: Optional[Dict[str, Any]],
+        now: float,
+        *,
+        reason: str = "post_reply",
+    ) -> None:
+        """快回成功后再补后台感知/独白，避免失败轮次继续污染日志和意图池。"""
+        messages = list(decision_messages or [])
+        if not messages:
+            return
+        task = getattr(self, "_direct_fastlane_refresh_task", None)
+        if task is not None and not task.done():
+            logger.debug(f"{self.log_prefix} ⚡ 直接快回后台补链仍在运行，跳过重复排队")
+            return
+        self._direct_fastlane_refresh_task = self._spawn(
+            self._refresh_direct_fastlane_inner_state(messages, ambient_info, now),
+            name=f"heartfc_direct_fastlane_refresh_{self.stream_id}",
+        )
+        logger.debug(f"{self.log_prefix} ⚡ 直接快回链路: 回复成功后后台补感知/独白已排队({reason})")
+
     async def _loopbody(self):
         """七阶段增强循环体，完全替代基础版"""
         self._tick_world_snapshot = None
@@ -1302,13 +1324,6 @@ class LoopMainDriverMixin:
                 logger.info(f"{self.log_prefix} ⚡ 直接快回链路: 跳过观察+独白")
         elif _is_admin_msg:
             logger.info(f"{self.log_prefix} 👑 管理员测试通道: 绕过回复限制，但保留感知/独白/关系/语气链路")
-        if _is_direct_reply_fastlane:
-            self._spawn(
-                self._refresh_direct_fastlane_inner_state(decision_messages, ambient_info, now),
-                name=f"heartfc_direct_fastlane_refresh_{self.stream_id}",
-            )
-            logger.debug(f"{self.log_prefix} ⚡ 直接快回链路: 后台补感知/独白已排队")
-
         # 组装并行任务列表
         _parallel_tasks: list = []
         _task_keys: list = []
@@ -2372,17 +2387,38 @@ class LoopMainDriverMixin:
                 else:
                     try:
                         _reply_source = "voice_driven"
+                        _voice_reply_timeout = 120.0
+                        _direct_fast_execute_timeout = False
+                        try:
+                            _direct_fast_execute_timeout = bool(
+                                self._should_use_direct_fast_reply_generation(
+                                    force_bypass=bool(force_reply_message is not None or gateway_gate == "force_reply")
+                                )
+                            )
+                        except Exception as _timeout_probe_exc:
+                            logger.debug(f"{self.log_prefix} 直接快回整体预算探测失败: {_timeout_probe_exc}")
+                        if _direct_fast_execute_timeout:
+                            _voice_reply_timeout = max(
+                                2.0,
+                                _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds") + 2.0,
+                            )
                         actual_reply_made = await asyncio.wait_for(
                             self._execute_voice_driven_reply(
                                 voice_conclusion=voice_conclusion,
                                 incoming_batch=decision_messages,
                                 force_reply_message=force_reply_message,
                             ),
-                            timeout=120.0,
+                            timeout=_voice_reply_timeout,
                         )
                     except asyncio.TimeoutError:
                         actual_reply_made = False
-                        logger.error(f"{self.log_prefix} ⚠️ 内心驱动回复超时(120s)")
+                        if bool(getattr(self, "_direct_fast_reply_generation", False)):
+                            self._last_flow_blocker = "direct_fast_reply_total_timeout"
+                            _timeout_target = force_reply_message or self._get_latest_human_message(decision_messages)
+                            self._mark_message_content_deferred(_timeout_target, self._last_flow_blocker)
+                            logger.warning(f"{self.log_prefix} ⚠️ 直接快回整体超时({_voice_reply_timeout:.1f}s)，取消发送")
+                        else:
+                            logger.error(f"{self.log_prefix} ⚠️ 内心驱动回复超时({_voice_reply_timeout:.0f}s)")
             elif (
                 planner_decision is not None
                 and hasattr(planner_decision, "action")
@@ -2493,6 +2529,13 @@ class LoopMainDriverMixin:
                     reply_text=str(getattr(self, "_last_reply_content", "") or ""),
                     was_proactive=_was_proactive_reply,
                 )
+                if bool(getattr(self, "_direct_fast_reply_generation", False)):
+                    self._queue_direct_fastlane_inner_state_refresh(
+                        decision_messages,
+                        ambient_info,
+                        now,
+                        reason="reply_success",
+                    )
                 # 第三层：回复成功裁定
                 _reply_confidence = getattr(planner_decision, "confidence", 0.6) if planner_decision else 0.5
                 self._emit_action_verdict(

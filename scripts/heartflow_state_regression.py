@@ -1726,6 +1726,12 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "直接快回跳过维度网关" in loop_source
     assert "src={_gateway_src}" in loop_source
     assert "_refresh_direct_fastlane_inner_state" in loop_source
+    assert "_queue_direct_fastlane_inner_state_refresh" in loop_source
+    assert "回复成功后后台补感知/独白已排队" in loop_source
+    assert "self._refresh_direct_fastlane_inner_state(decision_messages, ambient_info, now)" not in loop_source
+    assert "_voice_reply_timeout = max(" in loop_source
+    assert "direct_fast_reply_total_timeout" in loop_source
+    assert "直接快回整体超时" in loop_source
     assert "heartfc_direct_fastlane_background_voice_timeout_seconds" in loop_source
     assert "direct_fastlane_background" in loop_source
     assert "get_intention_pool().ingest_voice_verdict" in loop_source
@@ -1746,6 +1752,10 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "强制回复完整生成超时" in flow_source
     assert "取消发送" in flow_source
     assert "[直接快回]" in flow_source
+    assert "直接快回跳过慢上下文构建" in flow_source
+    assert "target_text[:120]" in flow_source
+    assert "if direct_fast_reply_generation:\n                extra_info_parts.append(\"[直接快回]" in flow_source
+    assert "self_reference_parts = self._build_self_reference_parts(target_message)\n                if self_reference_parts.get(\"self_memory\")" not in flow_source
     assert "fast_path: bool = False" in coordinator_source
     assert "fast_path: bool = False" in generator_source
     assert "[reply_postprocess] 跳过自然化错字和二次改写" in group_reply_source
