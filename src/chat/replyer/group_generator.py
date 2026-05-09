@@ -143,16 +143,15 @@ def _night_sleepy_short_reply_variant(text: str) -> str:
     payload = str(text or "").strip()
     core = payload.rstrip("。！？!?，,；;… ")
     if not core:
-        return "脑子有点慢，没看懂。"
+        return random.choice(("脑子还慢着。", "刚醒，有点没接上。", "等下，我缓一下。"))
     if any(marker in core for marker in ("啥", "什么", "咋", "怎么", "哪", "谁")):
-        tail = "脑子有点慢"
+        return random.choice(("脑子有点慢。", "刚醒，脑子没听明白。", "等下，我反应没接上。"))
     elif any(marker in core for marker in ("又", "还", "继续")):
-        tail = "我有点没反应过来"
+        return random.choice(("又这句，脑子慢着。", "还这句，我反应慢半拍。", "我脑子还慢着。"))
     elif len(re.sub(r"[^\w\u4e00-\u9fff]", "", core)) <= 4:
-        tail = "我还半醒着"
+        return random.choice(("我还半醒着。", "刚醒，脑子慢。", "等下，我缓一下。"))
     else:
-        tail = "反应有点慢"
-    return f"{core}...{tail}"
+        return random.choice(("反应有点慢。", "刚醒，先慢点。", "我脑子还没转过来。"))
 
 
 def _should_add_sleepy_tone_to_short_reply(text: str) -> bool:
@@ -662,7 +661,15 @@ class DefaultReplyer:
             "【低信息输入约束】对方这句信息不完整，禁止脑补对方态度、禁止训斥、禁止说教或审问式表达。"
             "可以自由接话，但保持短句、口语、低攻击；优先轻松追问、顺着话头接一句或温和调侃。"
             "不要出现“复读机”“一次性说全”“你到底想说啥”“建议您”等表达。"
+            "如果已经是重复短句，不要机械说“又来这句”或“没反应过来”，换成更自然的一句。"
         )
+
+    @classmethod
+    def _should_skip_tools_for_low_info_input(cls, target_text: str, has_text: bool = True) -> bool:
+        """短低信息输入不跑工具链，避免查词/历史检索拖慢并制造机械回复。"""
+        if not has_text:
+            return False
+        return bool(cls._build_low_info_input_guard(target_text))
 
     @staticmethod
     def _prune_redundant_context_sources(extra_info: str, recent_context_present: bool) -> str:
@@ -3049,6 +3056,15 @@ class DefaultReplyer:
         )
         chat_talking_prompt_short = self._sanitize_history_prompt_text(chat_talking_prompt_short)
 
+        low_info_guard = self._build_low_info_input_guard(text_part if has_text else target)
+        skip_low_info_tools = self._should_skip_tools_for_low_info_input(text_part if has_text else target, has_text)
+
+        if skip_low_info_tools and enable_tool:
+            logger.info("[reply_fast_context] 低信息短句跳过工具链")
+        enable_tool = enable_tool and not skip_low_info_tools
+        if skip_low_info_tools:
+            unknown_words = None
+
         # 统一黑话解释构建：根据配置选择上下文或 Planner 模式
         jargon_coroutine = self._build_jargon_explanation(
             chat_id,
@@ -3271,7 +3287,6 @@ class DefaultReplyer:
         except Exception as _e:
             logger.debug(f"{self.log_prefix} unknown异常: {_e}")
         recent_reply_guard = self._build_recent_reply_guard(target, sanitized_messages_short)
-        low_info_guard = self._build_low_info_input_guard(text_part if has_text else target)
         planner_reasoning = self._build_compact_planner_reasoning(
             reply_reason,
             low_info_input=bool(low_info_guard),

@@ -1189,6 +1189,7 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
         reply_message=type("ReplyMessageProbe", (), {"processed_plain_text": "我的刀盾", "display_message": ""})(),
     )
     assert sleepy_short != "又咋了？"
+    assert "又咋了...我有点没反应过来" not in sleepy_short
     assert any(marker in sleepy_short for marker in ("慢", "半醒", "脑子", "反应", "困"))
     sleepy_confused = DefaultReplyer._apply_sleepy_fast_reply_guard(
         content="啥玩意儿？",
@@ -1205,6 +1206,10 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
     assert "fallback_lines[:6]" in source
     assert "不要套固定开头" in group_reply_source
     assert "困死了，" not in group_reply_source
+    assert "低信息短句跳过工具链" in group_reply_source
+    assert "_should_skip_tools_for_low_info_input" in group_reply_source
+    assert DefaultReplyer._should_skip_tools_for_low_info_input("草饲你", True) is True
+    assert DefaultReplyer._should_skip_tools_for_low_info_input("草饲你是什么意思？", True) is False
     return {
         "night_soul_prompt_injected": True,
         "dawn_sleepy_tone_guard": True,

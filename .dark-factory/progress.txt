@@ -1365,3 +1365,26 @@
 - 时间仍由前端按帧推进，但文本只显示到秒，避免界面出现 `.085` 这类毫秒。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T04:55:36+08:00 - Task: 修复低信息短句回复工具链与夜间拼接腔
+
+### What was done:
+- 修正夜间短句困意护栏：不再把“又咋了/又来这句”机械拼接成“又咋了...我有点没反应过来”。
+- 夜间短句改为几组自然短反应变体，仍保留脑子慢、半醒、反应慢等状态感。
+- 低信息短句输入（如“草饲你”）在回复上下文构建时跳过工具链，避免触发 `query_words` 查词造成额外等待和机械回复。
+- 低信息短句跳过工具链时同时清空 `unknown_words`，避免黑话解释链路继续查询。
+- 更新心流状态回归断言，锁定低信息短句跳过工具链和夜间短句不再固定拼接。
+
+### Testing:
+- `uv run ruff check src/chat/replyer/group_generator.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/webui_smoke_test.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，只有工作区 CRLF 提示。
+
+### Notes:
+- 日志里的“灵魂引擎配置预加载完成”只代表梗词和场景矩阵加载完成，不代表回复模型、工具调用和具体回复已经提前生成。
+- 本轮没有改模型配置，没有恢复状态监控 WebSocket。
+- 低信息短句仍会走主回复模型；这次只跳过不必要的工具/黑话查询，降低“使用工具: 5.5s”这类耗时。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
