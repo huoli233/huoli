@@ -1446,6 +1446,8 @@ def check_memoir_channel_key_contract() -> Dict[str, Any]:
 
 def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     source = (ROOT / "src/chat/heart_flow/heartflow.py").read_text(encoding="utf-8")
+    main_source = (ROOT / "src/main.py").read_text(encoding="utf-8")
+    logger_source = (ROOT / "src/common/logger.py").read_text(encoding="utf-8")
     base_chat_source = (ROOT / "src/chat/heart_flow/heartFC_chat.py").read_text(encoding="utf-8")
     enhanced_source = (ROOT / "src/chat/heart_flow/heartFC_chat_enhanced.py").read_text(encoding="utf-8")
     gateway_source = (ROOT / "src/chat/heart_flow/decision_gateway.py").read_text(encoding="utf-8")
@@ -1455,13 +1457,18 @@ def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     ]
     create_block = source[source.index("async def _create_chat_instance") : source.index("    # ---- 清理 ----")]
     assert "self._warm_core_services()" in startup_block
-    assert "self._schedule_startup_warmup()" not in startup_block
-    assert "get_chat_manager().streams.values()" not in warmup_block
-    assert "startup_all" not in warmup_block
-    assert "prewarm_chat(stream.stream_id" not in warmup_block
+    assert "self._schedule_startup_warmup()" in startup_block
+    assert "get_chat_manager().streams.values()" in warmup_block
+    assert "startup_all" in warmup_block
+    assert "prewarm_chat(stream.stream_id" in warmup_block
+    assert "启动频道预热完成" in warmup_block
     assert "启动频道运行实例" in create_block
     assert "绑定已存在聊天流" in create_block
     assert "创建聊天实例" not in create_block
+    assert "1000 * (time.time() - init_start_time)" not in main_source
+    assert "init_seconds:.2f" in main_source
+    assert "datetime.fromtimestamp(log_file.stat().st_mtime)" in logger_source
+    assert "file_time = timestamp_to_datetime(log_file.stat().st_mtime)" not in logger_source
     assert "心流频道运行基类" in base_chat_source
     assert "async def _loopbody" not in base_chat_source
     assert ("旧版" + "循环体") not in base_chat_source
@@ -1471,8 +1478,10 @@ def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     assert ("_delegate_" + "readiness_evaluation") not in enhanced_source
     assert ("_apply_" + "readiness_constraint") not in enhanced_source
     return {
-        "startup_skips_known_stream_prewarm": True,
-        "startup_warmup_does_not_scan_streams": True,
+        "startup_prewarms_known_streams": True,
+        "startup_warmup_scans_real_streams": True,
+        "startup_duration_seconds_unit": True,
+        "log_cleanup_timezone_compare_fixed": True,
         "heartflow_runtime_log_disambiguated": True,
         "heartflow_base_legacy_loopbody_removed": True,
     }

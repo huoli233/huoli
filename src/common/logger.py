@@ -9,7 +9,7 @@ import tomlkit
 
 from pathlib import Path
 from typing import Callable, Optional
-from datetime import timedelta
+from datetime import datetime, timedelta
 from src.common.constants import (
     get_local_now,
     timestamp_to_datetime,
@@ -1033,7 +1033,7 @@ def cleanup_old_logs():
         # 遍历日志目录
         for log_file in LOG_DIR.glob("*.log*"):
             try:
-                file_time = timestamp_to_datetime(log_file.stat().st_mtime)
+                file_time = datetime.fromtimestamp(log_file.stat().st_mtime)
                 if file_time < cutoff_date:
                     file_size = log_file.stat().st_size
                     log_file.unlink()

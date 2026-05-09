@@ -99,6 +99,7 @@ class Heartflow:
             logger.warning(f"[心流] 多维状态调度器启动异常: {exc}")
         self._bind_proactive_hooks()
         self._warm_core_services()
+        self._schedule_startup_warmup()
         self._cleanup_task = asyncio.create_task(self._periodic_cleanup_loop())
         logger.info("[心流] 主协调器已启动")
 
@@ -449,10 +450,30 @@ class Heartflow:
         )
 
     async def _run_startup_warmup(self) -> None:
-        """后台只预热核心模块，不为历史聊天流启动频道运行实例。"""
+        """后台预热核心模块，并启动数据库里已存在的真实频道运行实例。"""
         await asyncio.sleep(0.2)
         self._warm_core_services()
-        logger.debug("[心流] 启动频道预热已禁用，历史聊天流将按首条消息按需绑定")
+        streams = [
+            stream
+            for stream in list(get_chat_manager().streams.values())
+            if not self._should_skip_prewarm(stream, reason="startup_all")
+        ]
+        if not streams:
+            logger.info("[心流] 启动频道预热完成：没有需要激活的历史聊天流")
+            return
+        tasks: List[asyncio.Task] = []
+        for stream in streams:
+            task = self.prewarm_chat(stream.stream_id, reason="startup_all")
+            if task is not None:
+                tasks.append(task)
+        if tasks:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            started = sum(1 for item in results if item is not None and not isinstance(item, Exception))
+            failed = sum(1 for item in results if isinstance(item, Exception))
+        else:
+            started = 0
+            failed = 0
+        logger.info(f"[心流] 启动频道预热完成：扫描={len(streams)} 启动={started} 失败={failed}")
 
     @staticmethod
     def _should_skip_prewarm(stream: ChatStream, *, reason: str = "") -> bool:

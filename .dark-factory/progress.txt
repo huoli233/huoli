@@ -1388,3 +1388,26 @@
 - 低信息短句仍会走主回复模型；这次只跳过不必要的工具/黑话查询，降低“使用工具: 5.5s”这类耗时。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T05:02:00+08:00 - Task: 修复启动预热、耗时日志与日志清理刷屏
+
+### What was done:
+- 修复主程序初始化耗时日志单位错误：原来把毫秒数写成“秒”，导致日志显示“耗时8921秒”，实际约为 8.92 秒。
+- 修复日志清理时间比较异常：日志文件 mtime 与本地时间比较时混用了 aware/naive datetime，启动时反复刷出 `can't compare offset-naive and offset-aware datetimes`。
+- 调整 Heartflow 启动预热策略：启动后扫描数据库里已存在的真实聊天流，并后台调用 `prewarm_chat(..., reason="startup_all")` 启动频道运行实例。
+- 保留 WebUI 内部/虚拟会话跳过逻辑，避免状态页或内部会话被当成真实聊天流预热。
+- 更新心流状态回归断言，锁定启动预热历史聊天流、耗时秒级日志和日志清理时区比较修复。
+
+### Testing:
+- `uv run ruff check src/main.py src/common/logger.py src/chat/heart_flow/heartflow.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，`heartflow_startup_prewarm.startup_prewarms_known_streams=true`。
+- `uv run python scripts/webui_smoke_test.py` 通过，确认 `state_monitor_websocket_removed=true`，状态监控 WebSocket 没有恢复。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 用户日志里从 `04:53:13` 到 `04:53:41` 是完整系统启动过程，约 28 秒；其中 `_init_components` 的“8921秒”是单位 bug，不代表真的启动 8921 秒。
+- 之前“第一条消息后才激活频道”不是错觉，旧代码明确只预热核心模块，并把历史聊天流留到首条消息到达后按需绑定。
+- 本轮改动后启动会后台激活已有真实聊天流运行态，但不会提前调用回复模型生成内容；具体回复仍要等真实消息到来。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

@@ -163,8 +163,8 @@ class MainSystem:
         await events_manager.handle_mai_events(event_type=EventType.ON_START)
         # logger.info("已触发 ON_START 事件")
         try:
-            init_time = int(1000 * (time.time() - init_start_time))
-            logger.info(f"初始化完成，耗时{init_time}秒")
+            init_seconds = time.time() - init_start_time
+            logger.info(f"初始化完成，耗时{init_seconds:.2f}秒")
         except Exception as e:
             logger.error(f"启动大脑和外部世界失败: {e}")
             raise
