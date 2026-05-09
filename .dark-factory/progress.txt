@@ -1179,3 +1179,24 @@
 - 临时验证服务没有真实 Heartflow 活跃会话，因此截图只验证状态页真实渲染和等待会话路径；活跃会话完整包由回归测试和 API 契约覆盖。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T01:59:45+08:00 - Task: 移除夜间短回复固定模板前缀
+
+### What was done:
+- 定位截图中“困死了，又咋了...”来自 `DefaultReplyer._apply_sleepy_fast_reply_guard()` 的本地后处理固定拼接，不是模型自然生成。
+- 移除夜间困倦状态下对普通短句的强制改写；模型生成“又咋了？”这类短句时不再被改成固定“困死了，xxx...”。
+- 直接快回通道的夜间提示改为要求模型自然带一点困、慢或被打断感，并明确禁止套固定开头、禁止机械加前缀。
+- 保留必要反矛盾护栏：只有模型明确说“不困/还好/想再聊会”这类违背夜间状态的话，才会被本地兜底纠正。
+- 更新 `scripts/heartflow_state_regression.py`，锁定普通短句不被夜间模板改写，并断言源码不再包含固定“困死了，”拼接。
+
+### Testing:
+- `uv run ruff check src/chat/replyer/group_generator.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- 静态搜索确认 `困死了，` 不再出现在回复生成器源码中。
+
+### Notes:
+- 修复后需要重启主程序，当前运行中的回复生成器才会加载新逻辑。
+- 这次没有恢复二次 rewrite，也没有重新启用自然化错字；仍保持一次主生成，只减少模板化后处理。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

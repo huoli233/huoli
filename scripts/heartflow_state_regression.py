@@ -1182,14 +1182,16 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
         extra_info=ensured,
         reply_message=type("ReplyMessageProbe", (), {"processed_plain_text": "我的刀盾", "display_message": ""})(),
     )
-    assert sleepy_short != "又咋了？"
-    assert "困" in sleepy_short
+    assert sleepy_short == "又咋了？"
     remove_night_cycle(channel_id)
     source = (ROOT / "src/chat/heart_flow/enhanced_modules/scene_planner_bridge_mixin.py").read_text(
         encoding="utf-8"
     )
+    group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
     assert "self._inject_night_soul_state(extra_parts)" in source
     assert "fallback_lines[:6]" in source
+    assert "不要套固定开头" in group_reply_source
+    assert "困死了，" not in group_reply_source
     return {
         "night_soul_prompt_injected": True,
         "dawn_sleepy_tone_guard": True,

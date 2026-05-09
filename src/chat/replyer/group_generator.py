@@ -2949,7 +2949,11 @@ class DefaultReplyer:
             )
             sleepy_guard = ""
             if _night_state_is_sleepy(extra_info) or _target_asks_sleep(reply_message):
-                sleepy_guard = "当前有清晨半醒或熬夜压力，问困不困时必须承认困/刚醒/脑子慢，禁止说不困、还好、想再聊会。"
+                sleepy_guard = (
+                    " 当前有清晨半醒或熬夜压力时，要自然带一点困、慢或被打断的感觉；"
+                    "不要套固定开头，不要把原句机械加前缀。"
+                    "如果对方问困不困，必须承认困/刚醒/脑子慢，禁止说不困、还好、想再聊会。"
+                )
             fast_behavioral_directive = (
                 "直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
                 f"{sleepy_guard}"
@@ -3622,7 +3626,7 @@ class DefaultReplyer:
         extra_info: str,
         reply_message: Optional[DatabaseMessages],
     ) -> str:
-        """夜间困倦状态下强制收束短回复语气，避免精神饱满。"""
+        """夜间困倦状态下只拦截明确违背状态的否认，不机械改写普通短句。"""
         text = str(content or "").strip()
         if not text:
             return text
@@ -3634,13 +3638,6 @@ class DefaultReplyer:
             or ""
         )
         if not _contains_sleep_denial(text):
-            if _contains_sleepy_tone(text):
-                return text
-            if len(text) <= 12:
-                clean_text = text.rstrip("。！？!?")
-                if any(marker in raw_target for marker in ("刀盾", "咋了", "怎么了", "啥")):
-                    return f"困死了，{clean_text}..."
-                return f"困，有点慢半拍。{clean_text}"
             return text
         if any(marker in raw_target for marker in ("困吗", "不困", "睡不睡", "还醒", "熬夜", "没睡")):
             return "困，脑子还没完全醒。"
