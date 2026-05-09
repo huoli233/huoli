@@ -1376,6 +1376,9 @@ def check_memoir_channel_key_contract() -> Dict[str, Any]:
 
 def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     source = (ROOT / "src/chat/heart_flow/heartflow.py").read_text(encoding="utf-8")
+    base_chat_source = (ROOT / "src/chat/heart_flow/heartFC_chat.py").read_text(encoding="utf-8")
+    enhanced_source = (ROOT / "src/chat/heart_flow/heartFC_chat_enhanced.py").read_text(encoding="utf-8")
+    gateway_source = (ROOT / "src/chat/heart_flow/decision_gateway.py").read_text(encoding="utf-8")
     startup_block = source[source.index("async def startup") : source.index("async def shutdown")]
     warmup_block = source[
         source.index("async def _run_startup_warmup") : source.index("    @staticmethod\n    def _should_skip_prewarm")
@@ -1389,10 +1392,19 @@ def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     assert "启动频道运行实例" in create_block
     assert "绑定已存在聊天流" in create_block
     assert "创建聊天实例" not in create_block
+    assert "心流频道运行基类" in base_chat_source
+    assert "async def _loopbody" not in base_chat_source
+    assert ("旧版" + "循环体") not in base_chat_source
+    readiness_token = "readiness_" + "evaluator"
+    assert readiness_token not in enhanced_source
+    assert readiness_token not in gateway_source
+    assert ("_delegate_" + "readiness_evaluation") not in enhanced_source
+    assert ("_apply_" + "readiness_constraint") not in enhanced_source
     return {
         "startup_skips_known_stream_prewarm": True,
         "startup_warmup_does_not_scan_streams": True,
         "heartflow_runtime_log_disambiguated": True,
+        "heartflow_base_legacy_loopbody_removed": True,
     }
 
 

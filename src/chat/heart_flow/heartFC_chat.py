@@ -18,44 +18,15 @@ logger = get_logger("心流核心")
 
 
 class HeartFChatting(ChatCoreBase):
-    """管理一个连续的 Focus Chat 循环，用于在特定聊天流中生成回复。
-    其生命周期现在由其关联的 SubHeartflow 的 FOCUSED 状态控制。
+    """心流频道运行基类。
 
-    继承耦合评估（供后续退役参考）：
-    ─────────────────────────────────
-    【Enhanced 仍在使用的能力】
-      ChatCoreBase.__init__: stream_id, chat_stream, log_prefix,
-                             action_manager, action_modifier, running,
-                             _loop_task, last_read_time
-      ChatCoreBase._handle_loop_completion: 循环任务完成回调
-      HeartFChatting.__init__: last_active_time, chat_history_summarizer
-      HeartFChatting.start/stop: 循环生命周期管理
-      HeartFChatting._main_chat_loop: 循环运行器
-      HeartFChatting._send_response: 消息发送
-
-    【Enhanced 已覆盖（不使用父版本）】
-      _classify_behavior_signal, _decide_reply_style,
-      _select_preferred_reply_message, _capture_reply_behavior_learning,
-      _loopbody
-
-    【Enhanced 完全未使用（安全移除候选）】
-      ChatCoreBase: expression_learner, start_cycle, end_cycle,
-                    print_cycle_info, _invoke_unified_planner_gate,
-                    _convert_unified_decision_to_actions,
-                    _build_fallback_actions, _build_relation_style_hint,
-                    _build_relationship_target_hint
-      HeartFChatting: is_mute, question_probability_multiplier,
-                      questioned, consecutive_no_reply_count,
-                      _history_loop_limit
-
-    结论：旧链可压缩为"初始化+循环管理+发送"三能力最小壳，
-          但目前不建议拆分，因为 action_manager/action_modifier
-          初始化深度耦合 ChatCoreBase，风险收益比不合适。
+    这里仅保留增强心流仍复用的生命周期管理、聊天概括器启动和消息发送能力。
+    具体循环体由 EnhancedHeartFChatting 的 mixin 链提供。
     """
 
     def __init__(self, chat_id: str):
         """
-        HeartFChatting 初始化函数
+        心流频道运行基类初始化函数
 
         参数:
             chat_id: 聊天流唯一标识符(如stream_id)
@@ -64,16 +35,7 @@ class HeartFChatting(ChatCoreBase):
         """
         super().__init__(chat_id)
 
-        self.is_mute = False
-
         self.last_active_time = time.time()  # 记录上一次非noreply时间
-
-        self.question_probability_multiplier = 1
-        self.questioned = False
-
-        # 跟踪连续 no_reply 次数，用于动态调整阈值
-        self.consecutive_no_reply_count = 0
-        self._history_loop_limit = 200
 
         # 聊天内容概括器
         self.chat_history_summarizer = ChatHistorySummarizer(
@@ -86,7 +48,7 @@ class HeartFChatting(ChatCoreBase):
         # 如果循环已经激活，直接返回
         if self.running:
             logger.debug(
-                f"{self.log_prefix} HeartFChatting 已激活，无需重复启动"
+                f"{self.log_prefix} 心流频道运行实例已激活，无需重复启动"
             )
             return
 
@@ -100,21 +62,14 @@ class HeartFChatting(ChatCoreBase):
             # 启动聊天内容概括器的后台定期检查循环
             await self.chat_history_summarizer.start()
 
-            logger.info(f"{self.log_prefix} HeartFChatting 启动完成")
+            logger.info(f"{self.log_prefix} 心流频道运行实例启动完成")
 
         except Exception as e:
             # 启动失败时重置状态
             self.running = False
             self._loop_task = None
-            logger.error(f"{self.log_prefix} HeartFChatting 启动失败: {e}")
+            logger.error(f"{self.log_prefix} 心流频道运行实例启动失败: {e}")
             raise
-
-    async def _loopbody(self):
-        """旧版循环体已废弃，群聊职责已移交 EnhancedHeartFChatting。
-        此方法仅作为虚方法保留，由子类完全覆盖。"""
-        logger.warning(f"{self.log_prefix} 旧版循环体被调用，应由子类覆盖")
-        await asyncio.sleep(3.0)
-        return True
 
     async def _main_chat_loop(self):
         """主循环，调用子类覆盖的 _loopbody 直到被取消。"""
@@ -203,4 +158,4 @@ class HeartFChatting(ChatCoreBase):
         except Exception as _e:
             logger.debug(f"异常: {_e}")
         self.history_loop.clear()
-        logger.info(f"{self.log_prefix} HeartFChatting 已停止")
+        logger.info(f"{self.log_prefix} 心流频道运行实例已停止")

@@ -157,7 +157,7 @@ class EnhancedHeartFChatting(
         # 日志节流：上次输出时间
         self._last_status_log_ts = 0.0
         self._status_log_interval = 10.0
-        # 准入度评估器缓存（由 readiness_evaluator 填充）
+        # 决策网关缓存
         self._legacy_constraint_hits = 0
         self._last_legacy_constraint_ts = 0.0
         self._last_legacy_penalty = 0.0
@@ -561,15 +561,6 @@ class EnhancedHeartFChatting(
 
 
 
-    # [已废弃 2026-04-06] _delegate_readiness_evaluation() 已移除
-    # 原方法导入不存在的 readiness_evaluator 模块，功能已由 DecisionGateway 完全替代
-    # 决策入口统一走 DecisionGateway.evaluate() 六层决策引擎
-    # 历史方法体约184行(L9928-L10110)，含 ReadinessInput 组装 + evaluator.evaluate() 调用
-
-    # [已废弃 2026-04-06] _apply_readiness_constraint() 已移除
-    # 原方法处理约束命中后的冷却记录，已迁移至 DecisionGateway 内部处理
-    # 约束逻辑现在由 D6 EnergyChainDimension.vote() 的 force_refuse 机制承载
-
     # ═══════════════════════════════════════════════════
     #  阶段 4.8：主动回复执行 - 跳过规划器直接生成回复
     # ═══════════════════════════════════════════════════
@@ -703,6 +694,5 @@ class EnhancedHeartFChatting(
 
 
     _SUMMARY_MIN_EVENTS_FOR_PIPELINE = 3
-
 
 

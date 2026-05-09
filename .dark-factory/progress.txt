@@ -964,3 +964,27 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - `AnticipationSetup`、`HeartFChatting` 基类、配置迁移、运行态 legacy_gate 等仍有现役兼容或基类职责，本轮未删除。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-09T16:53:19+08:00 - Task: 清理心流旧注释与旧兜底
+
+### What was done:
+- 按删除分支规则建立 `preserve/full-modules-心流旧注释兜底清理`，并在 `delete/心流旧注释兜底清理` 上执行本轮清理。
+- 将 `HeartFChatting` 文档改为当前“心流频道运行基类”语义，删除长篇旧链退役说明。
+- 删除 `HeartFChatting._loopbody()` 旧兜底方法，现役循环体由 `EnhancedLoopFlowMixin._loopbody()` 提供。
+- 移除 `HeartFChatting` 中不再使用的 `is_mute`、`question_probability_multiplier`、`questioned`、`consecutive_no_reply_count`、`_history_loop_limit` 初始化。
+- 将基类启动/停止日志改为“心流频道运行实例”语义，去掉旧类名日志噪音。
+- 删除 `heartFC_chat_enhanced.py` 中已移除方法的墓碑注释，移除 `decision_gateway.py` 中对已不存在 readiness evaluator 的旧说明。
+- 更新 `scripts/heartflow_state_regression.py`，锁定旧兜底方法和旧 readiness 文案不再回流。
+
+### Testing:
+- 静态搜索 `rg "旧版循环体|readiness_evaluator|已废弃 2026-04-06|_delegate_readiness_evaluation|_apply_readiness_constraint|HeartFChatting 已激活|HeartFChatting 启动完成|HeartFChatting 启动失败|HeartFChatting 已停止|is_mute|question_probability_multiplier|questioned|consecutive_no_reply_count" src scripts` 无命中。
+- `uv run ruff check scripts/heartflow_state_regression.py src/chat/heart_flow/heartFC_chat.py src/chat/heart_flow/heartFC_chat_enhanced.py src/chat/heart_flow/decision_gateway.py` 通过。
+- `uv run python scripts/model_runtime_audit.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `heartflow_base_legacy_loopbody_removed=true`。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 本轮只清理旧注释、旧兜底和未使用初始化字段；未迁移仍在现役决策链中使用的 `legacy_gate` 内部命名。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

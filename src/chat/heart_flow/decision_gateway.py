@@ -123,7 +123,6 @@ class GatewayConfig:
 class DecisionGateway:
     """
     多维投票决策网关。
-    替代旧的 readiness_evaluator 的总分加减模型，
     采用分层决策：
       1. 强制触发/强制抑制（最高优先级）
       2. LLM意愿验证
