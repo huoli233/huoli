@@ -1230,9 +1230,27 @@ def check_inner_voice_low_info_tone_contract() -> Dict[str, Any]:
     assert "发疯" not in fixed.thinking
     assert any(marker in fixed.thinking for marker in ("重复", "看懂", "没说清楚"))
     assert "low_info_guard" in fixed.thinking_source
+    multi_ref = VoiceVerdict(
+        thinking="这俩人又在打什么哑谜，感觉有点莫名其妙的。",
+        reply_desire_level=4,
+        should_reply=False,
+        current_mood="困惑",
+        thinking_source="llm_json",
+    )
+    normalized = engine._stabilize_single_speaker_reference(
+        multi_ref,
+        BoundaryContext(raw_text="我的刀盾", speaker_id="3138039548"),
+    )
+    assert "这俩人" not in normalized.thinking
+    assert "这人" in normalized.thinking
+    assert "single_speaker_guard" in normalized.thinking_source
     prompt_source = (ROOT / "src/chat/prompts/catalog.py").read_text(encoding="utf-8")
     assert "不要写\"发疯\"" in prompt_source
-    return {"hostile_low_info_thought_softened": True}
+    assert "不要把\"他和我\"误写成\"这俩人/他们俩\"" in prompt_source
+    return {
+        "hostile_low_info_thought_softened": True,
+        "single_speaker_reference_normalized": True,
+    }
 
 
 def check_webui_internal_chat_disabled_contract() -> Dict[str, Any]:
@@ -1855,6 +1873,8 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
     assert "emit_runtime_delta" in hub_source
     assert "wait_for_update" in hub_source
     assert "MONITOR_OVERVIEW_CHANNEL_ID" in hub_source
+    assert "await build_monitor_overview() if int(after_version or 0) <= 0" in heartflow_router_source
+    assert "live_chats = list_heartfc_chats()" in heartflow_router_source
     assert "startswith(\"monitor_\")" in heartflow_router_source
     assert "monitor = await build_channel_monitor_state(channel_id)" in heartflow_router_source
     assert "if not isinstance(existing, dict) or not existing:" in hub_source

@@ -47,8 +47,12 @@ async def wait_heartflow_monitor_overview(
     """Long-poll monitor overview and return as soon as the channel list changes."""
 
     hub = get_runtime_state_hub()
-    overview = await hub.get_snapshot(MONITOR_OVERVIEW_CHANNEL_ID)
-    if overview is None:
+    overview = await build_monitor_overview() if int(after_version or 0) <= 0 else await hub.get_snapshot(MONITOR_OVERVIEW_CHANNEL_ID)
+    live_chats = list_heartfc_chats()
+    if overview is None or (
+        int(overview.get("active_count", 0) or 0) <= 0
+        and int(live_chats.get("active_count", 0) or 0) > 0
+    ):
         overview = await build_monitor_overview()
     current_version = int(overview.get("state_version", 0) or 0)
     if current_version > int(after_version or 0):

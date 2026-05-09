@@ -392,6 +392,7 @@ class SelfDialogueEngine:
                 )
             verdict = self._apply_boundaries(verdict, ctx)
             verdict = self._stabilize_low_info_reflection(verdict, ctx)
+            verdict = self._stabilize_single_speaker_reference(verdict, ctx)
             if verdict.reply_desire_level != original_desire:
                 logger.info(
                     f"{self._tag} 欲望修正 {original_desire} -> {verdict.reply_desire_level}"
@@ -862,6 +863,28 @@ class SelfDialogueEngine:
             if not verdict.current_mood or verdict.current_mood == "疑惑":
                 verdict.current_mood = "无聊"
         verdict.thinking = self._compress_thought(verdict.thinking)
+        return verdict
+
+    def _stabilize_single_speaker_reference(
+        self, verdict: VoiceVerdict, ctx: BoundaryContext
+    ) -> VoiceVerdict:
+        """独白聚焦当前说话人时，避免把用户和机器人误写成两个人。"""
+        current = str(verdict.thinking or "").strip()
+        if not current or not ctx.speaker_id:
+            return verdict
+        replacements = {
+            "这俩人": "这人",
+            "这两人": "这人",
+            "他俩": "他",
+            "他们俩": "他",
+            "两个人": "这人",
+        }
+        normalized = current
+        for old, new in replacements.items():
+            normalized = normalized.replace(old, new)
+        if normalized != current:
+            verdict.thinking = self._compress_thought(normalized)
+            verdict.thinking_source = f"{verdict.thinking_source or 'unknown'}+single_speaker_guard"
         return verdict
 
     # ---- 情感分析 ----

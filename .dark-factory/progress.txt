@@ -1271,3 +1271,24 @@
 - 修改后需要重启主程序/WebUI，`http://127.0.0.1:8001/dashboard` 才会加载新的 live API 行为。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T02:28:41+08:00 - Task: 修复状态页初始会话校准与单人独白误称呼
+
+### What was done:
+- 现场查询 `http://127.0.0.1:8001/api/heartflow/chats`，确认当前 WebUI 进程实际能看到 `人坤测试` 活跃会话；截图仍显示等待会话，说明状态页总览可能读到了旧的 0 会话 hub 快照。
+- 修改 `/api/heartflow/monitor/live`：当 `after_version=0`（页面首次打开/刷新）时强制重建总览；如果缓存总览为 0 会话但实时 `list_heartfc_chats()` 已有活跃会话，也立即重建总览。
+- 修复内心独白单人上下文误称呼：当前独白聚焦一个说话人时，将“这俩人/这两人/他们俩/他俩”等误称呼规范成“这人/他”。
+- 更新内心独白提示词，明确不要把“他和我”误写成“这俩人/他们俩”。
+- 更新 `scripts/heartflow_state_regression.py`，锁定总览首次校准和单人独白称呼规范契约。
+
+### Testing:
+- `uv run ruff check src/webui/routers/heartflow.py src/chat/heart_flow/inner_voice.py src/chat/prompts/catalog.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `inner_voice_low_info_tone.single_speaker_reference_normalized=true`。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，只有工作区 CRLF 提示。
+
+### Notes:
+- 当前 8001 运行进程仍返回旧 `state_version=3` 和旧时间，说明服务尚未加载本轮源码；需要重启主程序/WebUI 后，状态页才会使用新的首次总览校准逻辑。
+- 这次没有恢复状态监控 WebSocket，仍然走 HTTP live API。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
