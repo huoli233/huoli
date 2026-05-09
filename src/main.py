@@ -1,7 +1,5 @@
 import asyncio
 import time
-
-from src.manager.remote import TelemetryHeartBeatTask
 from src.manager.async_task_manager import async_task_manager
 from src.chat.utils.statistic import OnlineTimeRecordTask, StatisticOutputTask
 
@@ -112,9 +110,6 @@ class MainSystem:
 
         # 添加统计信息输出任务
         await async_task_manager.add_task(StatisticOutputTask())
-
-        # 添加遥测心跳任务
-        await async_task_manager.add_task(TelemetryHeartBeatTask())
 
         # 添加表达方式自动检查任务
         await async_task_manager.add_task(ExpressionAutoCheckTask())

@@ -189,6 +189,19 @@ def check_source_contract() -> Dict[str, Any]:
     return {"early_stages": len(REQUIRED_EARLY_STAGES)}
 
 
+def check_remote_telemetry_removed_contract() -> Dict[str, Any]:
+    main_source = (ROOT / "src/main.py").read_text(encoding="utf-8")
+    assert not (ROOT / "src/manager/remote.py").exists()
+    assert "TelemetryHeartBeatTask" not in main_source
+    assert "src.manager.remote" not in main_source
+    assert "远程连接" not in main_source
+    assert "TELEMETRY_SERVER_URL" not in main_source
+    return {
+        "remote_telemetry_module_removed": True,
+        "startup_telemetry_task_removed": True,
+    }
+
+
 def check_prediction_runtime_contract() -> Dict[str, Any]:
     engine = SpeakPredictionEngine()
 
@@ -2020,6 +2033,7 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
 def main() -> None:
     results = {
         "source": check_source_contract(),
+        "remote_telemetry_removed": check_remote_telemetry_removed_contract(),
         "prediction_runtime": check_prediction_runtime_contract(),
         "memory_autonomy": check_memory_and_autonomy_contract(),
         "deprecated_small_module_cleanup": check_deprecated_small_module_cleanup_contract(),
