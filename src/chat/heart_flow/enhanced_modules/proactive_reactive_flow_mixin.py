@@ -53,11 +53,9 @@ if TYPE_CHECKING:
 class ProactiveReactiveFlowMixin:
     def _should_use_direct_fast_reply_generation(self, *, force_bypass: bool) -> bool:
         """只有显式快回任务才使用短超时。"""
-        if bool(getattr(self, "_is_admin_forced", False)):
+        if bool(getattr(self, "_force_full_reply_generation", False)):
             return False
-        if force_bypass:
-            return False
-        return bool(getattr(self, "_direct_fast_reply_generation", False))
+        return bool(getattr(self, "_direct_fast_reply_generation", False) or force_bypass)
 
     @staticmethod
     def _pick_runtime_text(key: str, seed_text: str) -> str:
@@ -108,24 +106,27 @@ class ProactiveReactiveFlowMixin:
             gateway_gate = str(getattr(self, "_last_gateway_gate", "allow") or "allow")
             force_bypass = bool(force_reply_message is not None or gateway_gate == "force_reply")
             targeted_to_bot = bool(force_bypass or getattr(self, "_cached_targeted_to_bot", False))
-            restraint = await self._run_self_restraint_check(
-                incoming_batch,
-                source="voice_driven_reply",
-                repetition_signal=self._analyze_repetition_pressure(incoming_batch),
-                harassment_signal=self._analyze_harassment_pressure(incoming_batch),
+            direct_fast_reply_generation = self._should_use_direct_fast_reply_generation(
                 force_bypass=force_bypass,
-                targeted_to_bot=targeted_to_bot,
-                admin_force=bool(getattr(self, "_is_admin_forced", False)),
             )
+            if direct_fast_reply_generation:
+                restraint = {"allow": True, "mode": "short_only", "reason": "直接快回跳过自省深检"}
+            else:
+                restraint = await self._run_self_restraint_check(
+                    incoming_batch,
+                    source="voice_driven_reply",
+                    repetition_signal=self._analyze_repetition_pressure(incoming_batch),
+                    harassment_signal=self._analyze_harassment_pressure(incoming_batch),
+                    force_bypass=force_bypass,
+                    targeted_to_bot=targeted_to_bot,
+                    admin_force=bool(getattr(self, "_is_admin_forced", False)),
+                )
             if not restraint.get("allow", True):
                 self._last_flow_blocker = f"voice自省拦截:{restraint.get('reason', 'skip')}"
                 logger.info(f"{self.log_prefix} 🧯 自省闸门拦截 voice 回复: {restraint.get('reason', 'skip')}")
                 return False
             self._mark_message_content_processing(target_message)
             forced_reply_generation = bool(force_bypass or getattr(self, "_is_admin_forced", False))
-            direct_fast_reply_generation = self._should_use_direct_fast_reply_generation(
-                force_bypass=force_bypass,
-            )
 
             # 获取目标用户的风格指导
             user_style_guide = ""

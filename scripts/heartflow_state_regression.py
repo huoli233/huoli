@@ -1612,10 +1612,12 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         },
     )()
     force_probe = ProactiveReactiveFlowMixin()
-    assert not force_probe._should_use_direct_fast_reply_generation(force_bypass=True)
+    assert force_probe._should_use_direct_fast_reply_generation(force_bypass=True)
     force_probe._is_admin_forced = True
     force_probe._direct_fast_reply_generation = True
-    assert not force_probe._should_use_direct_fast_reply_generation(force_bypass=False)
+    assert force_probe._should_use_direct_fast_reply_generation(force_bypass=False)
+    force_probe._force_full_reply_generation = True
+    assert not force_probe._should_use_direct_fast_reply_generation(force_bypass=True)
     direct_probe = ProactiveReactiveFlowMixin()
     direct_probe._direct_fast_reply_generation = True
     assert direct_probe._should_use_direct_fast_reply_generation(force_bypass=False)
@@ -1711,17 +1713,25 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "跳过阶段2.5b深度集成" in loop_source
     assert "跳过记忆预取" in loop_source
     assert "直接快回链路" in loop_source
+    assert "self._direct_fast_reply_generation = bool(_is_direct_reply_fastlane)" in loop_source
+    assert "直接快回，不等待前台感知/独白" in loop_source
+    assert "direct_fastlane_synthetic" in loop_source
+    assert "使用缓存关系快照，不等待关系计算" in loop_source
+    assert "直接快回跳过维度网关" in loop_source
+    assert "src={_gateway_src}" in loop_source
     assert "_refresh_direct_fastlane_inner_state" in loop_source
     assert "heartfc_direct_fastlane_background_voice_timeout_seconds" in loop_source
     assert "direct_fastlane_background" in loop_source
     assert "get_intention_pool().ingest_voice_verdict" in loop_source
-    assert "src=admin_force" in loop_source
+    assert '_gateway_src = "admin_force" if _is_admin_force_wake else "direct_fastlane"' in loop_source
     assert "heartfc_background_proactive_min_silence_seconds" in flow_source
     assert "heartfc_background_proactive_cooldown_seconds" in flow_source
     assert "heartfc_background_proactive_success_cooldown_min_seconds" in flow_source
     assert "if gw_ctx.admin_force" in scene_source
     assert "跳过被动策略规划" in scene_source
     assert "_should_use_direct_fast_reply_generation" in flow_source
+    assert "return bool(getattr(self, \"_direct_fast_reply_generation\", False) or force_bypass)" in flow_source
+    assert "直接快回跳过自省深检" in flow_source
     assert "forced_reply_generation = bool(force_bypass or getattr(self, \"_is_admin_forced\", False))" in flow_source
     assert "direct_fast_reply_generation = self._should_use_direct_fast_reply_generation" in flow_source
     assert "fast_path=direct_fast_reply_generation" in flow_source
@@ -1738,6 +1748,10 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "跳过补充回复判断" in group_reply_source
     assert "管理员强制快回" not in group_reply_source
     assert "直接快回通道" in group_reply_source
+    assert "_cond_tasks" not in group_reply_source
+    assert "_reply_context_tasks" in group_reply_source
+    assert "asyncio.gather(*_reply_context_tasks)" in group_reply_source
+    assert "条件任务并行超时(30s)" not in group_reply_source
     return {
         "local_force_reply_fallback_removed": True,
         "force_reply_generation_failure_aborts": True,
@@ -1745,7 +1759,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "admin_model_governor_bypass": True,
         "stale_voice_cache_cleared": True,
         "direct_fast_reply_path": True,
-        "force_reply_full_generation_path": True,
+        "force_reply_uses_direct_fast_path": True,
+        "explicit_full_generation_override": True,
     }
 
 

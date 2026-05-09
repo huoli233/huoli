@@ -3035,137 +3035,111 @@ class DefaultReplyer:
             extra_context=extra_info,
         )
 
-        try:
-            task_results = await asyncio.wait_for(
-                asyncio.gather(
-                    self._time_and_run_task(
-                        self.build_expression_habits(
-                            chat_talking_prompt_short,
-                            target,
-                            reply_reason,
-                            think_level=think_level,
-                        ),
-                        "expression_habits",
-                    ),
-                    self._time_and_run_task(
-                        self.build_tool_info(
-                            chat_talking_prompt_short,
-                            sender,
-                            target,
-                            enable_tool=enable_tool,
-                        ),
-                        "tool_info",
-                    ),
-                    self._time_and_run_task(
-                        self.build_personality_prompt(chat_id, user_id),
-                        "personality_prompt",
-                    ),
-                    self._time_and_run_task(memory_retrieval_coroutine, "memory_retrieval"),
-                    self._time_and_run_task(jargon_coroutine, "jargon_explanation"),
-                    self._time_and_run_task(
-                        self._craft_behavioral_directive(chat_id, user_id),
-                        "behavioral_directive",
-                    ),
-                    self._time_and_run_task(
-                        self._compose_emotional_lens(chat_id, user_id),
-                        "emotional_lens",
-                    ),
-                ),
-                timeout=60.0,
-            )
-        except asyncio.TimeoutError:
-            logger.warning(f"[{self.chat_stream}] 回复构建并行任务超时(60s)，使用空结果")
-            task_results = [("", name) for name in [
-                "expression_habits", "tool_info", "personality_prompt",
-                "memory_retrieval", "jargon_explanation", "behavioral_directive", "emotional_lens"
-            ]]
-        _cond_tasks = []
         results_dict = {}
+        _reply_context_tasks = [
+            self._time_and_run_task(
+                self.build_expression_habits(
+                    chat_talking_prompt_short,
+                    target,
+                    reply_reason,
+                    think_level=think_level,
+                ),
+                "expression_habits",
+            ),
+            self._time_and_run_task(
+                self.build_tool_info(
+                    chat_talking_prompt_short,
+                    sender,
+                    target,
+                    enable_tool=enable_tool,
+                ),
+                "tool_info",
+            ),
+            self._time_and_run_task(
+                self.build_personality_prompt(chat_id, user_id),
+                "personality_prompt",
+            ),
+            self._time_and_run_task(memory_retrieval_coroutine, "memory_retrieval"),
+            self._time_and_run_task(jargon_coroutine, "jargon_explanation"),
+            self._time_and_run_task(
+                self._craft_behavioral_directive(chat_id, user_id),
+                "behavioral_directive",
+            ),
+            self._time_and_run_task(
+                self._compose_emotional_lens(chat_id, user_id),
+                "emotional_lens",
+            ),
+        ]
         _has_pics = bool(pic_part)
         if _is_group_chat:
-            _cond_tasks.append(
-                (
-                    self._time_and_run_task(self._build_group_language_style(chat_id), "group_lang"),
-                    "group_lang",
-                )
+            _reply_context_tasks.append(
+                self._time_and_run_task(self._build_group_language_style(chat_id), "group_lang")
             )
         _recent_text = self._get_recent_text_for_context() or ""
         _agency_kws = ("工具", "AI", "机器人", "程序", "代码", "你是谁")
         if any(kw in _recent_text for kw in _agency_kws):
-            _cond_tasks.append(
-                (
-                    self._time_and_run_task(self._build_self_agency_prompt(chat_id, user_id), "self_agency"),
-                    "self_agency",
-                )
+            _reply_context_tasks.append(
+                self._time_and_run_task(self._build_self_agency_prompt(chat_id, user_id), "self_agency")
             )
         if _has_pics:
             current_image_desc = pic_part or target
-            _cond_tasks.append(
-                (
-                    self._time_and_run_task(
-                        self._build_image_emotion_guide(
-                            chat_id,
-                            has_only_pics,
-                            _has_pics,
-                            user_id or "",
-                            current_image_desc,
-                        ),
-                        "image_emotion",
+            _reply_context_tasks.append(
+                self._time_and_run_task(
+                    self._build_image_emotion_guide(
+                        chat_id,
+                        has_only_pics,
+                        _has_pics,
+                        user_id or "",
+                        current_image_desc,
                     ),
                     "image_emotion",
                 )
             )
-        _cond_tasks.append(
-            (
-                self._time_and_run_task(self._generate_learning_prompt(chat_id), "learning_ctx"),
-                "learning_ctx",
-            )
+        _reply_context_tasks.append(
+            self._time_and_run_task(self._generate_learning_prompt(chat_id), "learning_ctx")
         )
-        _cond_tasks.append(
-            (
-                self._time_and_run_task(
-                    self._fetch_interaction_intent(chat_id, user_id, target or ""),
-                    "interaction_intent",
-                ),
+        _reply_context_tasks.append(
+            self._time_and_run_task(
+                self._fetch_interaction_intent(chat_id, user_id, target or ""),
                 "interaction_intent",
             )
         )
-        _cond_tasks.append(
-            (
-                self._time_and_run_task(self._fetch_active_persona_state(chat_id), "persona_state"),
-                "persona_state",
-            )
+        _reply_context_tasks.append(
+            self._time_and_run_task(self._fetch_active_persona_state(chat_id), "persona_state")
         )
-        _cond_tasks.append(
-            (
-                self._time_and_run_task(self._fetch_memory_overload_status(chat_id), "mem_overload"),
-                "mem_overload",
-            )
+        _reply_context_tasks.append(
+            self._time_and_run_task(self._fetch_memory_overload_status(chat_id), "mem_overload")
         )
         if _is_group_chat:
-            _cond_tasks.append(
-                (
-                    self._time_and_run_task(self._fetch_dynamic_context_hint(chat_id), "dynamic_context_hint"),
-                    "dynamic_context_hint",
-                )
+            _reply_context_tasks.append(
+                self._time_and_run_task(self._fetch_dynamic_context_hint(chat_id), "dynamic_context_hint")
             )
-            _cond_tasks.append(
-                (
-                    self._time_and_run_task(self._fetch_topic_suggestion(chat_id), "topic_suggestion"),
-                    "topic_suggestion",
-                )
+            _reply_context_tasks.append(
+                self._time_and_run_task(self._fetch_topic_suggestion(chat_id), "topic_suggestion")
             )
-        if _cond_tasks:
-            try:
-                _cond_results = await asyncio.wait_for(
-                    asyncio.gather(*[t[0] for t in _cond_tasks]),
-                    timeout=30.0,
-                )
-            except asyncio.TimeoutError:
-                logger.warning(f"[{self.chat_stream}] 条件任务并行超时(30s)，跳过")
-                _cond_results = []
-            for _idx, (_name, result, _duration) in enumerate(_cond_results):
-                results_dict[_name] = result
+        try:
+            task_results = await asyncio.wait_for(
+                asyncio.gather(*_reply_context_tasks),
+                timeout=60.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(f"[{self.chat_stream}] 回复构建并行任务超时(60s)，使用空结果")
+            task_results = [
+                ("expression_habits", ("", []), 0.0),
+                ("tool_info", "", 0.0),
+                ("personality_prompt", "", 0.0),
+                ("memory_retrieval", "", 0.0),
+                ("jargon_explanation", "", 0.0),
+                ("behavioral_directive", "", 0.0),
+                ("emotional_lens", "", 0.0),
+                ("group_lang", "", 0.0),
+                ("learning_ctx", "", 0.0),
+                ("interaction_intent", "", 0.0),
+                ("persona_state", "", 0.0),
+                ("mem_overload", "", 0.0),
+                ("dynamic_context_hint", "", 0.0),
+                ("topic_suggestion", "", 0.0),
+            ]
 
         # 任务名称中英文映射
         task_name_mapping = {

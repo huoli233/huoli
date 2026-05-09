@@ -1437,6 +1437,29 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
 
+## 2026-05-10T06:59:07+08:00 - Task: 优化强制短句快回构建链路
+
+### What was done:
+- 定位用户日志中强制/短句回复慢的核心原因：管理员或明确对机器人说话虽然进入 direct fastlane，但主链仍可能前台等待阶段 3+4 的感知、内心独白、关系计算和维度网关；回复器上下文构建也分两段串行 `gather`。
+- 在心流主链里为 direct fastlane 显式打开 `_direct_fast_reply_generation`，并跳过前台感知/独白、关系计算和维度网关，改用合成 `VoiceVerdict` 直接进入 voice driven 生成；真实感知/独白继续后台补，不阻塞本轮发送。
+- 修复管理员强制消息前台独白和后台补独白同时跑导致同消息两次“心里想”的问题，避免目标/旧上下文继续污染本轮回复。
+- 在 voice driven 执行器里允许 `force_bypass` 使用 direct fast reply generation，并对快回跳过自省深检、错字自然化、二次改写和分段发送。
+- 将群聊回复器的表达方式、工具信息、人格、记忆、黑话、行为指导、情感透镜、群语言、学习状态、人格状态、动态上下文和话题建议合并到一次并行 `asyncio.gather`，取消第二段条件任务串行等待。
+- 更新心流回归契约，锁定强制默认快回、显式 full override 才走完整生成、回复上下文不再存在 `_cond_tasks` 二段 gather。
+
+### Testing:
+- `uv run ruff check src/chat/replyer/group_generator.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，`force_reply_generation_failure.force_reply_uses_direct_fast_path=true`，`explicit_full_generation_override=true`。
+- `uv run python scripts/webui_smoke_test.py` 通过，确认 `state_monitor_websocket_removed=true`。
+- `uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 预期效果：强制/短句快回不再先等独白模型、关系计算、维度网关和第二段 prompt 构建任务；回复前耗时应主要由阶段 2.5 短超时和最终模型生成耗时决定。
+- 这次没有删模块，也没有恢复状态监控 WebSocket。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
 ## 2026-05-10T06:05:00+08:00 - Task: 移除夜间短句本地模板替换
 
 ### What was done:

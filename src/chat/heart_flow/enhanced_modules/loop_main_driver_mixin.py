@@ -29,7 +29,7 @@ from src.chat.heart_flow.turn_scheduler import (
 )
 from src.plugin_system.apis import database_api, message_api, send_api
 from src.chat.utils.utils import is_bot_self
-from src.common.data_models.heartflow_models import FlowPhase, UnifiedFlowSnapshot
+from src.common.data_models.heartflow_models import FlowPhase, UnifiedFlowSnapshot, VoiceVerdict
 from src.chat.heart_flow.enhanced_modules.shared_runtime import (
     logger,
     _rng,
@@ -654,6 +654,8 @@ class LoopMainDriverMixin:
 
         _is_admin_force_wake = self._is_force_wake_admin(incoming_batch, pinged_msg)
         _is_direct_reply_fastlane = bool(_is_admin_force_wake or getattr(self, "_cached_targeted_to_bot", False))
+        self._direct_fast_reply_generation = bool(_is_direct_reply_fastlane)
+        self._force_full_reply_generation = False
 
         # 重建完整世界快照（携带目标用户ID），供 Phase 2.5+ 所有门控使用
         _target_uid = ""
@@ -1095,12 +1097,12 @@ class LoopMainDriverMixin:
         _is_admin_msg = self._is_force_wake_admin(incoming_batch, pinged_msg)
         run_perception = self._should_run_perception(now)
         run_voice = self._should_run_voice(now, incoming_batch, pinged_msg)
-        if _is_admin_msg:
-            run_perception = True
-            run_voice = True
-        elif _is_direct_reply_fastlane:
+        if _is_direct_reply_fastlane:
             run_perception = False
             run_voice = False
+        elif _is_admin_msg:
+            run_perception = True
+            run_voice = True
         # 窥屏态升级复用：如果窥屏态 LLM 已决定 reply/followup 且缓存有效，跳过重复独白
         _peek_voice_reuse = False
         if (
@@ -1117,10 +1119,13 @@ class LoopMainDriverMixin:
             f"{self.log_prefix} 🔄 阶段3+4启动 感知={run_perception} 独白={run_voice}"
             + (" (窥屏态verdict复用)" if _peek_voice_reuse else "")
         )
-        if _is_admin_msg:
+        if _is_direct_reply_fastlane:
+            if _is_admin_msg:
+                logger.info(f"{self.log_prefix} 👑 管理员测试通道: 直接快回，不等待前台感知/独白")
+            else:
+                logger.info(f"{self.log_prefix} ⚡ 直接快回链路: 跳过观察+独白")
+        elif _is_admin_msg:
             logger.info(f"{self.log_prefix} 👑 管理员测试通道: 绕过回复限制，但保留感知/独白/关系/语气链路")
-        elif _is_direct_reply_fastlane:
-            logger.info(f"{self.log_prefix} ⚡ 直接快回链路: 跳过观察+独白")
         if _is_direct_reply_fastlane:
             self._spawn(
                 self._refresh_direct_fastlane_inner_state(decision_messages, ambient_info, now),
@@ -1145,8 +1150,11 @@ class LoopMainDriverMixin:
                 )
             )
             _task_keys.append("voice")
-        _parallel_tasks.append(self._compute_relation_metrics(decision_messages))
-        _task_keys.append("relation")
+        if not _is_direct_reply_fastlane:
+            _parallel_tasks.append(self._compute_relation_metrics(decision_messages))
+            _task_keys.append("relation")
+        else:
+            logger.debug(f"{self.log_prefix} ⚡ 直接快回链路: 使用缓存关系快照，不等待关系计算")
 
         if _parallel_tasks:
             try:
@@ -1185,6 +1193,18 @@ class LoopMainDriverMixin:
 
         # 拆包内心独白结果
         voice_conclusion = self._cached_voice
+        if _is_direct_reply_fastlane:
+            voice_conclusion = VoiceVerdict(
+                thinking="先接住当前这句话，不展开。",
+                reply_desire_level=6,
+                should_reply=True,
+                next_action="reply",
+                current_mood="平静",
+                is_valid=True,
+                comprehension_confidence=0.6,
+                needs_upgrade=False,
+                thinking_source="direct_fastlane_synthetic",
+            )
         if run_voice:
             _vval = _result_map.get("voice")
             if isinstance(_vval, BaseException):
@@ -1403,16 +1423,17 @@ class LoopMainDriverMixin:
             logger.info(f"{self.log_prefix} 👑 管理员强制唤醒-无视早期退出: {early_exit['reason']}")
 
         # ── 阶段 4.5：多维状态系统统一决策（唯一决策入口） ──
-        if _is_admin_force_wake:
+        if _is_direct_reply_fastlane:
             gateway_result = {
                 "gate": "force_reply",
                 "should_skip": False,
-                "reason": "管理员强制回复",
+                "reason": "直接快回跳过维度网关",
             }
             self._last_gateway_verdict = None
+            _gateway_src = "admin_force" if _is_admin_force_wake else "direct_fastlane"
             logger.info(
                 f"{self.log_prefix} [维度网关] gate=force_reply prob=1.000 "
-                "skip=False src=admin_force reason=管理员强制回复"
+                f"skip=False src={_gateway_src} reason=直接快回跳过维度网关"
             )
         else:
             gateway_result = await self._run_dimension_gateway(
