@@ -136,13 +136,6 @@ class MemoryRetrievalToolRegistry:
             descriptions.append(f"{i}. {tool.get_tool_description()}")
         return "\n".join(descriptions)
 
-    def get_action_types_list(self) -> str:
-        """获取所有动作类型的列表，用于prompt（已废弃，保留用于兼容）"""
-        action_types = [tool.name for tool in self.tools.values()]
-        action_types.append("final_answer")
-        action_types.append("no_answer")
-        return " 或 ".join([f'"{at}"' for at in action_types])
-
     def get_tool_definitions(self) -> List[Dict[str, Any]]:
         """获取所有工具的定义列表，用于LLM function calling
 

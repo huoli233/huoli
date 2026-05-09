@@ -770,19 +770,6 @@ class StrategyRelationStyleMixin:
         except Exception as exc:
             logger.debug(f"{self.log_prefix} 最终状态输出失败: {exc}")
 
-    def _evaluate_impulse_factors(self, now: float, relation_result: Dict) -> Dict[str, Any]:
-        """评估冲动因子：无聊、孤独、沉默、好感度等（已废弃，使用情感驱动核心）"""
-        return {
-            "silence_sec": 0.0,
-            "matched_factors": [],
-            "total_bonus": 0.0,
-            "should_proactive": False,
-        }
-
-    def _log_impulse_factors(self, impulse: Dict[str, Any]) -> None:
-        """输出冲动因子日志（已废弃，使用情感驱动核心）"""
-        logger.debug(f"{self.log_prefix} 冲动因子日志已迁移至情感驱动核心")
-
     def _update_emotion_state(self, now: float, relation_result: Dict) -> Dict[str, Any]:
         """
         更新情感状态 - 真正的自主行为核心
@@ -949,4 +936,3 @@ class StrategyRelationStyleMixin:
             _db = min(0.02, (_desire - 8) * 0.02)
             verdict.activation_bar = max(0.55, verdict.activation_bar - _db)
             verdict.breakdown["voice_desire_incentive"] = _db
-

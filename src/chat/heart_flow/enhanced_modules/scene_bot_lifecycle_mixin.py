@@ -545,10 +545,6 @@ class SceneBotLifecycleMixin:
                 reasoning=f"LLM 调用失败: {exc}",
             )
 
-    def _ensure_night_cycle(self):
-        """[已废弃 2026-04-06] 夜间周期实例获取已迁移至 D6 EnergyChainDimension"""
-        return None
-
     @staticmethod
     def _normalize_night_action(action: Any, allow_internal: bool = False) -> str:
         normalized = str(action or "").strip().lower()

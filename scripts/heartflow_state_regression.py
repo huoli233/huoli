@@ -274,6 +274,50 @@ def check_memory_and_autonomy_contract() -> Dict[str, Any]:
     }
 
 
+def check_deprecated_small_module_cleanup_contract() -> Dict[str, Any]:
+    assert not (ROOT / "src/config" / ("threshold_" + "config.py")).exists()
+
+    vector_probe_source = (
+        ROOT / "src/memory_system/retrieval_tools/query_embedding_memory.py"
+    ).read_text(encoding="utf-8")
+    for token in (
+        "_Cached" + "Vector",
+        "Embedding" + "Reservoir",
+        "_vector_" + "reservoir",
+        "_resolve_" + "record_vector",
+        "_probe_" + "memory_by_vector_legacy",
+    ):
+        assert token not in vector_probe_source
+    assert "class StreamAwareVectorProbe" in vector_probe_source
+    assert "probe_memory_by_vector" in vector_probe_source
+
+    registry_source = (
+        ROOT / "src/memory_system/retrieval_tools/tool_registry.py"
+    ).read_text(encoding="utf-8")
+    assert ("get_" + "action_types_list") not in registry_source
+    assert "get_tool_definitions" in registry_source
+
+    lifecycle_source = (
+        ROOT / "src/chat/heart_flow/enhanced_modules/scene_bot_lifecycle_mixin.py"
+    ).read_text(encoding="utf-8")
+    assert ("_ensure_" + "night_cycle") not in lifecycle_source
+    assert "_apply_night_cycle_modulation" in lifecycle_source
+
+    relation_source = (
+        ROOT / "src/chat/heart_flow/enhanced_modules/strategy_relation_style_mixin.py"
+    ).read_text(encoding="utf-8")
+    assert ("_evaluate_" + "impulse_factors") not in relation_source
+    assert ("_log_" + "impulse_factors") not in relation_source
+    assert "_update_emotion_state" in relation_source
+    return {
+        "old_threshold_module_removed": True,
+        "legacy_vector_probe_removed": True,
+        "deprecated_registry_action_types_removed": True,
+        "deprecated_night_cycle_stub_removed": True,
+        "deprecated_impulse_stubs_removed": True,
+    }
+
+
 def check_participant_contract() -> Dict[str, Any]:
     domains = {
         "relationship_profile": {"user_id": "u1", "display_name": "甲", "relationship_label": "熟人"},
@@ -1658,6 +1702,7 @@ def main() -> None:
         "source": check_source_contract(),
         "prediction_runtime": check_prediction_runtime_contract(),
         "memory_autonomy": check_memory_and_autonomy_contract(),
+        "deprecated_small_module_cleanup": check_deprecated_small_module_cleanup_contract(),
         "participants": check_participant_contract(),
         "world_snapshot_relation": check_world_snapshot_relation_contract(),
         "dynamic_personal_impression": check_dynamic_personal_impression_contract(),

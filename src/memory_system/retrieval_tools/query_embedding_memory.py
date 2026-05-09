@@ -12,7 +12,6 @@
 import asyncio
 import math
 import time
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -48,55 +47,6 @@ def _cosine_affinity(vec_a: List[float], vec_b: List[float]) -> float:
     return _dot_product(vec_a, vec_b) / (mag_a * mag_b)
 
 
-# ==================== 向量缓存池 ====================
-
-
-@dataclass
-class _CachedVector:
-    """缓存的向量条目"""
-
-    vector: List[float]
-    cached_at: float
-
-
-class EmbeddingReservoir:
-    """向量缓存池 —— 对记录级Embedding做TTL缓存，超容FIFO淘汰。
-
-    融合容量治理（FIFO淘汰）与TTL过期机制，
-    使用dataclass + dict替代裸tuple字典。
-    """
-
-    def __init__(self, capacity: int = 500, ttl_seconds: float = 7200.0):
-        self._pool: Dict[int, _CachedVector] = {}
-        self._capacity = capacity
-        self._ttl = ttl_seconds
-
-    def retrieve(self, record_id: int) -> Optional[List[float]]:
-        """从缓存中取向量（过期自动清除）"""
-        entry = self._pool.get(record_id)
-        if entry is None:
-            return None
-        if time.time() - entry.cached_at > self._ttl:
-            del self._pool[record_id]
-            return None
-        return entry.vector
-
-    def deposit(self, record_id: int, vector: List[float]) -> None:
-        """存入向量（超容时淘汰最老条目）"""
-        if len(self._pool) >= self._capacity and record_id not in self._pool:
-            oldest_rid = min(self._pool, key=lambda k: self._pool[k].cached_at)
-            del self._pool[oldest_rid]
-        self._pool[record_id] = _CachedVector(
-            vector=vector, cached_at=time.time()
-        )
-
-    def count(self) -> int:
-        return len(self._pool)
-
-
-_vector_reservoir = EmbeddingReservoir()
-
-
 # ==================== Embedding获取 ====================
 
 
@@ -120,19 +70,6 @@ async def _request_embedding_vector(text: str) -> Optional[List[float]]:
     except Exception as exc:
         logger.debug(f"embedding请求失败: {exc}")
     return None
-
-
-async def _resolve_record_vector(
-    record_id: int, composite_text: str
-) -> Optional[List[float]]:
-    """获取记录的向量（优先走缓存）"""
-    cached = _vector_reservoir.retrieve(record_id)
-    if cached is not None:
-        return cached
-    fresh_vec = await _request_embedding_vector(composite_text)
-    if fresh_vec:
-        _vector_reservoir.deposit(record_id, fresh_vec)
-    return fresh_vec
 
 
 # ==================== 记录文本组装 ====================
@@ -165,100 +102,11 @@ def _assemble_searchable_text(record) -> str:
 # ==================== 核心检索函数 ====================
 
 _SCAN_WINDOW = 200  # 最大扫描记录数
-_AFFINITY_FLOOR = 0.3  # 最低相似度阈值
-_CONCURRENT_BATCH = 10  # 批量并发embedding请求的批大小
-
-
-async def _probe_memory_by_vector_legacy(
-    query: str,
-    stream_id: Optional[str] = None,
-    top_k: int = 5,
-) -> str:
-    """通过向量余弦相似度检索语义相关记忆。
-
-    参数:
-        query: 自然语言查询文本
-        stream_id: 聊天流ID（可选，从上下文自动获取）
-        top_k: 返回最相似记录的条数
-    返回:
-        格式化的检索结果文本
-    """
-    if not query or not query.strip():
-        return "查询文本为空"
-    if stream_id is None:
-        try:
-            from src.llm_models.utils_model import get_current_flow_stream
-            stream_id = get_current_flow_stream() or "global"
-        except Exception:
-            stream_id = "global"
-    try:
-        # 获取查询向量
-        query_vec = await _request_embedding_vector(query.strip())
-        if not query_vec:
-            return "无法获取查询向量"
-        # 拉取候选记录
-        allow_global = getattr(global_config.memory, "global_memory", False)
-        if allow_global:
-            candidates = list(
-                ChatHistory.select()
-                .order_by(ChatHistory.start_time.desc())
-                .limit(_SCAN_WINDOW)
-            )
-        else:
-            candidates = list(
-                ChatHistory.select()
-                .where(ChatHistory.chat_id == stream_id)
-                .order_by(ChatHistory.start_time.desc())
-                .limit(_SCAN_WINDOW)
-            )
-        if not candidates:
-            return "没有可检索的记忆记录"
-        # 逐批获取向量并计算相似度
-        scored_pairs: List[Tuple[float, Any]] = []
-        for batch_start in range(0, len(candidates), _CONCURRENT_BATCH):
-            batch = candidates[batch_start: batch_start + _CONCURRENT_BATCH]
-            pending = []
-            for rec in batch:
-                searchable = _assemble_searchable_text(rec)
-                if not searchable:
-                    continue
-                pending.append(
-                    (rec, _resolve_record_vector(rec.id, searchable))
-                )
-            for rec, coro in pending:
-                rec_vec = await coro
-                if rec_vec:
-                    affinity = _cosine_affinity(query_vec, rec_vec)
-                    if affinity > _AFFINITY_FLOOR:
-                        scored_pairs.append((affinity, rec))
-        if not scored_pairs:
-            truncated_query = query[:30]
-            return f"未找到与'{truncated_query}'语义相关的记忆"
-        # 排序取TOP-K
-        scored_pairs.sort(key=lambda pair: pair[0], reverse=True)
-        top_hits = scored_pairs[:top_k]
-        # 格式化输出
-        output_parts = []
-        for affinity, rec in top_hits:
-            ts_text = datetime.fromtimestamp(rec.start_time).strftime(
-                "%m-%d %H:%M"
-            )
-            headline = (
-                f"[相似度{affinity:.2f}] {ts_text} {rec.theme or '无主题'}"
-            )
-            if rec.summary:
-                brief = rec.summary[:100]
-                headline += f"\n  {brief}"
-            output_parts.append(headline)
-        return "\n\n".join(output_parts)
-    except Exception as exc:
-        logger.error(f"向量语义检索异常: {exc}")
-        return f"检索失败: {exc}"
 
 
 class StreamAwareVectorProbe:
     """流感知向量探测器
-    完全原创封装，与EmbeddingReservoir不同，使用状态机+上下文绑定+动态阈值调整
+    使用状态机+上下文绑定+动态阈值调整
     解决stream_id缺失问题，集成get_current_flow_stream自动回退
     包含独立缓存、批处理、亲和力加权、元过滤等子模块
     """

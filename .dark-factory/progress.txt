@@ -917,3 +917,27 @@
 - 保留 `src/chat/heart_flow/llm_autonomous_planner.py`、`AutonomousDecision` 与 `inner_voice.autonomous_reflection`，它们属于当前增强主循环主动判断链路，不属于旧后台自主代理。
 - `config/model_config.toml` 是本地忽略配置，本轮已同步修正但不会提交该含密钥文件。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-09T16:43:08+08:00 - Task: 继续排查并清理废弃小模块残留
+
+### What was done:
+- 按删除分支规则建立 `preserve/full-modules-废弃小模块清理`，并在 `delete/废弃小模块清理` 上执行本轮删除。
+- 删除无引用旧阈值文件 `src/config/threshold_config.py`。
+- 清理 `query_embedding_memory.py` 中只剩自身引用的旧向量探针实现，保留现役 `StreamAwareVectorProbe` 与 `search_memory_by_embedding` 工具入口。
+- 删除无调用者的 `MemoryRetrievalToolRegistry.get_action_types_list()` 废弃兼容方法。
+- 删除心流 mixin 中无调用者的 `_ensure_night_cycle()`、`_evaluate_impulse_factors()`、`_log_impulse_factors()` 空壳废弃入口。
+- 更新 `scripts/heartflow_state_regression.py`，增加废弃小模块清理契约，防止这些旧符号和旧文件回流。
+
+### Testing:
+- 静态搜索 `rg "_CachedVector|EmbeddingReservoir|_vector_reservoir|_resolve_record_vector|_probe_memory_by_vector_legacy|get_action_types_list|_ensure_night_cycle|_evaluate_impulse_factors|_log_impulse_factors|threshold_config" src scripts` 无命中。
+- 静态搜索 `rg "threshold_config|ANNOYANCE_EXTREME|PRESSURE_SKIPThreshold|DESIRED_LOW|DESIRED_MEDIUM" src scripts config template` 无命中。
+- `uv run ruff check scripts/heartflow_state_regression.py src/chat/heart_flow/enhanced_modules/scene_bot_lifecycle_mixin.py src/chat/heart_flow/enhanced_modules/strategy_relation_style_mixin.py src/memory_system/retrieval_tools/query_embedding_memory.py src/memory_system/retrieval_tools/tool_registry.py` 通过。
+- `uv run python scripts/model_runtime_audit.py` 通过，确认现役记忆工具仍注册 `search_memory_by_embedding`。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `deprecated_small_module_cleanup` 契约返回全 true。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 本轮没有删除 WebUI legacy 兼容、配置迁移、关系字段兼容、当前心流 legacy_gate 等仍在运行链路或回归契约中使用的代码。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
