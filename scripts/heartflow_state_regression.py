@@ -1714,8 +1714,10 @@ def check_webui_contract() -> Dict[str, Any]:
     assert ".live-pill.is-cached" in dashboard_style
     assert "下一步发言概率" in dashboard_source
     assert "后端当前时间" in dashboard_source
-    assert "formatClockMs" in dashboard_source
-    assert "preciseDuration(syncAgeSeconds)" in dashboard_source
+    assert "formatClockSecond" in dashboard_source
+    assert "durationSecond(syncAgeSeconds)" in dashboard_source
+    assert "formatClockMs" not in dashboard_source
+    assert "preciseDuration" not in dashboard_source
     assert "心理负荷" in dashboard_source
     assert "创伤负荷" in dashboard_source
     assert "表层伪装" in dashboard_source

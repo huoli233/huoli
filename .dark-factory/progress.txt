@@ -1341,3 +1341,27 @@
 - 这次没有恢复状态监控 WebSocket，状态页仍走 HTTP live API。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T04:51:46+08:00 - Task: 状态页时间显示改为秒级
+
+### What was done:
+- 将状态页“后端当前时间”从毫秒显示改为秒级显示。
+- 将“上次同步”从毫秒显示改为秒级显示。
+- 将“延迟”从小数秒显示改为整数秒/分钟显示。
+- 保留 `requestAnimationFrame` 逐帧驱动，时间显示仍会按秒正常跳动，只是不再显示小数和毫秒。
+- 更新 WebUI smoke 与心流状态回归断言，禁止状态页恢复 `formatClockMs` 和小数延迟显示。
+- 重新构建 dashboard dist 静态产物。
+
+### Testing:
+- `Push-Location web\dashboard; npm run build; Pop-Location` 通过。
+- `uv run ruff check scripts/webui_smoke_test.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/webui_smoke_test.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，只有工作区 CRLF 提示。
+
+### Notes:
+- 本轮只改显示格式，不改后端状态包推送、HTTP live API 或状态计算逻辑。
+- 时间仍由前端按帧推进，但文本只显示到秒，避免界面出现 `.085` 这类毫秒。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

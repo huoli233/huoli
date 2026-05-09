@@ -241,9 +241,9 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
         "connecting_label": 'connecting: "监听中"',
         "reconnecting_label": 'reconnecting: "续连中"',
         "local_clock": "requestAnimationFrame",
-        "backend_clock_ms": "后端当前时间",
-        "backend_clock_formatter": "formatClockMs",
-        "sync_age": "preciseDuration(syncAgeSeconds)",
+        "backend_clock_second": "后端当前时间",
+        "backend_clock_formatter": "formatClockSecond",
+        "sync_age": "durationSecond(syncAgeSeconds)",
         "psych_load_panel": "心理负荷",
         "trauma_raw_value": "创伤负荷",
         "mask_raw_value": "表层伪装",
@@ -253,6 +253,8 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     ]
     assert not missing_dashboard, f"状态监控前端常驻连接契约缺失: {missing_dashboard}"
     assert "timestamp - last" not in dashboard_source, "后端时钟不应再使用 50ms 节流，应按 animation frame 推进"
+    assert "formatClockMs" not in dashboard_source, "状态页后端时钟不应显示毫秒"
+    assert "preciseDuration" not in dashboard_source, "状态页延迟不应显示小数秒"
     assert "new " + "WebSocket" not in dashboard_source, "状态页不应再创建 WebSocket"
     assert "Web" + "Socket" not in dashboard_source, "状态页源码不应残留 WebSocket 状态监控逻辑"
     assert REMOVED_STATE_MONITOR_WS_PATH not in dashboard_source, "状态页不应再连接状态监控 WebSocket"

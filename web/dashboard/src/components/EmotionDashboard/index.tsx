@@ -550,27 +550,23 @@ function formatClock(timestamp: number): string {
   });
 }
 
-function formatClockMs(timestamp: number): string {
+function formatClockSecond(timestamp: number): string {
   const raw = Number(timestamp || 0);
   if (raw <= 0) {
     return "-";
   }
   const date = new Date(raw * 1000);
-  const clock = date.toLocaleTimeString("zh-CN", {
+  return date.toLocaleTimeString("zh-CN", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
   });
-  return `${clock}.${String(date.getMilliseconds()).padStart(3, "0")}`;
 }
 
-function preciseDuration(seconds: number | undefined | null): string {
+function durationSecond(seconds: number | undefined | null): string {
   const safe = Math.max(0, Number(seconds ?? 0));
-  if (safe < 10) {
-    return `${safe.toFixed(2)}秒`;
-  }
   if (safe < 60) {
-    return `${safe.toFixed(1)}秒`;
+    return `${Math.round(safe)}秒`;
   }
   return `${Math.floor(safe / 60)}分${Math.floor(safe % 60)}秒`;
 }
@@ -1082,9 +1078,9 @@ export function EmotionDashboard() {
         </article>
         <article className="command-card is-clock">
           <span>后端当前时间</span>
-          <strong>{selectedChannel ? formatClockMs(serverNowSeconds) : "-"}</strong>
+          <strong>{selectedChannel ? formatClockSecond(serverNowSeconds) : "-"}</strong>
           <p>
-            上次同步 {lastSyncSeconds > 0 ? formatClockMs(lastSyncSeconds) : "-"} · 延迟 {preciseDuration(syncAgeSeconds)}
+            上次同步 {lastSyncSeconds > 0 ? formatClockSecond(lastSyncSeconds) : "-"} · 延迟 {durationSecond(syncAgeSeconds)}
           </p>
           <p>{connectionLabel(displayConnectionState)} · {selectedScopeLabel}状态{usingCachedSnapshot ? "来自最近快照" : "实时更新"}</p>
         </article>
