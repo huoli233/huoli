@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from src.chat.heart_flow.heartfc_state_exporter import export_heartfc_state, list_heartfc_chats
 from src.chat.heart_flow.speak_prediction_engine import get_speak_prediction_engine
-from src.webui.services.runtime_state_hub import get_runtime_state_hub
+from src.webui.services.runtime_state_hub import MONITOR_OVERVIEW_CHANNEL_ID, get_runtime_state_hub
 from src.webui.runtime_config import webui_module_view
 
 _DYNAMIC_TRACE_CACHE: Dict[str, Dict[str, float]] = {}
@@ -2258,7 +2258,7 @@ def _build_presentation(
 async def build_monitor_overview() -> Dict[str, Any]:
     overview = list_heartfc_chats()
     now = time.time()
-    return {
+    packet = {
         "snapshot_kind": "overview",
         "updated_at": now,
         "server_time": now,
@@ -2267,6 +2267,8 @@ async def build_monitor_overview() -> Dict[str, Any]:
         "hidden_internal_count": overview.get("hidden_internal_count", 0),
         "channels": overview.get("channels", []),
     }
+    packet = await get_runtime_state_hub().set_snapshot(MONITOR_OVERVIEW_CHANNEL_ID, packet, reason="monitor_overview")
+    return packet
 
 
 async def build_channel_monitor_state(channel_id: str) -> Optional[Dict[str, Any]]:

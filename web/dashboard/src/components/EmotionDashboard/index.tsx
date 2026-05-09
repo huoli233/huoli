@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import "./styles.css";
 
@@ -544,13 +544,6 @@ function formatClock(timestamp: number): string {
   });
 }
 
-function wsUrl(channelId: string): string {
-  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const base = `${protocol}//${window.location.host}`;
-  const query = channelId ? `?channel_id=${encodeURIComponent(channelId)}` : "";
-  return `${base}/ws/state-monitor${query}`;
-}
-
 function percent(value: number | undefined | null): string {
   const safe = Math.max(0, Math.min(1, Number(value ?? 0)));
   return `${(safe * 100).toFixed(1)}%`;
@@ -705,11 +698,57 @@ function circadianExpressionStyle(packet: MonitorPacket | null, detail: Circadia
 function connectionLabel(value: string): string {
   return {
     waiting: "等待会话",
-    connecting: "连接中",
-    live: "实时同步",
-    reconnecting: "重连中",
-    error: "连接异常",
+    connecting: "监听中",
+    live: "API实时同步",
+    reconnecting: "续连中",
+    error: "同步异常",
   }[value] ?? "连接中";
+}
+
+function applyOverviewPayload(
+  monitor: OverviewPayload | null | undefined,
+  selectedChannel: string,
+  setOverview: (value: OverviewPayload | null) => void,
+  setSelectedChannel: (value: string) => void,
+  setPacket: (value: MonitorPacket | null) => void,
+): string {
+  setOverview(monitor ?? null);
+  const channels = monitor?.channels ?? [];
+  if (channels.length === 0) {
+    setSelectedChannel("");
+    setPacket(null);
+    return "";
+  }
+  const selectedStillExists = Boolean(selectedChannel) && channels.some((channel) => channel.channel_id === selectedChannel);
+  const nextChannel = selectedStillExists ? selectedChannel : channels[0]?.channel_id ?? "";
+  if (nextChannel !== selectedChannel) {
+    setSelectedChannel(nextChannel);
+  }
+  return nextChannel;
+}
+
+function applyMonitorPacket(
+  monitor: MonitorPacket | null | undefined,
+  setPacket: (value: MonitorPacket | null) => void,
+  setServerOffsetMs: (value: number) => void,
+): void {
+  if (!monitor) {
+    setPacket(null);
+    return;
+  }
+  const snapshotServerTime = Number(monitor.server_time ?? monitor.updated_at ?? 0);
+  if (snapshotServerTime > 0) {
+    setServerOffsetMs(snapshotServerTime * 1000 - Date.now());
+  }
+  setPacket(monitor);
+}
+
+function monitorUrl(path: string, version: number): string {
+  const query = new URLSearchParams({
+    after_version: String(Math.max(0, Math.floor(version || 0))),
+    timeout: "25",
+  });
+  return `${path}?${query.toString()}`;
 }
 
 function metricTone(value: number): string {
@@ -720,26 +759,6 @@ function metricTone(value: number): string {
     return "medium";
   }
   return "low";
-}
-
-function cloneWithPath(source: MonitorPacket | null, path: string, value: unknown): MonitorPacket | null {
-  if (!source || !path) {
-    return source;
-  }
-  const next = structuredClone(source) as Record<string, unknown>;
-  const parts = path.split(".").filter(Boolean);
-  let cursor = next;
-  for (const part of parts.slice(0, -1)) {
-    const current = cursor[part];
-    if (!current || typeof current !== "object" || Array.isArray(current)) {
-      cursor[part] = {};
-    }
-    cursor = cursor[part] as Record<string, unknown>;
-  }
-  if (parts.length > 0) {
-    cursor[parts[parts.length - 1]] = value;
-  }
-  return next as MonitorPacket;
 }
 
 function etaText(prediction: Prediction | undefined, serverOffsetMs: number, nowMs: number): string {
@@ -781,9 +800,6 @@ export function EmotionDashboard() {
   const [serverOffsetMs, setServerOffsetMs] = useState(0);
   const [clockNowMs, setClockNowMs] = useState(() => Date.now());
   const [errorMessage, setErrorMessage] = useState("");
-  const reconnectTimerRef = useRef<number | null>(null);
-  const socketRef = useRef<WebSocket | null>(null);
-  const hasEverConnectedRef = useRef(false);
 
   const residentCards = useMemo(() => {
     const overviewMap = packet?.presentation?.resident_overview ?? {};
@@ -826,7 +842,6 @@ export function EmotionDashboard() {
   const selectedScopeLabel = conversationScopeLabel(selectedOverview);
   const predictionPercent =
     prediction?.probability_percent ?? Number(((prediction?.speak_probability ?? 0) * 100).toFixed(1));
-  const shouldSyncRealtime = Boolean(selectedChannel);
   const displayConnectionState = selectedChannel ? connectionState : "waiting";
   const liveEtaLabel = etaText(prediction, serverOffsetMs, clockNowMs);
   const liveSilenceSeconds = Math.max(
@@ -867,12 +882,9 @@ export function EmotionDashboard() {
           return;
         }
         const monitor = data?.monitor as OverviewPayload | undefined;
-        setOverview(monitor ?? null);
-        const initialChannel = monitor?.channels?.[0]?.channel_id ?? "";
-        setSelectedChannel(initialChannel);
+        const initialChannel = applyOverviewPayload(monitor, "", setOverview, setSelectedChannel, setPacket);
         if (!initialChannel) {
           setConnectionState("waiting");
-          setPacket(null);
         }
       } catch (error) {
         if (!ignore) {
@@ -893,123 +905,98 @@ export function EmotionDashboard() {
   }, []);
 
   useEffect(() => {
-    if (socketRef.current) {
-      socketRef.current.close();
-      socketRef.current = null;
-    }
-    if (reconnectTimerRef.current) {
-      window.clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
+    let cancelled = false;
+    const controller = new AbortController();
+    let overviewVersion = Number(overview?.state_version ?? 0);
+
+    async function watchOverview() {
+      while (!cancelled) {
+        try {
+          const response = await fetch(monitorUrl("/api/heartflow/monitor/live", overviewVersion), {
+            credentials: "same-origin",
+            signal: controller.signal,
+          });
+          if (!response.ok) {
+            throw new Error(`overview ${response.status}`);
+          }
+          const data = await response.json();
+          if (cancelled) {
+            return;
+          }
+          const monitor = data?.monitor as OverviewPayload | undefined;
+          overviewVersion = Number(monitor?.state_version ?? overviewVersion);
+          applyOverviewPayload(monitor, selectedChannel, setOverview, setSelectedChannel, setPacket);
+          setConnectionState((current) => (current === "waiting" ? "waiting" : "live"));
+          setErrorMessage("");
+        } catch (error) {
+          if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
+            setConnectionState("reconnecting");
+            setErrorMessage(`实时总览同步失败: ${String(error)}`);
+            await new Promise((resolve) => window.setTimeout(resolve, 600));
+          }
+        }
+      }
     }
 
+    void watchOverview();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [selectedChannel]);
+
+  useEffect(() => {
     if (!selectedChannel) {
       setPacket(null);
       setConnectionState("waiting");
-      hasEverConnectedRef.current = false;
       return;
     }
 
-    if (!shouldSyncRealtime) {
-      return;
-    }
+    let cancelled = false;
+    const controller = new AbortController();
+    let packetVersion = Number(packet?.state_version ?? 0);
 
-    let closedByCleanup = false;
-
-    const connect = () => {
-      if (closedByCleanup) {
-        return;
-      }
+    async function watchChannel() {
       setConnectionState("connecting");
-      const socket = new WebSocket(wsUrl(selectedChannel));
-      socketRef.current = socket;
-
-      socket.onopen = () => {
-        hasEverConnectedRef.current = true;
-        setConnectionState("live");
-      };
-
-      socket.onmessage = (event) => {
+      while (!cancelled) {
         try {
-          const message = JSON.parse(event.data) as { type?: string; data?: unknown };
-          if (message.type === "state_snapshot" && message.data) {
-            const eventPacket = message.data as { data?: MonitorPacket | OverviewPayload; server_time?: number };
-            const payload = (eventPacket.data ?? message.data) as MonitorPacket | OverviewPayload;
-            const snapshotServerTime = Number(payload.server_time ?? eventPacket.server_time ?? 0);
-            if (snapshotServerTime > 0) {
-              setServerOffsetMs(snapshotServerTime * 1000 - Date.now());
-            }
-            if ((payload as OverviewPayload).snapshot_kind === "overview" || "channels" in payload) {
-              const overviewPayload = payload as OverviewPayload;
-              setOverview(overviewPayload);
-              const channels = overviewPayload?.channels ?? [];
-              if (!selectedChannel && channels.length > 0) {
-                setSelectedChannel(channels[0]?.channel_id ?? "");
-              } else if (
-                selectedChannel &&
-                channels.length > 0 &&
-                !channels.some((channel) => channel.channel_id === selectedChannel)
-              ) {
-                setSelectedChannel(channels[0]?.channel_id ?? "");
-              } else if (channels.length === 0) {
-                setPacket(null);
-              }
-            } else {
-              const nextPacket = payload as MonitorPacket;
-              setPacket(nextPacket);
-            }
-            setErrorMessage("");
-          } else if (message.type === "state_delta" && message.data) {
-            const event = message.data as {
-              channel_id?: string;
-              path?: string;
-              new?: unknown;
-              server_time?: number;
-              version?: number;
-            };
-            if (event.server_time) {
-              setServerOffsetMs(event.server_time * 1000 - Date.now());
-            }
-            if (event.path) {
-              setPacket((current) => cloneWithPath(current, event.path ?? "", event.new));
-            }
-          } else if (message.type === "state_error") {
-            setPacket(null);
+          const response = await fetch(
+            monitorUrl(`/api/heartflow/monitor/${encodeURIComponent(selectedChannel)}/live`, packetVersion),
+            {
+              credentials: "same-origin",
+              signal: controller.signal,
+            },
+          );
+          if (!response.ok) {
+            throw new Error(`monitor ${response.status}`);
           }
+          const data = await response.json();
+          if (cancelled) {
+            return;
+          }
+          const monitor = data?.monitor as MonitorPacket | undefined;
+          packetVersion = Number(monitor?.state_version ?? packetVersion);
+          applyMonitorPacket(monitor, setPacket, setServerOffsetMs);
+          setConnectionState("live");
+          setErrorMessage("");
         } catch (error) {
-          setErrorMessage(`解析实时状态失败: ${String(error)}`);
+          if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
+            setConnectionState("reconnecting");
+            setErrorMessage(`实时状态同步失败: ${String(error)}`);
+            await new Promise((resolve) => window.setTimeout(resolve, 600));
+          }
         }
-      };
+      }
+    }
 
-      socket.onerror = () => {
-        setConnectionState((current) => (hasEverConnectedRef.current ? current : "connecting"));
-      };
-
-      socket.onclose = () => {
-        socketRef.current = null;
-        if (closedByCleanup) {
-          return;
-        }
-        setConnectionState((current) => (hasEverConnectedRef.current ? current : "connecting"));
-        reconnectTimerRef.current = window.setTimeout(() => {
-          connect();
-        }, 800);
-      };
-    };
-
-    connect();
+    void watchChannel();
 
     return () => {
-      closedByCleanup = true;
-      if (reconnectTimerRef.current) {
-        window.clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      if (socketRef.current) {
-        socketRef.current.close();
-        socketRef.current = null;
-      }
+      cancelled = true;
+      controller.abort();
     };
-  }, [selectedChannel, shouldSyncRealtime]);
+  }, [selectedChannel]);
 
   return (
     <div className="dashboard-shell">

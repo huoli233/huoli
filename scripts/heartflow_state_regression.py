@@ -8,6 +8,8 @@ from typing import Any, Dict
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parents[1]
+REMOVED_STATE_MONITOR_WS_PATH = "/ws/" + "state" + "-monitor"
+REMOVED_STATE_MONITOR_ROUTER_NAME = "ws_" + "state_monitor"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -1632,16 +1634,22 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "Promise.allSettled" not in dashboard_source
     assert "void loadMonitorOverview();" in dashboard_source
     assert "void loadConfigScope();" not in dashboard_source
-    assert "hasEverConnectedRef" in dashboard_source
-    assert "const shouldSyncRealtime = Boolean(selectedChannel);" in dashboard_source
+    assert "has" + "EverConnectedRef" not in dashboard_source
+    assert "new " + "WebSocket" not in dashboard_source
+    assert "Web" + "Socket" not in dashboard_source
+    assert REMOVED_STATE_MONITOR_WS_PATH not in dashboard_source
+    assert "/api/heartflow/monitor/live" in dashboard_source
+    assert "/api/heartflow/monitor/" in dashboard_source
+    assert "monitorUrl(" in dashboard_source
     assert 'if (!selectedChannel) {' in dashboard_source
     assert 'const displayConnectionState = selectedChannel ? connectionState : "waiting";' in dashboard_source
     assert 'window.addEventListener("blur"' not in dashboard_source
     assert 'document.addEventListener("visibilitychange"' not in dashboard_source
     assert 'window.addEventListener("focus"' not in dashboard_source
     assert 'waiting: "等待会话"' in dashboard_source
-    assert 'connecting: "连接中"' in dashboard_source
-    assert 'reconnecting: "重连中"' in dashboard_source
+    assert 'connecting: "监听中"' in dashboard_source
+    assert 'reconnecting: "续连中"' in dashboard_source
+    assert 'live: "API实时同步"' in dashboard_source
     assert "实时通道暂不可用，轮询同步失败" not in dashboard_source
     assert 'polling: "补偿同步"' not in dashboard_source
     assert ".live-pill.is-polling" not in dashboard_style
@@ -1649,7 +1657,7 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "下一步发言概率" in dashboard_source
     assert "Number(predictionPercent).toFixed(1)" in dashboard_source
     assert "requestAnimationFrame" in dashboard_source
-    assert "state_delta" in dashboard_source
+    assert "state_delta" not in dashboard_source
     assert "state_heartbeat" not in dashboard_source
     assert 'type: "refresh"' not in dashboard_source
     assert "requires_refresh" not in dashboard_source
@@ -1662,22 +1670,24 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "<strong>{circadianDetail?.expression_style_label ?? \"正常\"}</strong>" not in dashboard_source
 
     heartflow_router_source = (ROOT / "src/webui/routers/heartflow.py").read_text(encoding="utf-8")
+    router_registry_source = (ROOT / "src/webui/routers/router_registry.py").read_text(encoding="utf-8")
     assert "asyncio.to_thread(build_config_scope_snapshot)" not in heartflow_router_source
     assert "状态页配置分级构建超时" not in heartflow_router_source
     assert "_config_scope_fallback" not in heartflow_router_source
-
-    websocket_source = (ROOT / "src/webui/routers/websocket/state_monitor.py").read_text(encoding="utf-8")
-    assert "channel_id required" in websocket_source
-    assert "build_monitor_overview" not in websocket_source
-    assert "全部群聊/私聊" not in websocket_source
-    assert '"refresh"' not in websocket_source
+    assert "wait_for_update" in heartflow_router_source
+    assert '"/monitor/live"' in heartflow_router_source
+    assert '"/monitor/{channel_id}/live"' in heartflow_router_source
+    assert REMOVED_STATE_MONITOR_ROUTER_NAME not in router_registry_source
+    assert not (ROOT / "src/webui/routers/websocket/state_monitor.py").exists()
 
     client = TestClient(create_app())
     dashboard = client.get("/dashboard")
     monitor = client.get("/api/heartflow/monitor")
+    monitor_live = client.get("/api/heartflow/monitor/live?timeout=0.1")
     config_scope = client.get("/api/heartflow/config-scope")
     assert dashboard.status_code == 200
     assert monitor.status_code == 200
+    assert monitor_live.status_code == 200
     assert config_scope.status_code == 404
     channels = monitor.json().get("monitor", {}).get("channels", [])
     checked_channel = False
@@ -1701,9 +1711,11 @@ def check_webui_contract() -> Dict[str, Any]:
     return {
         "dashboard": dashboard.status_code,
         "monitor": monitor.status_code,
+        "monitor_live": monitor_live.status_code,
         "channel_checked": checked_channel,
         "startup_http_fallback_polling_removed": True,
         "config_scope_removed_from_status_page": True,
+        "state_monitor_websocket_removed": True,
     }
 
 
@@ -1744,6 +1756,10 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
             assert second["new"] == 0.735
             assert cached is not None
             assert cached["presentation"]["resource_detail"]["chat_percent"] == 0.735
+            waiter = asyncio.create_task(
+                hub.wait_for_update(channel_id, after_version=int(cached["state_version"]), timeout_seconds=1.0)
+            )
+            await asyncio.sleep(0)
             refreshed = await hub.set_snapshot(
                 channel_id,
                 {
@@ -1754,35 +1770,36 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
                 reason="full_refresh",
             )
             third = await asyncio.wait_for(queue.get(), timeout=1.0)
+            waited = await waiter
+            timed_out = await hub.wait_for_update(
+                channel_id,
+                after_version=int(refreshed["state_version"]),
+                timeout_seconds=0.1,
+            )
             assert refreshed["state_version"] > snapshot["state_version"]
             assert third["type"] == "state_snapshot"
             assert third["data"]["presentation"]["resource_detail"]["chat_percent"] == 0.812
+            assert waited is not None
+            assert waited["type"] == "state_snapshot"
+            assert timed_out is None
             assert "requires_refresh" not in third
             return {
                 "snapshot": True,
                 "delta": True,
                 "event_driven_snapshot": True,
+                "http_wait_for_update": True,
             }
         finally:
             await hub.unsubscribe(queue, channel_id)
 
-    websocket_source = (ROOT / "src/webui/routers/websocket/state_monitor.py").read_text(encoding="utf-8")
     hub_source = (ROOT / "src/webui/services/runtime_state_hub.py").read_text(encoding="utf-8")
     core_config_source = (ROOT / "config/core_config.toml").read_text(encoding="utf-8")
     core_template_source = (ROOT / "template/core_config_template.toml").read_text(encoding="utf-8")
-    assert "state_delta" in websocket_source
-    assert "state_heartbeat" not in websocket_source
-    assert '"refresh"' not in websocket_source
-    assert '"type": "state_snapshot"' in websocket_source
-    assert "state_overview" not in websocket_source
-    assert "subscription.get()" in websocket_source
-    assert "subscription: Optional[asyncio.Queue] = None" in websocket_source
-    assert "await send_snapshot()\n        subscription = await hub.subscribe(channel_id)" in websocket_source
-    assert "await send_snapshot()\n                        await rebuild_subscription(old_channel, channel_id)" in websocket_source
-    assert "asyncio.sleep(" not in websocket_source
-    assert "asyncio.wait_for(websocket.receive_json(), timeout=interval)" not in websocket_source
+    assert not (ROOT / "src/webui/routers/websocket/state_monitor.py").exists()
     assert "class RuntimeStateHub" in hub_source
     assert "emit_runtime_delta" in hub_source
+    assert "wait_for_update" in hub_source
+    assert "MONITOR_OVERVIEW_CHANNEL_ID" in hub_source
     assert "requires_refresh" not in hub_source
     assert "def heartbeat(" not in hub_source
     assert "state_monitor_default_interval_seconds" not in core_config_source

@@ -1,12 +1,14 @@
+from collections import deque
+from collections.abc import Coroutine
 import asyncio
 import copy
 import time
-from collections import deque
 from typing import Any, Dict, Optional
 
 from src.common.logger import get_logger
 
 logger = get_logger("运行态总线")
+MONITOR_OVERVIEW_CHANNEL_ID = "__monitor_overview__"
 
 
 def _plain(value: Any, depth: int = 0) -> Any:
@@ -59,8 +61,27 @@ class RuntimeStateHub:
         self._subscribers: Dict[str, set[asyncio.Queue]] = {}
         self._history: Dict[str, deque[Dict[str, Any]]] = {}
         self._max_history = 200
+        self._owner_loop: asyncio.AbstractEventLoop | None = None
+
+    def _remember_loop(self) -> None:
+        try:
+            self._owner_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+    def submit_coroutine(self, coro: Coroutine[Any, Any, Any], *, name: str = "") -> Any:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = self._owner_loop
+            if loop is None or loop.is_closed() or not loop.is_running():
+                coro.close()
+                return None
+            return asyncio.run_coroutine_threadsafe(coro, loop)
+        return loop.create_task(coro, name=name or None)
 
     async def set_snapshot(self, channel_id: str, snapshot: Dict[str, Any], *, reason: str = "snapshot") -> Dict[str, Any]:
+        self._remember_loop()
         channel = str(channel_id or "")
         payload = copy.deepcopy(snapshot or {})
         now = time.time()
@@ -90,6 +111,7 @@ class RuntimeStateHub:
         value: Any,
         reason: str = "",
     ) -> Optional[Dict[str, Any]]:
+        self._remember_loop()
         channel = str(channel_id or "")
         if not channel or not path:
             return None
@@ -121,12 +143,49 @@ class RuntimeStateHub:
             return copy.deepcopy(event)
 
     async def get_snapshot(self, channel_id: str) -> Optional[Dict[str, Any]]:
+        self._remember_loop()
         channel = str(channel_id or "")
         async with self._lock:
             snapshot = self._channels.get(channel)
             return copy.deepcopy(snapshot) if snapshot is not None else None
 
+    async def wait_for_update(
+        self,
+        channel_id: Optional[str],
+        *,
+        after_version: int = 0,
+        timeout_seconds: float = 25.0,
+    ) -> Optional[Dict[str, Any]]:
+        self._remember_loop()
+        channel = str(channel_id or "")
+        timeout = max(0.1, min(float(timeout_seconds or 25.0), 30.0))
+        async with self._lock:
+            current_version = self._versions.get(channel, 0)
+            if current_version > int(after_version or 0):
+                snapshot = self._channels.get(channel)
+                if snapshot is not None:
+                    return {
+                        "type": "state_snapshot",
+                        "channel_id": channel,
+                        "version": current_version,
+                        "server_time": snapshot.get("server_time", time.time()),
+                        "data": copy.deepcopy(snapshot),
+                    }
+            queue: asyncio.Queue = asyncio.Queue(maxsize=10)
+            self._subscribers.setdefault(channel, set()).add(queue)
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=timeout)
+                except asyncio.TimeoutError:
+                    return None
+                if int(event.get("version", 0) or 0) > int(after_version or 0):
+                    return copy.deepcopy(event)
+        finally:
+            await self.unsubscribe(queue, channel)
+
     async def subscribe(self, channel_id: Optional[str] = None) -> asyncio.Queue:
+        self._remember_loop()
         channel = str(channel_id or "")
         queue: asyncio.Queue = asyncio.Queue(maxsize=100)
         async with self._lock:
@@ -175,16 +234,14 @@ def emit_runtime_delta(
     reason: str = "",
 ) -> None:
     """从心流同步代码中安全投递运行态增量。"""
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        return
-    loop.create_task(
-        get_runtime_state_hub().update_path(
+    hub = get_runtime_state_hub()
+    hub.submit_coroutine(
+        hub.update_path(
             str(channel_id or ""),
             module=module,
             path=path,
             value=value,
             reason=reason,
-        )
+        ),
+        name=f"runtime_delta_{module}",
     )

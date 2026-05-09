@@ -38,6 +38,8 @@ PATH_SAMPLES = {
     "level": "info",
     "full_path": "",
 }
+REMOVED_STATE_MONITOR_WS_PATH = "/ws/" + "state" + "-monitor"
+REMOVED_STATE_MONITOR_ROUTER_NAME = "ws_" + "state_monitor"
 SAFE_HTTP_OVERRIDES = {
     ("GET", "/api/webui/health"): {"headers": {}},
     ("POST", "/api/webui/auth/verify"): {"headers": {}, "json": None},
@@ -51,7 +53,6 @@ SAFE_HTTP_OVERRIDES = {
     ("GET", "/plugins/git-status"): {},
     ("GET", "/plugins/mirrors"): {},
     ("GET", "/plugins/installed"): {},
-    ("GET", "/ws/state-monitor/status"): {},
     ("GET", "/config/schema/bot"): {},
     ("GET", "/config/schema/model"): {},
     ("GET", "/config/bot"): {},
@@ -59,10 +60,12 @@ SAFE_HTTP_OVERRIDES = {
     ("GET", "/config/bot/raw"): {},
     ("GET", "/config/adapter-config/path"): {},
     ("GET", "/statistics/dashboard"): {},
+    ("GET", "/statistics/dashboard/live"): {"params": {"timeout": 0.1}},
     ("GET", "/statistics/summary"): {},
     ("GET", "/statistics/models"): {},
     ("GET", "/api/heartflow/chats"): {},
     ("GET", "/api/heartflow/monitor"): {},
+    ("GET", "/api/heartflow/monitor/live"): {"params": {"timeout": 0.1}},
     ("GET", "/dashboard"): {"headers": {}},
 }
 HTTP_SKIP_PATTERNS = [
@@ -168,14 +171,8 @@ def _expect_message(websocket, expected_type: str) -> dict[str, Any]:
 def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
     results = []
     registered = [route.path for route in client.app.routes if isinstance(route, WebSocketRoute)]
-
-    with client.websocket_connect("/ws/state-monitor") as websocket:
-        first = websocket.receive_json()
-        if first.get("type") != "state_error":
-            raise AssertionError(f"State monitor without channel_id must be rejected, got {first}")
-        if "channel_id" not in str(first.get("data", {})):
-            raise AssertionError(f"State monitor rejection must explain missing channel_id, got {first}")
-        results.append({"path": "/ws/state-monitor", "mode": "public", "status": "requires_channel", "init_type": first.get("type")})
+    if REMOVED_STATE_MONITOR_WS_PATH in registered:
+        raise AssertionError("状态监控页 WebSocket 路由仍被注册")
 
     with client.websocket_connect(f"/ws/auth?token={token}") as websocket:
         message = _expect_message(websocket, "auth_success")
@@ -191,23 +188,6 @@ def run_websocket_smoke(client: TestClient, token: str) -> dict[str, Any]:
         websocket.send_json({"type": "ping", "data": {}})
         pong = _expect_message(websocket, "pong")
         results.append({"path": "/ws/plugin-progress", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
-
-    with client.websocket_connect(f"/ws/state-monitor?token={token}&channel_id=__smoke_missing__") as websocket:
-        first = websocket.receive_json()
-        if first.get("type") != "state_error":
-            raise AssertionError(f"Unexpected state-monitor init message: {first}")
-        websocket.send_json({"type": "ping", "data": {}})
-        pong = _expect_message(websocket, "pong")
-        results.append({"path": "/ws/state-monitor", "mode": "token", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
-
-    cookie_headers = {"Cookie": f"huoli_session={token}"}
-    with client.websocket_connect("/ws/state-monitor?channel_id=__smoke_missing__", headers=cookie_headers) as websocket:
-        first = websocket.receive_json()
-        if first.get("type") != "state_error":
-            raise AssertionError(f"Unexpected state-monitor init message: {first}")
-        websocket.send_json({"type": "ping", "data": {}})
-        pong = _expect_message(websocket, "pong")
-        results.append({"path": "/ws/state-monitor", "mode": "cookie", "status": "ok", "init_type": first.get("type"), "response_type": pong["type"]})
 
     with client.websocket_connect(f"/api/chat/ws?token={token}") as websocket:
         seen_types = []
@@ -244,29 +224,33 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     dashboard_source = (PROJECT_ROOT / "web/dashboard/src/components/EmotionDashboard/index.tsx").read_text(
         encoding="utf-8"
     )
-    state_monitor_source = (PROJECT_ROOT / "src/webui/routers/websocket/state_monitor.py").read_text(
-        encoding="utf-8"
-    )
+    router_registry_source = (PROJECT_ROOT / "src/webui/routers/router_registry.py").read_text(encoding="utf-8")
+    heartflow_router_source = (PROJECT_ROOT / "src/webui/routers/heartflow.py").read_text(encoding="utf-8")
     core_config_source = (PROJECT_ROOT / "config/core_config.toml").read_text(encoding="utf-8")
     core_template_source = (PROJECT_ROOT / "template/core_config_template.toml").read_text(encoding="utf-8")
 
     required_dashboard_fragments = {
-        "channel_gate": "const shouldSyncRealtime = Boolean(selectedChannel);",
+        "overview_live_api": "/api/heartflow/monitor/live",
+        "channel_live_api": "/api/heartflow/monitor/${encodeURIComponent(selectedChannel)}/live",
         "waiting_display": 'const displayConnectionState = selectedChannel ? connectionState : "waiting";',
         "no_channel_guard": "if (!selectedChannel) {",
-        "fast_silent_reconnect": "}, 800);",
-        "state_delta": "state_delta",
+        "api_live_label": 'live: "API实时同步"',
+        "connecting_label": 'connecting: "监听中"',
+        "reconnecting_label": 'reconnecting: "续连中"',
         "local_clock": "requestAnimationFrame",
     }
     missing_dashboard = [
         name for name, fragment in required_dashboard_fragments.items() if fragment not in dashboard_source
     ]
     assert not missing_dashboard, f"状态监控前端常驻连接契约缺失: {missing_dashboard}"
+    assert "new " + "WebSocket" not in dashboard_source, "状态页不应再创建 WebSocket"
+    assert "Web" + "Socket" not in dashboard_source, "状态页源码不应残留 WebSocket 状态监控逻辑"
+    assert REMOVED_STATE_MONITOR_WS_PATH not in dashboard_source, "状态页不应再连接状态监控 WebSocket"
+    assert "state_delta" not in dashboard_source, "前端不应再处理 WebSocket 增量分支"
     assert "轮询同步失败" not in dashboard_source, "后台轮询失败不应显示到状态页前台"
     assert "fallbackPollTimerRef" not in dashboard_source, "状态页不应保留 HTTP 轮询补偿定时器"
     assert "pollMonitorFallback" not in dashboard_source, "状态页不应保留 HTTP 轮询补偿函数"
-    assert 'type: "refresh"' not in dashboard_source, "状态页 WebSocket 不应主动请求整包刷新"
-    assert '"refresh"' not in state_monitor_source, "状态监控 WebSocket 不应保留整包刷新消息入口"
+    assert 'type: "refresh"' not in dashboard_source, "状态页不应主动请求 WebSocket 整包刷新"
     assert "requires_refresh" not in dashboard_source, "状态页不应通过 requires_refresh 回拉整包快照"
     assert "state_heartbeat" not in dashboard_source, "状态页不应依赖固定心跳推进实时状态"
     assert "config-scope" not in dashboard_source, "状态页启动链路不应请求配置分级快照"
@@ -278,27 +262,14 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     assert 'setConnectionState("idle")' not in dashboard_source, "状态页不应把临时不可见显示为未连接"
     assert 'const displayConnectionState = "live";' not in dashboard_source, "状态页不应再固定伪装 live"
     assert 'polling: "补偿同步"' not in dashboard_source, "状态页不应显示 HTTP 补偿同步状态"
+    assert REMOVED_STATE_MONITOR_ROUTER_NAME not in router_registry_source, "状态监控 WebSocket 路由不应注册"
+    assert REMOVED_STATE_MONITOR_WS_PATH not in router_registry_source, "路由注册不应残留状态监控 WebSocket"
+    assert "wait_for_update" in heartflow_router_source, "状态页 HTTP 实时 API 应等待运行态事件"
+    assert '"/monitor/live"' in heartflow_router_source, "状态页总览实时 API 缺失"
+    assert '"/monitor/{channel_id}/live"' in heartflow_router_source, "状态页频道实时 API 缺失"
 
-    forbidden_backend_fragments = [
-        "verify_auth_token_from_cookie_or_header",
-        "get_token_manager",
-        "_authorize_state_monitor_websocket",
-        "Cookie",
-        "Header",
-        "HTTPException",
-    ]
-    remaining_backend_fragments = [fragment for fragment in forbidden_backend_fragments if fragment in state_monitor_source]
-    assert not remaining_backend_fragments, f"状态监控 WebSocket 仍残留认证门控: {remaining_backend_fragments}"
-    assert "await websocket.accept()" in state_monitor_source, "状态监控 WebSocket 应直接接受只读连接"
-    assert "channel_id required" in state_monitor_source, "状态监控 WebSocket 应拒绝未指定会话的总览订阅"
-    assert "build_monitor_overview" not in state_monitor_source, "状态监控 WebSocket 不应再构建总览快照"
-    assert "subscription.get()" in state_monitor_source, "状态监控 WebSocket 应订阅运行态事件"
-    assert (
-        "await send_snapshot()\n        subscription = await hub.subscribe(channel_id)" in state_monitor_source
-    ), "状态监控 WebSocket 应先直发快照再订阅后续事件，避免初始快照重复"
-    assert "state_heartbeat" not in state_monitor_source, "状态监控 WebSocket 不应固定间隔推送心跳"
-    assert "asyncio.sleep(" not in state_monitor_source, "状态监控 WebSocket 不应使用定时 sleep 推送状态"
-    assert "interval:" not in state_monitor_source, "状态监控 WebSocket 不应保留 interval 轮询参数"
+    state_monitor_path = PROJECT_ROOT / "src/webui/routers/websocket/state_monitor.py"
+    assert not state_monitor_path.exists(), "状态监控 WebSocket 模块应彻底删除"
     assert "state_monitor_default_interval_seconds" not in core_config_source, "状态页实时通道不应保留固定间隔配置"
     assert "state_monitor_min_interval_seconds" not in core_config_source, "状态页实时通道不应保留固定间隔配置"
     assert "state_monitor_max_interval_seconds" not in core_config_source, "状态页实时通道不应保留固定间隔配置"
@@ -310,8 +281,8 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
         "activation_gate": True,
         "channel_scoped_connection": True,
         "real_connection_display": True,
-        "public_state_monitor": True,
-        "no_auth_gate": True,
+        "state_monitor_websocket_removed": True,
+        "http_live_api": True,
         "startup_polling_removed": True,
     }
 

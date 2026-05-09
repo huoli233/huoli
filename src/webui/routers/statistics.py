@@ -1,18 +1,22 @@
 """统计数据 API 路由"""
 
-from fastapi import APIRouter, HTTPException, Depends, Cookie, Header
-from pydantic import BaseModel, Field
-from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
-from peewee import fn
+from typing import Any, Dict, List, Optional
 
-from src.common.logger import get_logger
+from fastapi import APIRouter, Cookie, Depends, Header, HTTPException
+from peewee import fn
+from pydantic import BaseModel, Field
+
 from src.common.database.database_model import LLMUsage, OnlineTime, Messages
+from src.common.logger import get_logger
 from src.webui.core.auth import verify_auth_token_from_cookie_or_header
+from src.webui.services.runtime_state_hub import get_runtime_state_hub
 
 logger = get_logger("WebUI统计")
 
 router = APIRouter(prefix="/statistics", tags=["statistics"])
+
+STATISTICS_CHANNEL_ID = "__statistics__"
 
 
 def require_auth(
@@ -82,32 +86,7 @@ async def get_dashboard_data(
         仪表盘数据
     """
     try:
-        now = datetime.now()
-        start_time = now - timedelta(hours=hours)
-
-        # 获取摘要数据
-        summary = await _get_summary_statistics(start_time, now)
-
-        # 获取模型统计
-        model_stats = await _get_model_statistics(start_time)
-
-        # 获取小时级时间序列数据
-        hourly_data = await _get_hourly_statistics(start_time, now)
-
-        # 获取日级时间序列数据（最近7天）
-        daily_start = now - timedelta(days=7)
-        daily_data = await _get_daily_statistics(daily_start, now)
-
-        # 获取最近活动
-        recent_activity = await _get_recent_activity(limit=10)
-
-        return DashboardData(
-            summary=summary,
-            model_stats=model_stats,
-            hourly_data=hourly_data,
-            daily_data=daily_data,
-            recent_activity=recent_activity,
-        )
+        return await build_dashboard_statistics(hours)
     except Exception as e:
         logger.error(f"获取仪表盘数据失败: {e}")
         raise HTTPException(
@@ -115,6 +94,69 @@ async def get_dashboard_data(
             detail=f"获取统计数据失败: {
                 str(e)}",
         ) from e
+
+
+async def build_dashboard_statistics(hours: int = 24) -> DashboardData:
+    now = datetime.now()
+    start_time = now - timedelta(hours=hours)
+    summary = await _get_summary_statistics(start_time, now)
+    model_stats = await _get_model_statistics(start_time)
+    hourly_data = await _get_hourly_statistics(start_time, now)
+    daily_data = await _get_daily_statistics(now - timedelta(days=7), now)
+    recent_activity = await _get_recent_activity(limit=10)
+    return DashboardData(
+        summary=summary,
+        model_stats=model_stats,
+        hourly_data=hourly_data,
+        daily_data=daily_data,
+        recent_activity=recent_activity,
+    )
+
+
+async def publish_statistics_snapshot(reason: str = "llm_usage") -> None:
+    try:
+        snapshot = (await build_dashboard_statistics()).model_dump()
+        await get_runtime_state_hub().set_snapshot(
+            STATISTICS_CHANNEL_ID,
+            snapshot,
+            reason=f"statistics_{reason}",
+        )
+    except Exception as exc:
+        logger.debug(f"统计实时快照发布失败: {exc}")
+
+
+@router.get("/dashboard/live")
+async def wait_dashboard_statistics(
+    hours: int = 24,
+    after_version: int = 0,
+    timeout: float = 25.0,
+    _auth: bool = Depends(require_auth),
+):
+    hub = get_runtime_state_hub()
+    cached = await hub.get_snapshot(STATISTICS_CHANNEL_ID)
+    if cached is None:
+        await publish_statistics_snapshot("initial")
+        cached = await hub.get_snapshot(STATISTICS_CHANNEL_ID)
+    if cached is not None and int(cached.get("state_version", 0) or 0) > int(after_version or 0):
+        return {"success": True, "changed": True, "statistics": cached}
+    event = await hub.wait_for_update(
+        STATISTICS_CHANNEL_ID,
+        after_version=after_version,
+        timeout_seconds=timeout,
+    )
+    if event is None:
+        latest = await hub.get_snapshot(STATISTICS_CHANNEL_ID)
+        return {"success": True, "changed": False, "statistics": latest or cached or {}}
+    return {
+        "success": True,
+        "changed": True,
+        "statistics": event.get("data", {}),
+        "event": {
+            "type": event.get("type", "state_snapshot"),
+            "version": event.get("version", 0),
+            "reason": event.get("reason", ""),
+        },
+    }
 
 
 async def _get_summary_statistics(

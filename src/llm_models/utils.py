@@ -1,15 +1,16 @@
 import base64
 import io
 
-from PIL import Image
 from datetime import datetime
 
-from src.common.logger import get_logger
+from PIL import Image
+
 from src.common.database.database import db  # 确保 db 被导入用于 create_tables
 from src.common.database.database_model import LLMUsage
+from src.common.logger import get_logger
 from src.config.api_ada_configs import ModelInfo
-from .payload_content.message import Message, MessageBuilder
 from .model_client.base_client import UsageRecord
+from .payload_content.message import Message, MessageBuilder
 
 logger = get_logger("消息压缩工具")
 
@@ -240,6 +241,18 @@ class LLMUsageRecorder:
                     f"提示词: {model_usage.prompt_tokens}, 完成: {model_usage.completion_tokens}, "
                     f"总计: {model_usage.total_tokens}"
                 )
+                try:
+                    from src.webui.routers.statistics import publish_statistics_snapshot
+                    from src.webui.services.runtime_state_hub import get_runtime_state_hub
+
+                    task = get_runtime_state_hub().submit_coroutine(
+                        publish_statistics_snapshot("llm_usage"),
+                        name="statistics_llm_usage",
+                    )
+                    if task is None:
+                        logger.debug("统计实时同步暂未绑定运行事件循环")
+                except Exception as emit_exc:
+                    logger.debug(f"统计实时同步触发失败: {emit_exc}")
                 return
             except Exception as e:
                 if _attempt < _max_db_retries - 1:

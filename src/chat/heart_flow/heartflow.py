@@ -297,6 +297,7 @@ class Heartflow:
                 f"[心流] 启动频道运行实例 {chat_id}, "
                 f"绑定已存在聊天流, 类型={'群聊' if chat_stream.group_info else '私聊'}"
             )
+            self._publish_monitor_overview("channel_created")
             return new_chat
 
     # ---- 清理 ----
@@ -314,6 +315,7 @@ class Heartflow:
             self._active_since.pop(chat_id, None)
         if stale_ids:
             logger.info(f"[心流] 清理了 {len(stale_ids)} 个不活跃聊天")
+            self._publish_monitor_overview("channel_cleanup")
         return len(stale_ids)
 
     async def _teardown_chat(self, chat_id: Any) -> None:
@@ -570,6 +572,29 @@ class Heartflow:
     def touch(self, chat_id: Any) -> None:
         """手动标记频道活跃"""
         self._active_since[chat_id] = _tm.time()
+
+    def _publish_monitor_overview(self, reason: str) -> None:
+        try:
+            from src.chat.heart_flow.heartfc_state_exporter import list_heartfc_chats
+            from src.webui.services.runtime_state_hub import MONITOR_OVERVIEW_CHANNEL_ID, get_runtime_state_hub
+
+            now = _tm.time()
+            overview = list_heartfc_chats()
+            packet = {
+                "snapshot_kind": "overview",
+                "updated_at": now,
+                "server_time": now,
+                "state_version": int(now * 1000),
+                "active_count": overview.get("active_count", 0),
+                "hidden_internal_count": overview.get("hidden_internal_count", 0),
+                "channels": overview.get("channels", []),
+            }
+            safe_create_task(
+                get_runtime_state_hub().set_snapshot(MONITOR_OVERVIEW_CHANNEL_ID, packet, reason=reason),
+                name=f"monitor_overview_{reason}",
+            )
+        except Exception as exc:
+            logger.debug(f"[心流] 监控总览实时刷新失败: {exc}")
 
     def _sweep_phase_expirations(self) -> None:
         timeout = _phase_idle_timeout_seconds()
