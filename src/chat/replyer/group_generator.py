@@ -88,29 +88,6 @@ def _contains_sleep_denial(text: str) -> bool:
     )
 
 
-def _contains_sleepy_tone(text: str) -> bool:
-    payload = str(text or "").strip()
-    if not payload:
-        return False
-    return any(
-        marker in payload
-        for marker in (
-            "困",
-            "睡",
-            "累",
-            "醒",
-            "慢",
-            "迷糊",
-            "昏",
-            "撑不住",
-            "脑子",
-            "半拍",
-            "哈欠",
-            "眯",
-        )
-    )
-
-
 def _night_state_is_sleepy(extra_info: str) -> bool:
     payload = str(extra_info or "")
     if not payload:
@@ -137,33 +114,6 @@ def _night_state_is_sleepy(extra_info: str) -> bool:
 def _target_asks_sleep(reply_message: Optional[DatabaseMessages]) -> bool:
     text = str(getattr(reply_message, "processed_plain_text", "") or getattr(reply_message, "display_message", "") or "")
     return any(marker in text for marker in ("困吗", "不困", "睡不睡", "还醒", "熬夜", "没睡"))
-
-
-def _night_sleepy_short_reply_variant(text: str) -> str:
-    payload = str(text or "").strip()
-    core = payload.rstrip("。！？!?，,；;… ")
-    if not core:
-        return random.choice(("脑子还慢着。", "刚醒，有点没接上。", "等下，我缓一下。"))
-    if any(marker in core for marker in ("啥", "什么", "咋", "怎么", "哪", "谁")):
-        return random.choice(("脑子有点慢。", "刚醒，脑子没听明白。", "等下，我反应没接上。"))
-    elif any(marker in core for marker in ("又", "还", "继续")):
-        return random.choice(("又这句，脑子慢着。", "还这句，我反应慢半拍。", "我脑子还慢着。"))
-    elif len(re.sub(r"[^\w\u4e00-\u9fff]", "", core)) <= 4:
-        return random.choice(("我还半醒着。", "刚醒，脑子慢。", "等下，我缓一下。"))
-    else:
-        return random.choice(("反应有点慢。", "刚醒，先慢点。", "我脑子还没转过来。"))
-
-
-def _should_add_sleepy_tone_to_short_reply(text: str) -> bool:
-    payload = str(text or "").strip()
-    if not payload or _contains_sleepy_tone(payload):
-        return False
-    compact = re.sub(r"[\s。！？!?，,；;…]", "", payload)
-    if not compact:
-        return False
-    if len(compact) > 14:
-        return False
-    return True
 
 
 def _is_valid_unknown_word_candidate(word: str) -> bool:
@@ -3670,7 +3620,7 @@ class DefaultReplyer:
         extra_info: str,
         reply_message: Optional[DatabaseMessages],
     ) -> str:
-        """夜间困倦状态下修正明显违背状态的短句，不套固定前缀。"""
+        """夜间困倦状态只修正明显矛盾内容，不用本地模板替换人格回复。"""
         text = str(content or "").strip()
         if not text:
             return text
@@ -3682,8 +3632,6 @@ class DefaultReplyer:
             or ""
         )
         if not _contains_sleep_denial(text):
-            if _night_state_is_sleepy(extra_info) and _should_add_sleepy_tone_to_short_reply(text):
-                return _night_sleepy_short_reply_variant(text)
             return text
         if any(marker in raw_target for marker in ("困吗", "不困", "睡不睡", "还醒", "熬夜", "没睡")):
             return "困，脑子还没完全醒。"

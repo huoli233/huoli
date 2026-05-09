@@ -1436,3 +1436,25 @@
 - 变更需要重启主程序后生效。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T06:05:00+08:00 - Task: 移除夜间短句本地模板替换
+
+### What was done:
+- 定位“脑子慢着”“反应有点慢”来自 `DefaultReplyer._apply_sleepy_fast_reply_guard()` 的本地夜间短句替换，不是主人格自然生成。
+- 移除 `_night_sleepy_short_reply_variant()` 及其固定短句池，普通短回复不再被后处理替换成模板句。
+- 夜间护栏只保留“明显矛盾”修正：当模型明确说“不困/还想聊会”等违背夜间状态时才兜底改成承认困。
+- 更新回归断言，锁定普通短句保持主人格/模型原文，且源码不再残留“脑子慢着”“反应有点慢”等固定替换句。
+
+### Testing:
+- `uv run ruff check src/chat/replyer/group_generator.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，`night_soul_prompt.sleepy_short_reply_preserves_persona=true`。
+- `uv run python scripts/webui_smoke_test.py` 通过，确认 `state_monitor_websocket_removed=true`。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 这次不是改主人格，而是移除绕过主人格的本地模板后处理。
+- 夜间困意仍通过 prompt 注入给模型自己表达；本地不再把短句改成固定“脑子慢/反应慢”。
+- 变更需要重启主程序后生效。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

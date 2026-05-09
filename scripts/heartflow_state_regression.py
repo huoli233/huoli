@@ -1174,6 +1174,7 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
     ensured = probe._ensure_soul_data_in_extra_info("[当前心理状态] 烦躁度0，回复平静。")
     assert "[夜间身体状态]" in ensured
     assert "夜间语气约束" in ensured
+    group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
     reply_message = type("ReplyMessageProbe", (), {"processed_plain_text": "你不困吗", "display_message": ""})()
     guarded = DefaultReplyer._apply_sleepy_fast_reply_guard(
         content="不太困，想再聊会儿",
@@ -1188,20 +1189,20 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
         extra_info=ensured,
         reply_message=type("ReplyMessageProbe", (), {"processed_plain_text": "我的刀盾", "display_message": ""})(),
     )
-    assert sleepy_short != "又咋了？"
+    assert sleepy_short == "又咋了？"
     assert "又咋了...我有点没反应过来" not in sleepy_short
-    assert any(marker in sleepy_short for marker in ("慢", "半醒", "脑子", "反应", "困"))
+    assert "脑子慢着" not in sleepy_short
     sleepy_confused = DefaultReplyer._apply_sleepy_fast_reply_guard(
         content="啥玩意儿？",
         extra_info=ensured,
         reply_message=type("ReplyMessageProbe", (), {"processed_plain_text": "曹氏你", "display_message": ""})(),
     )
-    assert "脑子" in sleepy_confused or "反应" in sleepy_confused
+    assert sleepy_confused == "啥玩意儿？"
+    assert "反应有点慢" not in group_reply_source
     remove_night_cycle(channel_id)
     source = (ROOT / "src/chat/heart_flow/enhanced_modules/scene_planner_bridge_mixin.py").read_text(
         encoding="utf-8"
     )
-    group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
     assert "self._inject_night_soul_state(extra_parts)" in source
     assert "fallback_lines[:6]" in source
     assert "不要套固定开头" in group_reply_source
@@ -1214,7 +1215,7 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
         "night_soul_prompt_injected": True,
         "dawn_sleepy_tone_guard": True,
         "fast_reply_sleep_denial_guard": True,
-        "sleepy_short_reply_guard": True,
+        "sleepy_short_reply_preserves_persona": True,
     }
 
 
