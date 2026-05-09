@@ -1730,13 +1730,6 @@ class NightCycleSystem:
             evaluated_hour = int(s.last_evaluated_hour)
         except (TypeError, ValueError):
             evaluated_hour = -1
-        if evaluated_hour != time.localtime().tm_hour:
-            self.evaluate_current(force=True)
-            s = self._state
-            try:
-                evaluated_hour = int(s.last_evaluated_hour)
-            except (TypeError, ValueError):
-                evaluated_hour = -1
         summary_hour = evaluated_hour if 0 <= evaluated_hour <= 23 else None
         time_band = self.resolve_time_band(summary_hour)
         current_hour = time_band["hour"]

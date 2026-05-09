@@ -809,3 +809,24 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - `config/model_config.toml` 被 `.gitignore` 忽略，属于本地含密钥运行配置，不应提交完整文件到 Git。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-09T15:44:00+08:00 - Task: 移除回复生成失败本地兜底发送
+
+### What was done:
+- 删除 `proactive_reactive_flow_mixin.py` 中强制回复/直接快回生成失败后的本地话术兜底构造与发送路径。
+- 回复模型超时、返回空白或 reply_set 缺失时，现在标记具体失败原因并 `return False`，由主循环记录 `reply_aborted` / `reply_sent=false`。
+- 删除 `config/core_config.toml` 和 `template/core_config_template.toml` 中 `heartfc_force_reply_fallback_*` 话术与触发词配置，避免后续重新接回硬编码聊天内容。
+- 更新心流回归契约：不再断言本地兜底存在，改为断言 `local_force_reply_fallback`、`_build_forced_reply_fallback_*`、`heartfc_force_reply_fallback_*` 不存在。
+- 修正 `NightCycleSystem.night_behavior_summary()` 对刚评估小时的覆盖问题，避免摘要函数把显式评估的实时小时改回当前系统小时。
+
+### Testing:
+- `uv run ruff check src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py src/core/night_cycle_system.py scripts/heartflow_state_regression.py` 通过。
+- `git diff --check -- src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py src/core/night_cycle_system.py scripts/heartflow_state_regression.py config/core_config.toml template/core_config_template.toml` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，返回 `force_reply_generation_failure.local_force_reply_fallback_removed=true`。
+- `uv run python scripts/config_profile_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 本轮涉及删除旧本地兜底入口，已建立 `preserve/full-modules-回复本地兜底移除` 保存删除前状态，并在 `delete/回复本地兜底移除` 承载实际删除改动。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

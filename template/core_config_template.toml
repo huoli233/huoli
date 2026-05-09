@@ -346,20 +346,6 @@ heartfc_energy_drain_floor = 0.08
 heartfc_post_message_retry_sec = 2.0
 # 强制回复生成超时（秒）
 heartfc_force_reply_generation_timeout_seconds = 35.0
-# 强制回复本地兜底：短文本判定长度
-heartfc_force_reply_fallback_short_text_max_chars = 6
-# 强制回复本地兜底触发词与话术
-heartfc_force_reply_fallback_daodun_markers = ["刀盾"]
-heartfc_force_reply_fallback_bot_name_markers = []
-heartfc_force_reply_fallback_question_markers = ["?", "？", "什么", "怎么", "为啥", "为什么"]
-heartfc_force_reply_fallback_greeting_markers = ["hi", "hello", "hey", "你好", "在吗", "在不在"]
-heartfc_force_reply_fallback_empty_texts = ["看到了。"]
-heartfc_force_reply_fallback_daodun_texts = ["刀盾又到了，你想让我接哪句？", "还在刀盾，换个说法我才好接。", "刀盾我看见了，别只丢这四个字。"]
-heartfc_force_reply_fallback_bot_name_texts = ["在。", "叫我干嘛？", "听着呢，说事。"]
-heartfc_force_reply_fallback_question_texts = ["你这句问得太短了，补半句。", "哪块？接着刚才那句说清楚点。", "说清楚点，我再接。"]
-heartfc_force_reply_fallback_greeting_texts = ["在。", "嗯，在听。", "说吧。"]
-heartfc_force_reply_fallback_short_texts = ["{text}，然后呢？", "就这几个字？补一句。", "看到了，你想让我怎么接？"]
-heartfc_force_reply_fallback_default_texts = ["看到了，你继续说。", "收到，这句我先记着。", "嗯，我看见了。"]
 # 后台主动通道节奏与退避
 heartfc_background_proactive_base_interval_seconds = 12.0
 heartfc_background_proactive_min_interval_seconds = 6.0
@@ -696,18 +682,6 @@ heartfc_force_reply_generation_timeout_seconds = 35.0
 heartfc_post_send_focus_audit_timeout_seconds = 2.0
 heartfc_energy_drain_floor = 0.08
 heartfc_post_message_retry_sec = 2.0
-heartfc_force_reply_fallback_short_text_max_chars = 6
-heartfc_force_reply_fallback_daodun_markers = ["刀盾"]
-heartfc_force_reply_fallback_bot_name_markers = []
-heartfc_force_reply_fallback_question_markers = ["?", "？", "什么", "怎么", "为啥", "为什么"]
-heartfc_force_reply_fallback_greeting_markers = ["hi", "hello", "hey", "你好", "在吗", "在不在"]
-heartfc_force_reply_fallback_empty_texts = ["看到了。"]
-heartfc_force_reply_fallback_daodun_texts = ["刀盾又到了，你想让我接哪句？", "还在刀盾，换个说法我才好接。", "刀盾我看见了，别只丢这四个字。"]
-heartfc_force_reply_fallback_bot_name_texts = ["在。", "叫我干嘛？", "听着呢，说事。"]
-heartfc_force_reply_fallback_question_texts = ["你这句问得太短了，补半句。", "哪块？接着刚才那句说清楚点。", "说清楚点，我再接。"]
-heartfc_force_reply_fallback_greeting_texts = ["在。", "嗯，在听。", "说吧。"]
-heartfc_force_reply_fallback_short_texts = ["{text}，然后呢？", "就这几个字？补一句。", "看到了，你想让我怎么接？"]
-heartfc_force_reply_fallback_default_texts = ["看到了，你继续说。", "收到，这句我先记着。", "嗯，我看见了。"]
 heartfc_background_proactive_base_interval_seconds = 12.0
 heartfc_background_proactive_min_interval_seconds = 6.0
 heartfc_background_proactive_max_interval_seconds = 30.0

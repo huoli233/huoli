@@ -2,13 +2,12 @@
 import asyncio
 import math
 import random
-import re
 import time
 from dataclasses import dataclass, field, is_dataclass, replace as dataclass_replace
 import datetime
 from collections import Counter, defaultdict, deque
 from types import SimpleNamespace
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from src.chat.utils.timer_calculator import Timer
 from src.chat.replyer.context_block_builder import build_reply_context_block
@@ -19,7 +18,6 @@ from src.core.watch_state_machine import WatchLevel
 from src.core.group_pattern_detector import GroupPattern
 from src.core.group_scene_state import AtmosphereType
 from src.core.unified_planner import PlanningDecision, ActionType
-from src.config.config import global_config
 from src.common.logger import get_logger
 from src.chat.heart_flow.frequency_control import frequency_control_manager
 from src.plugin_system.apis import database_api, message_api, send_api
@@ -54,7 +52,7 @@ if TYPE_CHECKING:
 
 class ProactiveReactiveFlowMixin:
     def _should_use_direct_fast_reply_generation(self, *, force_bypass: bool) -> bool:
-        """只有显式快回任务才使用短超时和本地模板兜底。"""
+        """只有显式快回任务才使用短超时。"""
         if bool(getattr(self, "_is_admin_forced", False)):
             return False
         if force_bypass:
@@ -65,144 +63,10 @@ class ProactiveReactiveFlowMixin:
     def _pick_runtime_text(key: str, seed_text: str) -> str:
         candidates = _rt_str_list(key)
         if not candidates:
-            logger.warning(f"runtime_tuning.{key} 缺失，强制回复兜底无法生成配置话术")
+            logger.warning(f"runtime_tuning.{key} 缺失，无法生成配置文本")
             return ""
         index = sum(ord(ch) for ch in str(seed_text or "")) % len(candidates)
         return candidates[index]
-
-    @staticmethod
-    def _runtime_markers(key: str) -> List[str]:
-        return [marker.strip() for marker in _rt_str_list(key) if marker.strip()]
-
-    @staticmethod
-    def _contains_runtime_marker(text: str, key: str, *, ignore_case: bool = False) -> bool:
-        markers = ProactiveReactiveFlowMixin._runtime_markers(key)
-        if ignore_case:
-            haystack = text.lower()
-            return any(marker.lower() in haystack for marker in markers if marker)
-        return any(marker in text for marker in markers if marker)
-
-    @staticmethod
-    def _matches_runtime_marker(text: str, key: str, *, ignore_case: bool = False) -> bool:
-        markers = ProactiveReactiveFlowMixin._runtime_markers(key)
-        if ignore_case:
-            target = text.lower()
-            return any(marker.lower() == target for marker in markers if marker)
-        return any(marker == text for marker in markers if marker)
-
-    @staticmethod
-    def _bot_name_markers() -> List[str]:
-        markers = ProactiveReactiveFlowMixin._runtime_markers(
-            "heartfc_force_reply_fallback_bot_name_markers"
-        )
-
-        def add_marker(value: Any) -> None:
-            marker = str(value or "").strip()
-            if marker:
-                markers.append(marker)
-
-        try:
-            from src.config.core_config_engine import get_core_config
-
-            identity_values = get_core_config().resolve_module_view("identity_bot").values
-            add_marker(identity_values.get("nickname", ""))
-            alias_values = identity_values.get("alias_names", [])
-            if isinstance(alias_values, (list, tuple, set)):
-                for alias in alias_values:
-                    add_marker(alias)
-        except Exception as exc:
-            logger.debug(f"读取身份配置触发词失败: {exc}")
-        add_marker(getattr(global_config.bot, "nickname", ""))
-        for alias in getattr(global_config.bot, "alias_names", []) or []:
-            add_marker(alias)
-        unique_markers: List[str] = []
-        seen: Set[str] = set()
-        for marker in markers:
-            normalized = marker.strip()
-            if not normalized:
-                continue
-            dedupe_key = normalized.lower()
-            if dedupe_key in seen:
-                continue
-            seen.add(dedupe_key)
-            unique_markers.append(normalized)
-        return unique_markers
-
-    @staticmethod
-    def _contains_bot_name_marker(text: str) -> bool:
-        return any(marker in text for marker in ProactiveReactiveFlowMixin._bot_name_markers())
-
-    @staticmethod
-    def _build_forced_reply_fallback_text(target_message: Any) -> str:
-        raw_text = (
-            getattr(target_message, "processed_plain_text", "")
-            or getattr(target_message, "plain_text", "")
-            or getattr(target_message, "content", "")
-            or ""
-        )
-        text = re.sub(r"\s+", " ", str(raw_text or "")).strip()
-        if not text:
-            return ProactiveReactiveFlowMixin._pick_runtime_text(
-                "heartfc_force_reply_fallback_empty_texts",
-                text,
-            )
-        if ProactiveReactiveFlowMixin._contains_runtime_marker(
-            text,
-            "heartfc_force_reply_fallback_daodun_markers",
-        ):
-            return ProactiveReactiveFlowMixin._pick_runtime_text(
-                "heartfc_force_reply_fallback_daodun_texts",
-                text,
-            )
-        elif ProactiveReactiveFlowMixin._contains_bot_name_marker(text):
-            return ProactiveReactiveFlowMixin._pick_runtime_text(
-                "heartfc_force_reply_fallback_bot_name_texts",
-                text,
-            )
-        elif ProactiveReactiveFlowMixin._contains_runtime_marker(
-            text,
-            "heartfc_force_reply_fallback_question_markers",
-        ):
-            return ProactiveReactiveFlowMixin._pick_runtime_text(
-                "heartfc_force_reply_fallback_question_texts",
-                text,
-            )
-        elif ProactiveReactiveFlowMixin._matches_runtime_marker(
-            text,
-            "heartfc_force_reply_fallback_greeting_markers",
-            ignore_case=True,
-        ):
-            return ProactiveReactiveFlowMixin._pick_runtime_text(
-                "heartfc_force_reply_fallback_greeting_texts",
-                text,
-            )
-        short_text_max_chars = _rt_int("heartfc_force_reply_fallback_short_text_max_chars")
-        if len(text) <= short_text_max_chars:
-            template = ProactiveReactiveFlowMixin._pick_runtime_text(
-                "heartfc_force_reply_fallback_short_texts",
-                text,
-            )
-            return template.format(text=text)
-        return ProactiveReactiveFlowMixin._pick_runtime_text(
-            "heartfc_force_reply_fallback_default_texts",
-            text,
-        )
-
-    def _build_forced_reply_fallback_response(self, target_message: Any, failure_reason: str) -> Any:
-        from src.common.data_models.llm_data_model import LLMGenerationDataModel
-        from src.common.data_models.message_data_model import ReplySetModel
-
-        fallback_text = self._build_forced_reply_fallback_text(target_message)
-        reply_set = ReplySetModel()
-        reply_set.add_text_content(fallback_text)
-        return LLMGenerationDataModel(
-            content=fallback_text,
-            model="local_force_reply_fallback",
-            selected_expressions=[],
-            reply_set=reply_set,
-            processed_output=[fallback_text],
-            timing={"fallback_reason": str(failure_reason or "forced_reply_generation_failed")},
-        )
 
     async def _execute_voice_driven_reply(
         self,
@@ -262,7 +126,6 @@ class ProactiveReactiveFlowMixin:
             direct_fast_reply_generation = self._should_use_direct_fast_reply_generation(
                 force_bypass=force_bypass,
             )
-            allow_local_generation_fallback = bool(forced_reply_generation or direct_fast_reply_generation)
 
             # 获取目标用户的风格指导
             user_style_guide = ""
@@ -434,7 +297,7 @@ class ProactiveReactiveFlowMixin:
                     success = False
                     llm_response = None
                     generation_failure_reason = "direct_fast_reply_generation_timeout"
-                    logger.warning(f"{self.log_prefix} 💭 直接快回生成超时({direct_fast_timeout:.1f}s)，启用本地短兜底")
+                    logger.warning(f"{self.log_prefix} 💭 直接快回生成超时({direct_fast_timeout:.1f}s)，取消发送")
             elif forced_reply_generation:
                 try:
                     success, llm_response = await asyncio.wait_for(
@@ -445,22 +308,15 @@ class ProactiveReactiveFlowMixin:
                     success = False
                     llm_response = None
                     generation_failure_reason = "force_reply_generation_timeout"
-                    logger.warning(f"{self.log_prefix} 💭 强制回复完整生成超时({force_reply_timeout:.1f}s)，启用本地短兜底")
+                    logger.warning(f"{self.log_prefix} 💭 强制回复完整生成超时({force_reply_timeout:.1f}s)，取消发送")
             else:
                 success, llm_response = await reply_generation
 
             if not success or not llm_response or not llm_response.reply_set:
-                if allow_local_generation_fallback:
-                    llm_response = self._build_forced_reply_fallback_response(target_message, generation_failure_reason)
-                    success = True
-                    logger.warning(
-                        f"{self.log_prefix} 💭 强制回复生成失败，已启用本地短兜底: {generation_failure_reason}"
-                    )
-                else:
-                    self._last_flow_blocker = "voice回复生成失败"
-                    self._mark_message_content_deferred(target_message, "voice_generation_failed")
-                    logger.warning(f"{self.log_prefix} 💭 回复生成失败")
-                    return False
+                self._last_flow_blocker = f"voice回复生成失败:{generation_failure_reason}"
+                self._mark_message_content_deferred(target_message, generation_failure_reason)
+                logger.warning(f"{self.log_prefix} 💭 回复生成失败，取消发送: {generation_failure_reason}")
+                return False
 
             response_set = llm_response.reply_set
             selected_expressions = llm_response.selected_expressions

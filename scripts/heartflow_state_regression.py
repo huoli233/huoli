@@ -940,9 +940,6 @@ def check_content_state_scope_contract() -> Dict[str, Any]:
 
 
 def check_force_guard_contract() -> Dict[str, Any]:
-    from src.chat.heart_flow.enhanced_modules.shared_runtime import _rt_str_list
-
-    daodun_marker = _rt_str_list("heartfc_force_reply_fallback_daodun_markers")[0]
     probe = type(
         "ForceGuardProbe",
         (ProactiveContextPromptMixin,),
@@ -956,7 +953,7 @@ def check_force_guard_contract() -> Dict[str, Any]:
     msg = type(
         "FakeMessage",
         (),
-        {"processed_plain_text": f"我的{daodun_marker}", "user_id": "admin-user"},
+        {"processed_plain_text": "这条消息需要进入强制保护测试", "user_id": "admin-user"},
     )()
     high_desire_voice = type("Voice", (), {"reply_desire_level": 10})()
 
@@ -1287,56 +1284,17 @@ def check_db_backed_json_storage_contract() -> Dict[str, Any]:
     }
 
 
-def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
-    from src.chat.heart_flow.enhanced_modules.shared_runtime import _rt_str_list
-    from src.config.config import global_config
-
-    daodun_markers = _rt_str_list("heartfc_force_reply_fallback_daodun_markers")
-    assert daodun_markers
-    daodun_marker = daodun_markers[0]
+def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     msg = type(
         "FakeMessage",
         (),
         {
-            "processed_plain_text": f"我的{daodun_marker}",
-            "plain_text": f"我的{daodun_marker}",
-            "content": f"我的{daodun_marker}",
+            "processed_plain_text": "模型生成失败时不应该发送本地话术",
+            "plain_text": "模型生成失败时不应该发送本地话术",
+            "content": "模型生成失败时不应该发送本地话术",
             "user_id": "admin-user",
         },
     )()
-    fallback_response = ProactiveReactiveFlowMixin()._build_forced_reply_fallback_response(
-        msg,
-        "force_reply_generation_timeout",
-    )
-    assert fallback_response.model == "local_force_reply_fallback"
-    assert fallback_response.content != "看到了，怎么了？"
-    assert daodun_marker in fallback_response.content
-    assert fallback_response.processed_output == [fallback_response.content]
-    assert fallback_response.reply_set is not None
-    assert fallback_response.reply_set.reply_data[0].content == fallback_response.content
-    assert fallback_response.timing["fallback_reason"] == "force_reply_generation_timeout"
-    bot_marker = str(getattr(global_config.bot, "nickname", "") or "").strip()
-    assert bot_marker
-    named_msg = type(
-        "FakeMessage",
-        (),
-        {
-            "processed_plain_text": bot_marker,
-            "plain_text": bot_marker,
-            "content": bot_marker,
-            "user_id": "admin-user",
-        },
-    )()
-    named_fallback = ProactiveReactiveFlowMixin()._build_forced_reply_fallback_response(
-        named_msg,
-        "voice_generation_failed",
-    )
-    assert named_fallback.content in set(_rt_str_list("heartfc_force_reply_fallback_bot_name_texts"))
-    direct_fallback = ProactiveReactiveFlowMixin()._build_forced_reply_fallback_response(
-        msg,
-        "direct_fast_reply_generation_timeout",
-    )
-    assert direct_fallback.timing["fallback_reason"] == "direct_fast_reply_generation_timeout"
     force_probe = ProactiveReactiveFlowMixin()
     assert not force_probe._should_use_direct_fast_reply_generation(force_bypass=True)
     force_probe._is_admin_forced = True
@@ -1385,11 +1343,6 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     flow_source = (ROOT / "src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py").read_text(
         encoding="utf-8"
     )
-    forced_fallback_source = flow_source[
-        flow_source.index("def _build_forced_reply_fallback_text") : flow_source.index(
-            "def _build_forced_reply_fallback_response"
-        )
-    ]
     interaction_source = (ROOT / "src/chat/heart_flow/enhanced_modules/interaction_core_mixin.py").read_text(
         encoding="utf-8"
     )
@@ -1402,6 +1355,8 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     coordinator_source = (ROOT / "src/chat/heart_flow/reply_coordinator.py").read_text(encoding="utf-8")
     generator_source = (ROOT / "src/plugin_system/apis/generator_api.py").read_text(encoding="utf-8")
     group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
+    core_config_source = (ROOT / "config/core_config.toml").read_text(encoding="utf-8")
+    core_template_source = (ROOT / "template/core_config_template.toml").read_text(encoding="utf-8")
     assert "heartfc_force_reply_generation_timeout_seconds" in flow_source
     assert "heartfc_direct_fast_reply_generation_timeout_seconds" in flow_source
     assert "heartfc_post_send_focus_audit_timeout_seconds" in interaction_source
@@ -1409,21 +1364,23 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     assert "asyncio.wait_for" in interaction_source
     assert "回复后台巡查超时" in interaction_source
     assert "direct_fast_reply_generation_timeout" in flow_source
-    assert "强制回复生成失败，已启用本地短兜底" in flow_source
+    assert "force_reply_generation_timeout" in flow_source
+    assert "self._last_flow_blocker = f\"voice回复生成失败:{generation_failure_reason}\"" in flow_source
+    assert "self._mark_message_content_deferred(target_message, generation_failure_reason)" in flow_source
+    assert "回复生成失败，取消发送" in flow_source
+    assert "未发送本地兜底" not in flow_source
+    assert "本地短兜底" not in flow_source
+    assert "local_force_reply_fallback" not in flow_source
+    assert "_build_forced_reply_fallback_text" not in flow_source
+    assert "_build_forced_reply_fallback_response" not in flow_source
+    assert "allow_local_generation_fallback" not in flow_source
+    assert "heartfc_force_reply_fallback" not in flow_source
+    assert "heartfc_force_reply_fallback" not in core_config_source
+    assert "heartfc_force_reply_fallback" not in core_template_source
+    assert "听着呢，说事。" not in core_config_source
+    assert "听着呢，说事。" not in core_template_source
     assert "看到了，怎么了？" not in flow_source
     assert "我看见问题了，你具体指哪块" not in flow_source
-    for hardcoded_marker in [
-        *daodun_markers,
-        *(_rt_str_list("heartfc_force_reply_fallback_question_markers") or []),
-        *(_rt_str_list("heartfc_force_reply_fallback_greeting_markers") or []),
-        bot_marker,
-    ]:
-        assert hardcoded_marker not in forced_fallback_source
-    assert "heartfc_force_reply_fallback_daodun_markers" in forced_fallback_source
-    assert "heartfc_force_reply_fallback_question_markers" in forced_fallback_source
-    assert "heartfc_force_reply_fallback_greeting_markers" in forced_fallback_source
-    assert "heartfc_force_reply_fallback_bot_name_markers" in flow_source
-    assert 'resolve_module_view("identity_bot")' in flow_source
     assert "continuity_context" in flow_source
     assert "_build_context_execution_block" in flow_source
     assert "_is_direct_reply_fastlane = bool(_is_admin_force_wake or getattr(self, \"_cached_targeted_to_bot\", False))" in loop_source
@@ -1450,6 +1407,7 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     assert "enable_chinese_typo=not direct_fast_reply_generation" in flow_source
     assert "强制回复完整生成预算" in flow_source
     assert "强制回复完整生成超时" in flow_source
+    assert "取消发送" in flow_source
     assert "[直接快回]" in flow_source
     assert "fast_path: bool = False" in coordinator_source
     assert "fast_path: bool = False" in generator_source
@@ -1459,10 +1417,9 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     assert "管理员强制快回" not in group_reply_source
     assert "直接快回通道" in group_reply_source
     return {
-        "local_force_reply_fallback": True,
-        "local_force_reply_fallback_varied": True,
-        "force_reply_markers_configured": True,
-        "force_reply_bot_name_from_config": True,
+        "local_force_reply_fallback_removed": True,
+        "force_reply_generation_failure_aborts": True,
+        "force_reply_fallback_config_removed": True,
         "admin_model_governor_bypass": True,
         "stale_voice_cache_cleared": True,
         "direct_fast_reply_path": True,
@@ -1671,7 +1628,7 @@ def main() -> None:
         "huoli_naming": check_huoli_naming_contract(),
         "admin_identity": check_admin_identity_not_relationship_contract(),
         "db_backed_json_storage": check_db_backed_json_storage_contract(),
-        "force_reply_generation_fallback": check_force_reply_generation_fallback_contract(),
+        "force_reply_generation_failure": check_force_reply_generation_failure_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),
         "night_status_labels": check_night_status_label_contract(),
