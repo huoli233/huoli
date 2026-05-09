@@ -226,6 +226,8 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     )
     router_registry_source = (PROJECT_ROOT / "src/webui/routers/router_registry.py").read_text(encoding="utf-8")
     heartflow_router_source = (PROJECT_ROOT / "src/webui/routers/heartflow.py").read_text(encoding="utf-8")
+    runtime_hub_source = (PROJECT_ROOT / "src/webui/services/runtime_state_hub.py").read_text(encoding="utf-8")
+    state_monitor_source = (PROJECT_ROOT / "src/webui/services/state_monitor.py").read_text(encoding="utf-8")
     core_config_source = (PROJECT_ROOT / "config/core_config.toml").read_text(encoding="utf-8")
     core_template_source = (PROJECT_ROOT / "template/core_config_template.toml").read_text(encoding="utf-8")
 
@@ -267,6 +269,9 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     assert "wait_for_update" in heartflow_router_source, "状态页 HTTP 实时 API 应等待运行态事件"
     assert '"/monitor/live"' in heartflow_router_source, "状态页总览实时 API 缺失"
     assert '"/monitor/{channel_id}/live"' in heartflow_router_source, "状态页频道实时 API 缺失"
+    assert "is_channel_monitor_packet" in heartflow_router_source, "频道实时 API 应拒绝半成品运行态快照"
+    assert "warm_monitor_snapshots" in state_monitor_source, "状态页应支持后台预热完整快照"
+    assert "if not isinstance(existing, dict) or not existing:" in runtime_hub_source, "运行态增量不应从空状态制造半成品快照"
 
     state_monitor_path = PROJECT_ROOT / "src/webui/routers/websocket/state_monitor.py"
     assert not state_monitor_path.exists(), "状态监控 WebSocket 模块应彻底删除"

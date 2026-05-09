@@ -5,7 +5,11 @@ from src.chat.heart_flow.heartfc_state_exporter import (
     list_heartfc_chats,
 )
 from src.chat.heart_flow.heartfc_thresholds import get_heartfc_thresholds
-from src.webui.services.state_monitor import build_channel_monitor_state, build_monitor_overview
+from src.webui.services.state_monitor import (
+    build_channel_monitor_state,
+    build_monitor_overview,
+    is_channel_monitor_packet,
+)
 from src.webui.services.runtime_state_hub import MONITOR_OVERVIEW_CHANNEL_ID, get_runtime_state_hub
 
 router = APIRouter(prefix="/api/heartflow", tags=["heartflow"])
@@ -89,9 +93,12 @@ async def wait_heartflow_monitor_state(
 
     hub = get_runtime_state_hub()
     cached = await hub.get_snapshot(channel_id)
-    if cached is not None and int(cached.get("state_version", 0) or 0) > int(after_version or 0):
+    if (
+        is_channel_monitor_packet(cached, channel_id)
+        and int(cached.get("state_version", 0) or 0) > int(after_version or 0)
+    ):
         return {"success": True, "changed": True, "monitor": cached}
-    if cached is None:
+    if not is_channel_monitor_packet(cached, channel_id):
         monitor = await build_channel_monitor_state(channel_id)
         if monitor is None:
             raise HTTPException(status_code=404, detail="Heartflow chat is not active")
@@ -106,7 +113,7 @@ async def wait_heartflow_monitor_state(
         monitor = event.get("data")
     else:
         monitor = await hub.get_snapshot(channel_id)
-    if monitor is None:
+    if not is_channel_monitor_packet(monitor, channel_id):
         monitor = await build_channel_monitor_state(channel_id)
     if monitor is None:
         raise HTTPException(status_code=404, detail="Heartflow chat is not active")

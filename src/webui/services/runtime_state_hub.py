@@ -118,7 +118,10 @@ class RuntimeStateHub:
         now = time.time()
         clean_value = _plain(value)
         async with self._lock:
-            snapshot = copy.deepcopy(self._channels.get(channel, {}))
+            existing = self._channels.get(channel)
+            if not isinstance(existing, dict) or not existing:
+                return None
+            snapshot = copy.deepcopy(existing)
             old = _deep_get(snapshot, path)
             if old == clean_value:
                 return None

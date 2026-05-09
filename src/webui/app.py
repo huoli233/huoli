@@ -61,6 +61,7 @@ def create_app(
     _setup_cors(app, port)
     _setup_global_error_handler(app)
     _setup_shutdown_hooks(app)
+    _setup_runtime_warmup_hooks(app)
     _register_api_routes(app)
     _setup_robots_txt(app)
 
@@ -69,6 +70,28 @@ def create_app(
         _setup_static_files(app)
 
     return app
+
+
+def _setup_runtime_warmup_hooks(app: FastAPI):
+    """WebUI 启动后预热后台快照，让页面打开时直接读取运行态缓存。"""
+
+    @app.on_event("startup")
+    async def _warm_runtime_snapshots():
+        try:
+            from src.common.task_utils import safe_create_task
+            from src.webui.routers.statistics import publish_statistics_snapshot
+            from src.webui.services.state_monitor import warm_monitor_snapshots
+
+            safe_create_task(
+                publish_statistics_snapshot("webui_startup"),
+                name="statistics_webui_startup_warmup",
+            )
+            safe_create_task(
+                warm_monitor_snapshots(reason="webui_startup"),
+                name="heartflow_monitor_webui_startup_warmup",
+            )
+        except Exception as exc:
+            logger.debug(f"WebUI 运行态快照预热失败: {exc}")
 
 
 def _setup_shutdown_hooks(app: FastAPI):

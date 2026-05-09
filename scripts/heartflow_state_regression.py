@@ -1726,7 +1726,18 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
 
     async def _exercise() -> Dict[str, Any]:
         channel_id = "regression-runtime-hub"
+        empty_channel_id = "regression-runtime-hub-empty"
         hub = get_runtime_state_hub()
+        empty_delta = await hub.update_path(
+            empty_channel_id,
+            module="regression",
+            path="presentation.resource_detail.chat_percent",
+            value=0.5,
+            reason="no_partial_seed",
+        )
+        empty_cached = await hub.get_snapshot(empty_channel_id)
+        assert empty_delta is None
+        assert empty_cached is None
         queue = await hub.subscribe(channel_id)
         try:
             snapshot = await hub.set_snapshot(
@@ -1786,6 +1797,7 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
             return {
                 "snapshot": True,
                 "delta": True,
+                "no_partial_seed": True,
                 "event_driven_snapshot": True,
                 "http_wait_for_update": True,
             }
@@ -1793,6 +1805,8 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
             await hub.unsubscribe(queue, channel_id)
 
     hub_source = (ROOT / "src/webui/services/runtime_state_hub.py").read_text(encoding="utf-8")
+    heartflow_router_source = (ROOT / "src/webui/routers/heartflow.py").read_text(encoding="utf-8")
+    state_monitor_source = (ROOT / "src/webui/services/state_monitor.py").read_text(encoding="utf-8")
     core_config_source = (ROOT / "config/core_config.toml").read_text(encoding="utf-8")
     core_template_source = (ROOT / "template/core_config_template.toml").read_text(encoding="utf-8")
     assert not (ROOT / "src/webui/routers/websocket/state_monitor.py").exists()
@@ -1800,6 +1814,9 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
     assert "emit_runtime_delta" in hub_source
     assert "wait_for_update" in hub_source
     assert "MONITOR_OVERVIEW_CHANNEL_ID" in hub_source
+    assert "if not isinstance(existing, dict) or not existing:" in hub_source
+    assert "is_channel_monitor_packet" in heartflow_router_source
+    assert "warm_monitor_snapshots" in state_monitor_source
     assert "requires_refresh" not in hub_source
     assert "def heartbeat(" not in hub_source
     assert "state_monitor_default_interval_seconds" not in core_config_source

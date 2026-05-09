@@ -1153,3 +1153,29 @@
 - 本轮删除仅限状态监控专用 `/ws/state-monitor`；聊天、登录认证、插件进度等其他 WebSocket 仍保留。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
 - 删除类回滚优先使用 `preserve/full-modules-状态监控WebSocket移除`，或本轮提交 tag `回滚点/状态监控HTTP实时同步`。
+
+## 2026-05-10T01:55:23+08:00 - Task: 优化状态页首次同步与后台快照预热
+
+### What was done:
+- 修复运行态总线的半成品快照问题：`RuntimeStateHub.update_path()` 不再在没有完整频道快照时从空字典创建部分状态，避免前端误判“同步成功但全是 0/等待同步”。
+- 增加 `is_channel_monitor_packet()` 校验，频道实时 API 只把包含 `domains/presentation/prediction` 的完整包返回给状态页；遇到半成品缓存时会重建完整监控包。
+- 增加 `warm_monitor_snapshots()` 后台预热：WebUI 启动和 Heartflow 频道创建/清理总览刷新时，后台提前构建完整频道状态快照，页面打开时优先读缓存。
+- 状态页初始加载改为命中 `/api/heartflow/monitor/live?timeout=0.1`，优先拿运行态缓存，不再每次打开都强制走 `/api/heartflow/monitor` 重建总览。
+- WebUI 启动时同时预热统计金额快照 `publish_statistics_snapshot("webui_startup")`，让金额/统计后台缓存与机器人回复构建链路分离。
+- 同步更新 `scripts/webui_smoke_test.py` 与 `scripts/heartflow_state_regression.py`，锁定“半成品快照不能冒充完整状态”和“后台预热完整快照”的契约。
+
+### Testing:
+- `uv run ruff check src/webui/services/runtime_state_hub.py src/webui/services/state_monitor.py src/webui/routers/heartflow.py src/chat/heart_flow/heartflow.py src/webui/app.py scripts/webui_smoke_test.py scripts/heartflow_state_regression.py` 通过。
+- `Push-Location web/dashboard; npm run build; Pop-Location` 通过，生成新的状态页构建产物。
+- `uv run python scripts/webui_smoke_test.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，新增 `runtime_state_hub.no_partial_seed=true`。
+- `uv run python scripts/model_runtime_audit.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过。
+- 浏览器级验证：临时启动 `uvicorn src.webui.app:create_app --factory --host 127.0.0.1 --port 8765`，用 Playwright CLI 截图 `/dashboard` 成功；临时服务已关闭。
+
+### Notes:
+- 当前 8001 用户服务在验证期间已停止，后端代码改动需要重启 WebUI/主程序后生效。
+- 临时验证服务没有真实 Heartflow 活跃会话，因此截图只验证状态页真实渲染和等待会话路径；活跃会话完整包由回归测试和 API 契约覆盖。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

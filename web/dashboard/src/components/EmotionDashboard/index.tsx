@@ -743,10 +743,10 @@ function applyMonitorPacket(
   setPacket(monitor);
 }
 
-function monitorUrl(path: string, version: number): string {
+function monitorUrl(path: string, version: number, timeoutSeconds = 25): string {
   const query = new URLSearchParams({
     after_version: String(Math.max(0, Math.floor(version || 0))),
-    timeout: "25",
+    timeout: String(timeoutSeconds),
   });
   return `${path}?${query.toString()}`;
 }
@@ -871,7 +871,7 @@ export function EmotionDashboard() {
       setLoading(true);
       setErrorMessage("");
       try {
-        const response = await fetch("/api/heartflow/monitor", {
+        const response = await fetch(monitorUrl("/api/heartflow/monitor/live", 0, 0.1), {
           credentials: "same-origin",
         });
         if (!response.ok) {

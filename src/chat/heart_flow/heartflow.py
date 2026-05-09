@@ -576,6 +576,7 @@ class Heartflow:
     def _publish_monitor_overview(self, reason: str) -> None:
         try:
             from src.chat.heart_flow.heartfc_state_exporter import list_heartfc_chats
+            from src.webui.services.state_monitor import warm_monitor_snapshots
             from src.webui.services.runtime_state_hub import MONITOR_OVERVIEW_CHANNEL_ID, get_runtime_state_hub
 
             now = _tm.time()
@@ -593,6 +594,12 @@ class Heartflow:
                 get_runtime_state_hub().set_snapshot(MONITOR_OVERVIEW_CHANNEL_ID, packet, reason=reason),
                 name=f"monitor_overview_{reason}",
             )
+            channel_ids = [str(item.get("channel_id", "")) for item in overview.get("channels", []) if item.get("channel_id")]
+            if channel_ids:
+                safe_create_task(
+                    warm_monitor_snapshots(channel_ids, reason=reason),
+                    name=f"monitor_snapshot_warmup_{reason}",
+                )
         except Exception as exc:
             logger.debug(f"[心流] 监控总览实时刷新失败: {exc}")
 

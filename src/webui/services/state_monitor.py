@@ -111,6 +111,32 @@ _STATE_MONITOR_DEFAULTS: Dict[str, Dict[str, float]] = {
 }
 
 
+def is_channel_monitor_packet(packet: Optional[Dict[str, Any]], channel_id: str | None = None) -> bool:
+    if not isinstance(packet, dict):
+        return False
+    if channel_id and str(packet.get("channel_id", "")) != str(channel_id):
+        return False
+    return all(isinstance(packet.get(key), dict) for key in ("domains", "presentation", "prediction"))
+
+
+async def warm_monitor_snapshots(
+    channel_ids: Optional[list[str]] = None,
+    *,
+    reason: str = "warmup",
+) -> None:
+    """后台预热完整监控快照，避免前端首次打开时拿到半成品增量。"""
+
+    overview = await build_monitor_overview()
+    if channel_ids is None:
+        channel_ids = [str(item.get("channel_id", "")) for item in overview.get("channels", [])]
+    hub = get_runtime_state_hub()
+    for channel_id in [item for item in channel_ids if item]:
+        cached = await hub.get_snapshot(channel_id)
+        if is_channel_monitor_packet(cached, channel_id):
+            continue
+        await build_channel_monitor_state(channel_id)
+
+
 def _overlay_dicts(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
     merged = copy.deepcopy(base)
     for key, value in patch.items():
