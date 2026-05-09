@@ -717,3 +717,29 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前分支仍为 `delete/状态页假实时轮询移除`；本轮不是删除类改动，仅在现有脏工作区上精确暂存心流日志/独白相关文件。
 - 工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt`、多个 `docs/*.md`、`.trae/`、WebUI 状态页相关文件和 dist 资产，提交时必须继续避免暂存。
+
+## 2026-05-09T09:20:10+08:00 - Task: 状态页实时监控链路去固定心跳与刷新回拉
+
+### What was done:
+- 排查用户指出的 `状态监控 WebSocket 已建立` 日志：该日志来自状态页 `/ws/state-monitor` 长连接，不是旧 HTTP 轮询；但链路内仍存在 1 秒 `state_heartbeat` 和前端连接后主动 `refresh` 整包回拉。
+- 移除状态监控 WebSocket 的 `interval` 参数、周期 `asyncio.sleep()` heartbeat 任务和 `state_heartbeat` 消息。
+- 移除前端 WebSocket `onopen` 后主动发送 `refresh`，也移除收到 `requires_refresh` 后再请求整包快照的逻辑。
+- 移除服务端 `refresh` 消息入口，状态页只允许初始快照、`switch_channel` 和运行态事件订阅。
+- `RuntimeStateHub.set_snapshot()` 改为直接发布 `state_snapshot`，不再发布 `requires_refresh=true` 的 delta。
+- 状态页 WebSocket 建立/断开日志降为 debug，并改名为“状态实时事件通道”，避免正常打开状态页刷 info 日志。
+- 更新 `webui_smoke_test.py` 和 `heartflow_state_regression.py`，禁止 `state_heartbeat`、`refresh`、`requires_refresh`、定时 sleep 状态推送回潮。
+- 重新构建 `web/dashboard/dist`，生成新状态页静态资源。
+
+### Testing:
+- `uv run ruff check src/webui/routers/websocket/state_monitor.py src/webui/services/runtime_state_hub.py scripts/webui_smoke_test.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/webui_smoke_test.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过，`runtime_state_hub.event_driven_snapshot=true`。
+- `cd web/dashboard && npm run build` 通过，生成 `web/dashboard/dist/assets/index-CEZGdhd_.js`。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src/webui scripts` 通过。
+- `git diff --check` 针对本轮文件通过。
+- Chrome headless 打开本地 `/dashboard` 通过：页面渲染 `dashboard-shell`、`下一步发言概率`、`等待会话`，未出现 `配置分级`。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 这次保留 WebSocket 长连接作为实时事件通道；彻底移除的是固定间隔 heartbeat、前端主动 refresh 和 requires_refresh 回拉，不是删除实时监控 API 本身。
+- 工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt`、多个 `docs/*.md`、`.trae/`。

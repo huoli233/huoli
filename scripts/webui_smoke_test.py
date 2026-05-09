@@ -252,10 +252,8 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
         "channel_gate": "const shouldSyncRealtime = Boolean(selectedChannel);",
         "waiting_display": 'const displayConnectionState = selectedChannel ? connectionState : "waiting";',
         "no_channel_guard": "if (!selectedChannel) {",
-        "immediate_refresh": 'socket.send(JSON.stringify({ type: "refresh", data: { channel_id: selectedChannel } }));',
         "fast_silent_reconnect": "}, 800);",
         "state_delta": "state_delta",
-        "state_heartbeat": "state_heartbeat",
         "local_clock": "requestAnimationFrame",
     }
     missing_dashboard = [
@@ -265,6 +263,10 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     assert "轮询同步失败" not in dashboard_source, "后台轮询失败不应显示到状态页前台"
     assert "fallbackPollTimerRef" not in dashboard_source, "状态页不应保留 HTTP 轮询补偿定时器"
     assert "pollMonitorFallback" not in dashboard_source, "状态页不应保留 HTTP 轮询补偿函数"
+    assert 'type: "refresh"' not in dashboard_source, "状态页 WebSocket 不应主动请求整包刷新"
+    assert '"refresh"' not in state_monitor_source, "状态监控 WebSocket 不应保留整包刷新消息入口"
+    assert "requires_refresh" not in dashboard_source, "状态页不应通过 requires_refresh 回拉整包快照"
+    assert "state_heartbeat" not in dashboard_source, "状态页不应依赖固定心跳推进实时状态"
     assert "config-scope" not in dashboard_source, "状态页启动链路不应请求配置分级快照"
     assert "authReady" not in dashboard_source, "状态页实时同步不应依赖 WebUI 登录态"
     assert "/api/webui/auth/check" not in dashboard_source, "状态页不应在建立实时连接前检查登录"
@@ -289,7 +291,9 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
     assert "channel_id required" in state_monitor_source, "状态监控 WebSocket 应拒绝未指定会话的总览订阅"
     assert "build_monitor_overview" not in state_monitor_source, "状态监控 WebSocket 不应再构建总览快照"
     assert "subscription.get()" in state_monitor_source, "状态监控 WebSocket 应订阅运行态事件"
-    assert "state_heartbeat" in state_monitor_source, "状态监控 WebSocket 应提供心跳而非轮询重建"
+    assert "state_heartbeat" not in state_monitor_source, "状态监控 WebSocket 不应固定间隔推送心跳"
+    assert "asyncio.sleep(" not in state_monitor_source, "状态监控 WebSocket 不应使用定时 sleep 推送状态"
+    assert "interval:" not in state_monitor_source, "状态监控 WebSocket 不应保留 interval 轮询参数"
 
     return {
         "activation_gate": True,

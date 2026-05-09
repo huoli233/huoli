@@ -900,7 +900,6 @@ export function EmotionDashboard() {
       socket.onopen = () => {
         hasEverConnectedRef.current = true;
         setConnectionState("live");
-        socket.send(JSON.stringify({ type: "refresh", data: { channel_id: selectedChannel } }));
       };
 
       socket.onmessage = (event) => {
@@ -940,20 +939,12 @@ export function EmotionDashboard() {
               new?: unknown;
               server_time?: number;
               version?: number;
-              requires_refresh?: boolean;
             };
             if (event.server_time) {
               setServerOffsetMs(event.server_time * 1000 - Date.now());
             }
-            if (event.requires_refresh) {
-              socket.send(JSON.stringify({ type: "refresh", data: { channel_id: selectedChannel } }));
-            } else if (event.path) {
+            if (event.path) {
               setPacket((current) => cloneWithPath(current, event.path ?? "", event.new));
-            }
-          } else if (message.type === "state_heartbeat" && message.data) {
-            const event = message.data as { server_time?: number };
-            if (event.server_time) {
-              setServerOffsetMs(event.server_time * 1000 - Date.now());
             }
           } else if (message.type === "state_error") {
             setPacket(null);

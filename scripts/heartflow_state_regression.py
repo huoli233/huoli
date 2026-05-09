@@ -1448,7 +1448,9 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "Number(predictionPercent).toFixed(1)" in dashboard_source
     assert "requestAnimationFrame" in dashboard_source
     assert "state_delta" in dashboard_source
-    assert "state_heartbeat" in dashboard_source
+    assert "state_heartbeat" not in dashboard_source
+    assert 'type: "refresh"' not in dashboard_source
+    assert "requires_refresh" not in dashboard_source
     assert "liveEtaLabel" in dashboard_source
 
     heartflow_router_source = (ROOT / "src/webui/routers/heartflow.py").read_text(encoding="utf-8")
@@ -1460,6 +1462,7 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "channel_id required" in websocket_source
     assert "build_monitor_overview" not in websocket_source
     assert "全部群聊/私聊" not in websocket_source
+    assert '"refresh"' not in websocket_source
 
     client = TestClient(create_app())
     dashboard = client.get("/dashboard")
@@ -1524,7 +1527,6 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
                 reason="value_changed",
             )
             second = await asyncio.wait_for(queue.get(), timeout=1.0)
-            heartbeat = await hub.heartbeat(channel_id)
             cached = await hub.get_snapshot(channel_id)
             assert snapshot["state_version"] >= 1
             assert first["type"] == "state_snapshot"
@@ -1532,13 +1534,26 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
             assert second["type"] == "state_delta"
             assert second["path"] == "presentation.resource_detail.chat_percent"
             assert second["new"] == 0.735
-            assert heartbeat["type"] == "state_heartbeat"
             assert cached is not None
             assert cached["presentation"]["resource_detail"]["chat_percent"] == 0.735
+            refreshed = await hub.set_snapshot(
+                channel_id,
+                {
+                    "channel_id": channel_id,
+                    "presentation": {"resource_detail": {"chat_percent": 0.812}},
+                    "prediction": {"eta_seconds": 360},
+                },
+                reason="full_refresh",
+            )
+            third = await asyncio.wait_for(queue.get(), timeout=1.0)
+            assert refreshed["state_version"] > snapshot["state_version"]
+            assert third["type"] == "state_snapshot"
+            assert third["data"]["presentation"]["resource_detail"]["chat_percent"] == 0.812
+            assert "requires_refresh" not in third
             return {
                 "snapshot": True,
                 "delta": True,
-                "heartbeat": True,
+                "event_driven_snapshot": True,
             }
         finally:
             await hub.unsubscribe(queue, channel_id)
@@ -1546,13 +1561,17 @@ def check_runtime_state_hub_contract() -> Dict[str, Any]:
     websocket_source = (ROOT / "src/webui/routers/websocket/state_monitor.py").read_text(encoding="utf-8")
     hub_source = (ROOT / "src/webui/services/runtime_state_hub.py").read_text(encoding="utf-8")
     assert "state_delta" in websocket_source
-    assert "state_heartbeat" in websocket_source
+    assert "state_heartbeat" not in websocket_source
+    assert '"refresh"' not in websocket_source
     assert '"type": "state_snapshot"' in websocket_source
     assert "state_overview" not in websocket_source
     assert "subscription.get()" in websocket_source
+    assert "asyncio.sleep(" not in websocket_source
     assert "asyncio.wait_for(websocket.receive_json(), timeout=interval)" not in websocket_source
     assert "class RuntimeStateHub" in hub_source
     assert "emit_runtime_delta" in hub_source
+    assert "requires_refresh" not in hub_source
+    assert "def heartbeat(" not in hub_source
     return asyncio.run(_exercise())
 
 

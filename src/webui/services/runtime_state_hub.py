@@ -65,7 +65,6 @@ class RuntimeStateHub:
         payload = copy.deepcopy(snapshot or {})
         now = time.time()
         async with self._lock:
-            previous = self._channels.get(channel)
             version = self._versions.get(channel, 0) + 1
             payload["server_time"] = now
             payload["state_version"] = version
@@ -79,24 +78,7 @@ class RuntimeStateHub:
                 "reason": reason,
                 "data": copy.deepcopy(payload),
             }
-            if previous is None:
-                await self._publish_locked(channel, event)
-            else:
-                await self._publish_locked(
-                    channel,
-                    {
-                        "type": "state_delta",
-                        "channel_id": channel,
-                        "version": version,
-                        "server_time": now,
-                        "module": "monitor",
-                        "path": "snapshot",
-                        "old": None,
-                        "new": None,
-                        "reason": reason,
-                        "requires_refresh": True,
-                    },
-                )
+            await self._publish_locked(channel, event)
             return copy.deepcopy(payload)
 
     async def update_path(
@@ -137,17 +119,6 @@ class RuntimeStateHub:
             }
             await self._publish_locked(channel, event)
             return copy.deepcopy(event)
-
-    async def heartbeat(self, channel_id: Optional[str] = None) -> Dict[str, Any]:
-        channel = str(channel_id or "")
-        async with self._lock:
-            version = self._versions.get(channel, 0) if channel else max(self._versions.values(), default=0)
-        return {
-            "type": "state_heartbeat",
-            "channel_id": channel,
-            "version": version,
-            "server_time": time.time(),
-        }
 
     async def get_snapshot(self, channel_id: str) -> Optional[Dict[str, Any]]:
         channel = str(channel_id or "")

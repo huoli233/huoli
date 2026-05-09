@@ -5,7 +5,6 @@ from typing import Optional
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from src.common.logger import get_logger
-from src.webui.runtime_config import webui_module_view
 from src.webui.services.state_monitor import build_channel_monitor_state
 from src.webui.services.runtime_state_hub import get_runtime_state_hub
 
@@ -13,16 +12,10 @@ logger = get_logger("WS状态监控")
 router = APIRouter(tags=["websocket"])
 
 
-def _websocket_config() -> dict:
-    return webui_module_view("webui_websocket")
-
-
-
 @router.websocket("/ws/state-monitor")
 async def websocket_state_monitor_endpoint(
     websocket: WebSocket,
     channel_id: Optional[str] = Query(default=None),
-    interval: float = Query(default=1.0, ge=0.1, le=30.0),
 ):
     session_id = f"state_{int(time.time() * 1000)}_{id(websocket)}"
     await websocket.accept()
@@ -39,9 +32,7 @@ async def websocket_state_monitor_endpoint(
         logger.info(f"状态监控 WebSocket 拒绝未指定会话: {session_id}")
         return
 
-    logger.info(f"状态监控 WebSocket 已建立: {session_id}, 会话={channel_id}")
-    config = _websocket_config()
-    heartbeat_interval = max(0.5, float(config.get("state_monitor_heartbeat_seconds", 1.0)))
+    logger.debug(f"状态实时事件通道已建立: {session_id}, 会话={channel_id}")
     hub = get_runtime_state_hub()
     subscription = await hub.subscribe(channel_id)
     client_queue: asyncio.Queue = asyncio.Queue(maxsize=20)
@@ -86,11 +77,10 @@ async def websocket_state_monitor_endpoint(
         reader_task = asyncio.create_task(read_client_messages())
         while True:
             event_task = asyncio.create_task(subscription.get())
-            heartbeat_task = asyncio.create_task(asyncio.sleep(heartbeat_interval))
             client_task = asyncio.create_task(client_queue.get())
             try:
                 done, pending = await asyncio.wait(
-                    {client_task, event_task, heartbeat_task},
+                    {client_task, event_task},
                     return_when=asyncio.FIRST_COMPLETED,
                 )
                 for task in pending:
@@ -110,19 +100,6 @@ async def websocket_state_monitor_endpoint(
                                 },
                             }
                         )
-                    elif msg_type == "refresh":
-                        requested_channel = data.get("data", {}).get("channel_id")
-                        if not requested_channel:
-                            await websocket.send_json(
-                                {
-                                    "type": "state_error",
-                                    "data": {
-                                        "message": "state monitor refresh requires channel_id",
-                                    },
-                                }
-                            )
-                            continue
-                        await send_snapshot(requested_channel)
                     elif msg_type == "switch_channel":
                         target_channel = data.get("data", {}).get("channel_id")
                         if not target_channel:
@@ -144,20 +121,13 @@ async def websocket_state_monitor_endpoint(
                 elif event_task in done:
                     event = event_task.result()
                     await websocket.send_json({"type": event.get("type", "state_delta"), "data": event})
-                elif heartbeat_task in done:
-                    await websocket.send_json(
-                        {
-                            "type": "state_heartbeat",
-                            "data": await hub.heartbeat(channel_id),
-                        }
-                    )
             except WebSocketDisconnect:
                 break
     finally:
         if "reader_task" in locals():
             reader_task.cancel()
         await hub.unsubscribe(subscription, channel_id)
-        logger.debug(f"状态监控 WebSocket 已断开: {session_id}")
+        logger.debug(f"状态实时事件通道已断开: {session_id}")
 
 
 @router.get("/ws/state-monitor/status")
