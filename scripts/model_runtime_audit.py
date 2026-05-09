@@ -11,11 +11,12 @@ if str(ROOT) not in sys.path:
 TARGET_MODEL = "gemini-2.5-flash"
 BLOCKED_REPLYER_MODELS: set[str] = set()
 BLOCKED_RUNTIME_MODEL_TEXT = ("gemini-3", "gemini-2.5-flash-lite")
-TOOL_MODELS = ("qwen3-30b", "qwen3-next-80b")
+TOOL_MODELS = ("qwen3-30b",)
 NON_TOOL_TASKS = (
     "utils",
     "model_monitor",
     "planner",
+    "vlm",
     "focus_chat",
     "lightweight",
     "lpmm_entity_extract",

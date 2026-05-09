@@ -96,14 +96,6 @@ enable_thinking = true # 启用思考
 
 
 [[models]]
-model_identifier = "Qwen/Qwen3-Next-80B-A3B-Instruct"
-name = "qwen3-next-80b"
-api_provider = "SiliconFlow"    
-price_in = 1.0
-price_out = 4.0
-supports_tool_calling = true
-
-[[models]]
 model_identifier = "zai-org/GLM-4.6"
 name = "siliconflow-glm-4.6"
 api_provider = "SiliconFlow"    
@@ -168,7 +160,7 @@ slow_threshold = 15.0                     # 慢请求阈值（秒），模型等
 selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
 [model_task_config.tool_use] #功能模型，需要使用支持工具调用的模型，请使用较快的小模型（调用量较大）
-model_list = ["qwen3-30b","qwen3-next-80b"]
+model_list = ["qwen3-30b"]
 temperature = 0.7
 max_tokens = 1024
 slow_threshold = 10.0
@@ -189,7 +181,7 @@ slow_threshold = 12.0
 selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
 [model_task_config.vlm] # 图像识别模型
-model_list = ["qwen3-vl-30"]
+model_list = ["gemini-2.5-flash"]
 max_tokens = 256
 slow_threshold = 15.0
 selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
