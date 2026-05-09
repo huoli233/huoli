@@ -1713,6 +1713,13 @@ def check_webui_contract() -> Dict[str, Any]:
     assert ".live-pill.is-waiting" in dashboard_style
     assert ".live-pill.is-cached" in dashboard_style
     assert "下一步发言概率" in dashboard_source
+    assert "后端当前时间" in dashboard_source
+    assert "formatClockMs" in dashboard_source
+    assert "preciseDuration(syncAgeSeconds)" in dashboard_source
+    assert "心理负荷" in dashboard_source
+    assert "创伤负荷" in dashboard_source
+    assert "表层伪装" in dashboard_source
+    assert "低于触发阈值的心理值也显示原始数值" in dashboard_source
     assert "Number(predictionPercent).toFixed(1)" in dashboard_source
     assert "requestAnimationFrame" in dashboard_source
     assert "state_delta" not in dashboard_source

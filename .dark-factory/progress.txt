@@ -1292,3 +1292,29 @@
 - 这次没有恢复状态监控 WebSocket，仍然走 HTTP live API。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T04:07:35+08:00 - Task: 修复状态页毫秒时钟与心理负荷原始值显示
+
+### What was done:
+- 将状态页顶部“最后同步”改为“后端当前时间”，用后端时间偏移在浏览器端逐帧推进，显示到毫秒，并同时保留上次同步时间和同步延迟。
+- 将状态页本地时钟刷新节奏从 100ms 调整为 50ms，避免时间显示看起来卡顿。
+- 新增“心理负荷”常驻面板，直接显示烦躁负荷、心理压力、创伤负荷、内在混乱、表层伪装和安全风险原始值。
+- 更新状态页 CSS，确保毫秒时钟和指标数字使用等宽数字显示，减少实时跳动时的布局抖动。
+- 更新 WebUI smoke 与心流状态回归断言，锁定后端当前时间、同步延迟、心理负荷、创伤负荷和表层伪装显示契约。
+
+### Testing:
+- `Push-Location web\dashboard; npm run build; Pop-Location` 通过。
+- `uv run ruff check scripts/webui_smoke_test.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/webui_smoke_test.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，只有工作区 CRLF 提示。
+- 启动临时 WebUI `http://127.0.0.1:8765/dashboard` 后，用 headless Chromium CDP 验证真实渲染文本：存在“后端当前时间”、毫秒时间格式、上次同步、延迟、心理负荷、烦躁负荷、心理压力、创伤负荷、内在混乱、表层伪装和安全风险。
+
+### Notes:
+- “后端当前时间”是基于最后一次后端包的 server_time 与浏览器当前时间的 offset 推进；没有新包时它仍会像时钟一样走，但“延迟”会持续增长。
+- 心理/创伤/伪装等值现在不再只等触发阈值后才显示；为 0 表示后端当前没有给该会话写入对应负荷。
+- 这次没有恢复状态监控 WebSocket，状态页仍走 HTTP live API。
+- 临时验证服务和临时浏览器进程已停止，验证产生的临时 profile/截图已清理。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

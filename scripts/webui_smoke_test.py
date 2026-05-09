@@ -241,6 +241,12 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
         "connecting_label": 'connecting: "监听中"',
         "reconnecting_label": 'reconnecting: "续连中"',
         "local_clock": "requestAnimationFrame",
+        "backend_clock_ms": "后端当前时间",
+        "backend_clock_formatter": "formatClockMs",
+        "sync_age": "preciseDuration(syncAgeSeconds)",
+        "psych_load_panel": "心理负荷",
+        "trauma_raw_value": "创伤负荷",
+        "mask_raw_value": "表层伪装",
     }
     missing_dashboard = [
         name for name, fragment in required_dashboard_fragments.items() if fragment not in dashboard_source

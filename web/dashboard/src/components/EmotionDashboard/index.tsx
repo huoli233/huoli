@@ -550,6 +550,31 @@ function formatClock(timestamp: number): string {
   });
 }
 
+function formatClockMs(timestamp: number): string {
+  const raw = Number(timestamp || 0);
+  if (raw <= 0) {
+    return "-";
+  }
+  const date = new Date(raw * 1000);
+  const clock = date.toLocaleTimeString("zh-CN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  return `${clock}.${String(date.getMilliseconds()).padStart(3, "0")}`;
+}
+
+function preciseDuration(seconds: number | undefined | null): string {
+  const safe = Math.max(0, Number(seconds ?? 0));
+  if (safe < 10) {
+    return `${safe.toFixed(2)}秒`;
+  }
+  if (safe < 60) {
+    return `${safe.toFixed(1)}秒`;
+  }
+  return `${Math.floor(safe / 60)}分${Math.floor(safe % 60)}秒`;
+}
+
 function percent(value: number | undefined | null): string {
   const safe = Math.max(0, Math.min(1, Number(value ?? 0)));
   return `${(safe * 100).toFixed(1)}%`;
@@ -851,6 +876,9 @@ export function EmotionDashboard() {
     prediction?.probability_percent ?? Number(((prediction?.speak_probability ?? 0) * 100).toFixed(1));
   const usingCachedSnapshot = Boolean(packet?.stale_cache || overview?.stale_cache);
   const displayConnectionState = selectedChannel ? (usingCachedSnapshot ? "cached" : connectionState) : "waiting";
+  const serverNowSeconds = (clockNowMs + serverOffsetMs) / 1000;
+  const lastSyncSeconds = Number(packet?.server_time ?? packet?.updated_at ?? 0);
+  const syncAgeSeconds = lastSyncSeconds > 0 ? serverNowSeconds - lastSyncSeconds : 0;
   const liveEtaLabel = etaText(prediction, serverOffsetMs, clockNowMs);
   const liveSilenceSeconds = Math.max(
     0,
@@ -862,7 +890,7 @@ export function EmotionDashboard() {
     let frame = 0;
     let last = 0;
     const tick = (timestamp: number) => {
-      if (timestamp - last >= 100) {
+      if (timestamp - last >= 50) {
         last = timestamp;
         setClockNowMs(Date.now());
       }
@@ -1056,9 +1084,12 @@ export function EmotionDashboard() {
           <strong>{Number(predictionPercent).toFixed(1)}%</strong>
           <p>{prediction?.decision_label ?? "等待状态"} · {runtimeSyncLabel(prediction)} · {liveEtaLabel}</p>
         </article>
-        <article className="command-card">
-          <span>最后同步</span>
-          <strong>{packet?.updated_at ? formatClock(packet.updated_at) : "-"}</strong>
+        <article className="command-card is-clock">
+          <span>后端当前时间</span>
+          <strong>{selectedChannel ? formatClockMs(serverNowSeconds) : "-"}</strong>
+          <p>
+            上次同步 {lastSyncSeconds > 0 ? formatClockMs(lastSyncSeconds) : "-"} · 延迟 {preciseDuration(syncAgeSeconds)}
+          </p>
           <p>{connectionLabel(displayConnectionState)} · {selectedScopeLabel}状态{usingCachedSnapshot ? "来自最近快照" : "实时更新"}</p>
         </article>
       </section>
@@ -1272,6 +1303,46 @@ export function EmotionDashboard() {
           <p className="panel-note">
             {emotionDetail?.feeling_text ?? "当前没有明显情绪波动"} · 已沉默 {countText(liveSilenceSeconds, "秒")} · 未回应 {emotionDetail?.unanswered_count ?? 0} 次
           </p>
+        </section>
+
+        <section className="panel">
+          <div className="panel-header">
+            <h2>心理负荷</h2>
+            <span>{currentUserDetail?.user_id ? currentUserDetail.display_name : "等待焦点"}</span>
+          </div>
+          <div className="metric-wall">
+            <div className={`metric-tile tone-${metricTone(1 - Math.min(1, (currentUserDetail?.irritation_load ?? 0) / 100))}`}>
+              <span>烦躁负荷</span>
+              <strong>{fixed(currentUserDetail?.irritation_load, 2)}</strong>
+              <p>{currentUserDetail?.current_mood_hint ?? "无焦点对象"}</p>
+            </div>
+            <div className={`metric-tile tone-${metricTone(1 - Math.min(1, (currentUserDetail?.pressure_load ?? 0) / 100))}`}>
+              <span>心理压力</span>
+              <strong>{fixed(currentUserDetail?.pressure_load, 2)}</strong>
+              <p>关系侧压力原始值</p>
+            </div>
+            <div className={`metric-tile tone-${metricTone(1 - Math.min(1, (currentUserDetail?.trauma_load ?? 0) / 3))}`}>
+              <span>创伤负荷</span>
+              <strong>{fixed(currentUserDetail?.trauma_load, 3)}</strong>
+              <p>{(currentUserDetail?.trauma_load ?? 0) > 0 ? "已有创伤输入" : "未触发创伤样本"}</p>
+            </div>
+            <div className={`metric-tile tone-${metricTone(1 - Math.min(1, (currentUserDetail?.chaos_load ?? 0) / 6))}`}>
+              <span>内在混乱</span>
+              <strong>{fixed(currentUserDetail?.chaos_load, 2)}</strong>
+              <p>脑内扰动原始值</p>
+            </div>
+            <div className={`metric-tile tone-${metricTone(1 - Math.min(1, (currentUserDetail?.mask_load ?? 0) / 6))}`}>
+              <span>表层伪装</span>
+              <strong>{fixed(currentUserDetail?.mask_load, 2)}</strong>
+              <p>{(currentUserDetail?.mask_load ?? 0) > 0 ? "伪装层已参与" : "伪装层未抬升"}</p>
+            </div>
+            <div className={`metric-tile tone-${metricTone(1 - (safetyDetail?.safety_score ?? 0))}`}>
+              <span>安全风险</span>
+              <strong>{percent(safetyDetail?.safety_score)}</strong>
+              <p>{safetyDetail?.dominant_threat || safetyDetail?.safety_level || "安全"}</p>
+            </div>
+          </div>
+          <p className="panel-note">低于触发阈值的心理值也显示原始数值；为 0 表示后端当前没有给这个会话写入对应负荷。</p>
         </section>
 
         <section className="panel">

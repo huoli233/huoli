@@ -185,6 +185,14 @@ body {
   letter-spacing: -0.04em;
 }
 
+.command-card.is-clock strong {
+  font-family: "IBM Plex Mono", "Cascadia Mono", monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 30px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
 .command-card p,
 .panel-note {
   margin: 8px 0 0;
@@ -309,6 +317,7 @@ body {
   margin-top: 8px;
   font-size: 26px;
   letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
 }
 
 .metric-tile p {
