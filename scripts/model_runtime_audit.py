@@ -11,6 +11,14 @@ if str(ROOT) not in sys.path:
 TARGET_MODEL = "gemini-2.5-flash"
 BLOCKED_REPLYER_MODELS: set[str] = set()
 BLOCKED_RUNTIME_MODEL_TEXT = ("gemini-3", "gemini-2.5-flash-lite")
+LEGACY_COMPARE_PROVIDER_NAMES = {"AggAPI"}
+LEGACY_COMPARE_MODEL_NAMES = {
+    "gemma-3-1b",
+    "gemma-3-12b",
+    "gemma-3-27b",
+    "gemma-4-26b",
+    "gemma-4-31b",
+}
 TOOL_MODELS = ("qwen3-30b",)
 NON_TOOL_TASKS = (
     "utils",
@@ -69,6 +77,27 @@ def _assert_target_model_client_contract(rel: str, data: dict[str, Any]) -> None
             )
 
 
+def _assert_compare_template_not_legacy(rel: str, data: dict[str, Any]) -> dict[str, list[str]]:
+    provider_names = sorted(
+        str(provider.get("name", ""))
+        for provider in data.get("api_providers", [])
+        if isinstance(provider, dict) and provider.get("name")
+    )
+    model_names = sorted(
+        str(model.get("name", ""))
+        for model in data.get("models", [])
+        if isinstance(model, dict) and model.get("name")
+    )
+    legacy_providers = sorted(set(provider_names) & LEGACY_COMPARE_PROVIDER_NAMES)
+    legacy_models = sorted(set(model_names) & LEGACY_COMPARE_MODEL_NAMES)
+    assert not legacy_providers, f"{rel} 仍包含旧默认供应商: {legacy_providers}"
+    assert not legacy_models, f"{rel} 仍包含旧默认模型: {legacy_models}"
+    return {
+        "providers": provider_names,
+        "models": model_names,
+    }
+
+
 def check_runtime_model_config() -> dict[str, Any]:
     checked: dict[str, Any] = {}
     for rel in (
@@ -125,6 +154,10 @@ def check_runtime_model_config() -> dict[str, Any]:
     if compare_path.exists():
         _assert_no_blocked_runtime_model_text("template/compare/model_config_template.toml", compare_path)
         data = _load_toml(compare_path)
+        compare_identity = _assert_compare_template_not_legacy(
+            "template/compare/model_config_template.toml",
+            data,
+        )
         tasks = data.get("model_task_config", {})
         compare_routes: dict[str, list[str]] = {}
         for task_name, task_config in tasks.items():
@@ -143,6 +176,7 @@ def check_runtime_model_config() -> dict[str, Any]:
             blocked = sorted(set(replyer_models) & BLOCKED_REPLYER_MODELS)
             assert not blocked, f"template/compare/model_config_template.toml:replyer 不应再包含鉴权失败模型: {blocked}"
             compare_routes["replyer"] = replyer_models
+        compare_routes["providers"] = compare_identity["providers"]
         checked["template/compare/model_config_template.toml"] = compare_routes
     return checked
 

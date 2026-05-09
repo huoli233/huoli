@@ -1,233 +1,214 @@
 [inner]
-version = "1.12.0"
+version = "1.11.0"
 
 # 配置文件版本号迭代规则同bot_config.toml
 
-[[api_providers]] # 聚合API（唯一供应商）
-name = "AggAPI"
-base_url = "http://154.193.217.165:3000/v1"
-api_key = "your-aggapi-key-here"
+[[api_providers]] # API服务提供商（可以配置多个）
+name = "DeepSeek"                       # API服务商名称（可随意命名，在models的api-provider中需使用这个命名）
+base_url = "https://api.deepseek.com/v1" # API服务商的BaseURL
+api_key = "your-api-key-here"           # API密钥（请替换为实际的API密钥）
+client_type = "openai"                  # 请求客户端（可选，默认值为"openai"，使用gimini等Google系模型时请配置为"gemini"）
+max_retry = 2                           # 最大重试次数（单个模型API调用失败，最多重试的次数）
+timeout = 120                            # API请求超时时间（单位：秒）
+retry_interval = 10                     # 重试间隔时间（单位：秒）
+
+[[api_providers]] # 阿里 百炼 API服务商配置
+name = "BaiLian"
+base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+api_key = "your-bailian-key"
 client_type = "openai"
-max_retry = 5
-timeout = 180
-retry_interval = 15
+max_retry = 2
+timeout = 120
+retry_interval = 5
+
+[[api_providers]] # 特殊：Google的Gimini使用特殊API，与OpenAI格式不兼容，需要配置client为"gemini"
+name = "Google"
+base_url = "https://generativelanguage.googleapis.com/v1beta"
+api_key = "your-google-api-key-1"
+client_type = "gemini"
+max_retry = 2
+timeout = 120
+retry_interval = 10
+
+[[api_providers]] # SiliconFlow的API服务商配置
+name = "SiliconFlow"
+base_url = "https://api.siliconflow.cn/v1"
+api_key = "your-siliconflow-api-key"
+client_type = "openai"
+max_retry = 3
+timeout = 120
+retry_interval = 5
 
 
-# ===== 🟢 轻量级任务模型 - 快速响应 (< 2B) =====
-# 适用场景: 简单问答、文本分类、关键词提取、快速决策
-
-[[models]] # Gemma 3 1B - 极速思考/最轻量
-model_identifier = "gemma-3-1b-it"
-name = "gemma-3-1b"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-
-# ===== 🟡 中等级任务模型 - 平衡性能 (4B-27B) =====
-# 适用场景: 一般对话、内容总结、翻译、长文本理解、多轮对话
-
-[[models]] # Gemma 3 12B - 中等复杂度任务
-model_identifier = "gemma-3-12b-it"
-name = "gemma-3-12b"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-[[models]] # Gemma 3 27B - 长文本理解/多轮对话
-model_identifier = "gemma-3-27b-it"
-name = "gemma-3-27b"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-
-# ===== 🔴 复杂任务模型 - 高性能 (26B-31B+) =====
-# 适用场景: 复杂推理、代码生成、创意写作、高级推理、专业领域问答
-
-[[models]] # Gemma 4 26B - 高级推理/工具调用
-model_identifier = "gemma-4-26b-a4b-it"
-name = "gemma-4-26b"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-[[models]] # Gemma 4 31B - 最复杂任务/多步骤推理
-model_identifier = "gemma-4-31b-it"
-name = "gemma-4-31b"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-
-# ===== 💬 聊天主力模型 =====
-
-[[models]] # Gemini 2.5 Flash - 聊天主力/图像识别
-model_identifier = "gemini-2.5-flash"
-name = "gemini-2.5-flash"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-[[models]] # Grok 4.20 推理 - 深度推理/图像识别
-model_identifier = "grok-4.20-0309-reasoning"
-name = "grok-4.20-reasoning"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-[[models]] # Grok 4.20 非推理 - 聊天/通用/图像识别
-model_identifier = "grok-4.20-0309-non-reasoning"
-name = "grok-4.20-chat"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-[[models]] # GLM5 - 聊天/通用
-model_identifier = "z-ai/glm5"
-name = "glm5"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-[[models]] # GLM4.7 - 聊天/通用
-model_identifier = "z-ai/glm4.7"
-name = "glm4.7"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-
-# ===== 🧠 复杂任务模型（受速率限制，按需分配，也可参与聊天） =====
-
-[[models]] # DeepSeek V3.2 - 复杂任务/聊天
-model_identifier = "deepseek-ai/deepseek-v3.2"
-name = "deepseek-v3.2"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-[[models]] # Kimi K2.5 - 复杂任务/聊天
-model_identifier = "moonshotai/kimi-k2.5"
-name = "kimi-k2.5"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-[[models]] # Minimax M2.7 - 复杂任务/聊天
-model_identifier = "minimaxai/minimax-m2.7"
-name = "minimax-m2.7"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-[[models]] # Qwen3.5 122B - 复杂任务/聊天
-model_identifier = "qwen/qwen3.5-122b-a10b"
-name = "qwen3.5-122b"
-api_provider = "AggAPI"
-price_in = 0.0
-price_out = 0.0
-
-
-# ===== 📊 嵌入模型 =====
-# bge-m3: 向量维度1024, 支持中英双语, 最大输入8192 tokens
+[[models]] # 模型（可以配置多个）
+model_identifier = "deepseek-chat" # 模型标识符（API服务商提供的模型标识符）
+name = "deepseek-v3"               # 模型名称（可随意命名，在后面中需使用这个命名）
+api_provider = "DeepSeek"          # API服务商名称（对应在api_providers中配置的服务商名称）
+price_in = 2.0                     # 输入价格（用于API调用统计，单位：元/ M token）（可选，若无该字段，默认值为0）
+price_out = 8.0                    # 输出价格（用于API调用统计，单位：元/ M token）（可选，若无该字段，默认值为0）
+# force_stream_mode = true          # 强制流式输出模式（若模型不支持非流式输出，请取消该注释，启用强制流式输出，若无该字段，默认值为false）
 
 [[models]]
-model_identifier = "@cf/baai/bge-m3"
-name = "bge-m3"
-api_provider = "AggAPI"
+model_identifier = "gemini-2.5-flash"
+name = "gemini-2.5-flash"
+api_provider = "Google"
+client_type = "gemini"
 price_in = 0
 price_out = 0
-dimension = 1024
+supports_tool_calling = true
+suppress_reasoning = true
+[models.extra_params]
+enable_thinking = false
+include_thoughts = false
+thinking_budget = 0
+
+[[models]]
+model_identifier = "deepseek-ai/DeepSeek-V3.2-Exp"
+name = "siliconflow-deepseek-v3.2"
+api_provider = "SiliconFlow"
+price_in = 2.0
+price_out = 3.0
+# temperature = 0.5    # 可选：为该模型单独指定温度，会覆盖任务配置中的温度
+# max_tokens = 4096    # 可选：为该模型单独指定最大token数，会覆盖任务配置中的max_tokens
+[models.extra_params] # 可选的额外参数配置
+enable_thinking = false # 不启用思考
+
+[[models]]
+model_identifier = "deepseek-ai/DeepSeek-V4-Flash"
+name = "siliconflow-deepseek-v4-flash"
+api_provider = "SiliconFlow"
+price_in = 0
+price_out = 0
+[models.extra_params] # 可选的额外参数配置
+enable_thinking = false # 不启用思考
+
+
+[[models]]
+model_identifier = "deepseek-ai/DeepSeek-V3.2-Exp"
+name = "siliconflow-deepseek-v3.2-think"
+api_provider = "SiliconFlow"
+price_in = 2.0
+price_out = 3.0
+# temperature = 0.7    # 可选：为该模型单独指定温度，会覆盖任务配置中的温度
+# max_tokens = 4096    # 可选：为该模型单独指定最大token数，会覆盖任务配置中的max_tokens
+[models.extra_params] # 可选的额外参数配置
+enable_thinking = true # 启用思考
+
+
+[[models]]
+model_identifier = "zai-org/GLM-4.6"
+name = "siliconflow-glm-4.6"
+api_provider = "SiliconFlow"
+price_in = 3.5
+price_out = 14.0
+[models.extra_params] # 可选的额外参数配置
+enable_thinking = false # 不启用思考
+
+[[models]]
+model_identifier = "zai-org/GLM-4.6"
+name = "siliconflow-glm-4.6-think"
+api_provider = "SiliconFlow"
+price_in = 3.5
+price_out = 14.0
+[models.extra_params] # 可选的额外参数配置
+enable_thinking = true # 启用思考
+
+[[models]]
+model_identifier = "deepseek-ai/DeepSeek-R1"
+name = "siliconflow-deepseek-r1"
+api_provider = "SiliconFlow"
+price_in = 4.0
+price_out = 16.0
+
+
+[[models]]
+model_identifier = "Qwen/Qwen3-30B-A3B-Instruct-2507"
+name = "qwen3-30b"
+api_provider = "SiliconFlow"
+price_in = 0.7
+price_out = 2.8
+supports_tool_calling = true
+
+[[models]]
+model_identifier = "Qwen/Qwen3-VL-30B-A3B-Instruct"
+name = "qwen3-vl-30"
+api_provider = "SiliconFlow"
+price_in = 4.13
+price_out = 4.13
+
+[[models]]
+model_identifier = "FunAudioLLM/SenseVoiceSmall"
+name = "sensevoice-small"
+api_provider = "SiliconFlow"
+price_in = 0
+price_out = 0
+
+[[models]]
+model_identifier = "BAAI/bge-m3"
+name = "bge-m3"
+api_provider = "SiliconFlow"
+price_in = 0
+price_out = 0
 
 
 
-# ========== 🟢 轻量级任务配置 (< 2B) ==========
-# 适用场景: 简单问答、文本分类、关键词提取、快速决策、表情包、取名、关系、情绪变化
+[model_task_config.utils] # 活力组件使用的基础模型，例如表情包模块、取名模块、关系模块、情绪变化等
+model_list = ["gemini-2.5-flash"] # 内心独白/通用组件使用 Gemini，避免 SiliconFlow 独白超时
+temperature = 0.2                        # 模型温度，新V3建议0.1-0.3
+max_tokens = 4096                         # 最大输出token数
+slow_threshold = 15.0                     # 慢请求阈值（秒），模型等待回复时间超过此值会输出警告日志
+selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
-[model_task_config.utils]
-model_list = ["gemma-3-1b"]  # 1B模型，极速响应
-temperature = 0.2
-max_tokens = 4096
-slow_threshold = 10.0
-selection_strategy = "random"
-
-[model_task_config.planner]  # 决策：负责决定何时回复
-model_list = ["gemma-3-1b"]  # 轻量级决策
-temperature = 0.3
-max_tokens = 800
-slow_threshold = 8.0
-selection_strategy = "random"
-
-[model_task_config.voice]  # 语音识别
-model_list = ["gemma-3-1b"]
-slow_threshold = 10.0
-selection_strategy = "random"
-
-
-# ========== 🟡 中等级任务配置 (4B-27B) ==========
-# 适用场景: 一般对话、内容总结、翻译、长文本理解、多轮对话、工具调用
-
-[model_task_config.tool_use]  # 功能模型，需要使用支持工具调用的模型
-model_list = ["gemma-3-12b", "gemma-3-27b"]  # 12B和27B平衡性能
+[model_task_config.tool_use] #功能模型，需要使用支持工具调用的模型，请使用较快的小模型（调用量较大）
+model_list = ["qwen3-30b"]
 temperature = 0.7
 max_tokens = 1024
-slow_threshold = 15.0
-selection_strategy = "random"
+slow_threshold = 10.0
+selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
-[model_task_config.vlm]  # 图像识别模型 - 按指定只使用 Gemini 2.5 Flash
+[model_task_config.replyer] # 首要回复模型，还用于表达方式学习
 model_list = ["gemini-2.5-flash"]
-max_tokens = 1024
-slow_threshold = 20.0
-selection_strategy = "random"
-
-[model_task_config.lightweight]  # 轻量级但比1B强一些的任务
-model_list = ["gemma-3-12b", "gemma-3-27b"]
-temperature = 0.3
-max_tokens = 1024
-slow_threshold = 20.0
-selection_strategy = "random"
-
-
-# ========== 🔴 复杂任务配置 (26B-31B+) ==========
-# 适用场景: 复杂推理、代码生成、创意写作、高级推理、专业领域问答、实体提取、RDF构建
-
-[model_task_config.lpmm_entity_extract]  # 实体提取模型
-model_list = ["gemma-4-26b", "gemma-4-31b", "gemma-3-27b"]  # 优先使用大模型
-temperature = 0.2
-max_tokens = 800
-slow_threshold = 25.0
-selection_strategy = "random"
-
-[model_task_config.lpmm_rdf_build]  # RDF构建模型
-model_list = ["gemma-4-26b", "gemma-4-31b", "gemma-3-27b"]  # 优先使用大模型
-temperature = 0.2
-max_tokens = 800
-slow_threshold = 25.0
-selection_strategy = "random"
-
-
-# ========== 💬 聊天回复任务配置 ==========
-# 混合使用所有可用模型
-
-[model_task_config.replyer]  # 首要回复模型，还用于表达方式学习
-model_list = ["gemini-2.5-flash"]
-temperature = 0.3
+temperature = 0.3                        # 模型温度，新V3建议0.1-0.3
 max_tokens = 2048
-slow_threshold = 30.0
-selection_strategy = "random"
+slow_threshold = 25.0
+selection_strategy = "random"            # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
-[model_task_config.focus_chat]  # 专注聊天模型配置
+[model_task_config.planner] # 决策：负责决定活力什么时候回复的模型
 model_list = ["gemini-2.5-flash"]
-temperature = 0.7
-max_tokens = 1024
-slow_threshold = 60.0
-selection_strategy = "random"
+temperature = 0.3
+max_tokens = 800
+slow_threshold = 12.0
+selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
+[model_task_config.vlm] # 图像识别模型
+model_list = ["gemini-2.5-flash"]
+max_tokens = 256
+slow_threshold = 15.0
+selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
-# ========== 📊 嵌入模型配置 ==========
+[model_task_config.voice] # 语音识别模型
+model_list = ["sensevoice-small"]
+slow_threshold = 12.0
+selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
 
+# 嵌入模型
 [model_task_config.embedding]
 model_list = ["bge-m3"]
-slow_threshold = 10.0
-selection_strategy = "random"
+slow_threshold = 5.0
+selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
+
+# ------------LPMM知识库模型------------
+
+[model_task_config.lpmm_entity_extract] # 实体提取模型
+model_list = ["gemini-2.5-flash"]
+temperature = 0.2
+max_tokens = 800
+slow_threshold = 20.0
+selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）
+
+[model_task_config.lpmm_rdf_build] # RDF构建模型
+model_list = ["gemini-2.5-flash"]
+temperature = 0.2
+max_tokens = 800
+slow_threshold = 20.0
+selection_strategy = "random"           # 模型选择策略：balance（负载均衡）或 random（随机选择）

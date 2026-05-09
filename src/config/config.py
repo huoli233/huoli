@@ -7,7 +7,7 @@ from tomlkit import TOMLDocument
 from tomlkit.items import Table, KeyType
 from dataclasses import field, dataclass
 from rich.traceback import install
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from src.common.logger import get_logger
 from src.common.toml_utils import format_toml_string
@@ -58,6 +58,15 @@ TEMPLATE_DIR = os.path.join(PROJECT_ROOT, "template")
 # 对该字段的更新，请严格参照语义化版本规范：https://semver.org/lang/zh-CN/
 MMC_VERSION = "0.13.0-sakana.1"
 _SYNC_ON_IMPORT_ENV = "HUOLI_SYNC_CONFIG_ON_IMPORT"
+_SENSITIVE_CONFIG_KEY_PARTS = ("api_key", "token", "secret", "password", "authorization")
+_LEGACY_MODEL_CONFIG_PROVIDER_NAMES = {"AggAPI"}
+_LEGACY_MODEL_CONFIG_MODEL_NAMES = {
+    "gemma-3-1b",
+    "gemma-3-12b",
+    "gemma-3-27b",
+    "gemma-4-26b",
+    "gemma-4-31b",
+}
 
 
 def _legacy_message_section_name() -> str:
@@ -120,6 +129,134 @@ def get_value_by_path(d, path):
     return d
 
 
+def _plain_config_value(value: Any) -> Any:
+    """转换为普通 Python 值，便于比较配置内容而不受 tomlkit trivia 影响。"""
+    if hasattr(value, "unwrap"):
+        try:
+            return value.unwrap()
+        except Exception:
+            pass
+    if isinstance(value, dict) or hasattr(value, "items"):
+        try:
+            return {str(k): _plain_config_value(v) for k, v in value.items()}
+        except Exception:
+            return value
+    if isinstance(value, list) or isinstance(value, tuple):
+        return [_plain_config_value(item) for item in value]
+    return value
+
+
+def _is_sensitive_config_path(path: List[str] | tuple[str, ...]) -> bool:
+    normalized = ".".join(str(part).lower() for part in path)
+    return any(part in normalized for part in _SENSITIVE_CONFIG_KEY_PARTS)
+
+
+def _safe_config_log_value(value: Any, path: List[str] | tuple[str, ...] | None = None) -> Any:
+    """日志输出配置值时隐藏密钥，避免启动日志泄漏真实或模板密钥。"""
+    path = list(path or [])
+    if _is_sensitive_config_path(path):
+        return "<已隐藏>"
+    plain = _plain_config_value(value)
+    if isinstance(plain, dict):
+        return {k: _safe_config_log_value(v, path + [str(k)]) for k, v in plain.items()}
+    if isinstance(plain, list):
+        return [_safe_config_log_value(item, path) for item in plain]
+    return plain
+
+
+def _model_config_compare_has_legacy_defaults(compare_config: TOMLDocument | dict, new_config: TOMLDocument | dict) -> bool:
+    """识别仍停留在 AggAPI/Gemma 旧默认模型的 compare 基线。"""
+    compare_plain = _plain_config_value(compare_config) or {}
+    new_plain = _plain_config_value(new_config) or {}
+    compare_providers = {
+        str(item.get("name", ""))
+        for item in compare_plain.get("api_providers", [])
+        if isinstance(item, dict)
+    }
+    new_providers = {
+        str(item.get("name", ""))
+        for item in new_plain.get("api_providers", [])
+        if isinstance(item, dict)
+    }
+    compare_models = {
+        str(item.get("name", ""))
+        for item in compare_plain.get("models", [])
+        if isinstance(item, dict)
+    }
+    new_models = {
+        str(item.get("name", ""))
+        for item in new_plain.get("models", [])
+        if isinstance(item, dict)
+    }
+    legacy_provider_left = bool((compare_providers - new_providers) & _LEGACY_MODEL_CONFIG_PROVIDER_NAMES)
+    legacy_model_left = bool((compare_models - new_models) & _LEGACY_MODEL_CONFIG_MODEL_NAMES)
+    return legacy_provider_left or legacy_model_left
+
+
+def _remove_legacy_default_array_items(
+    config_doc: TOMLDocument | dict,
+    compare_config: TOMLDocument | dict,
+    new_config: TOMLDocument | dict,
+    key: str,
+    identity_key: str = "name",
+) -> int:
+    """只移除仍等于旧模板默认值的数组项，保留用户改过的 provider/model。"""
+    target_items = config_doc.get(key)
+    if not isinstance(target_items, list):
+        return 0
+
+    compare_items = [
+        item
+        for item in _plain_config_value(compare_config.get(key, []))
+        if isinstance(item, dict) and item.get(identity_key)
+    ]
+    new_names = {
+        str(item.get(identity_key, ""))
+        for item in _plain_config_value(new_config.get(key, []))
+        if isinstance(item, dict) and item.get(identity_key)
+    }
+    stale_defaults = {
+        str(item.get(identity_key, "")): item
+        for item in compare_items
+        if str(item.get(identity_key, "")) not in new_names
+    }
+    if not stale_defaults:
+        return 0
+
+    removed = 0
+    for index in range(len(target_items) - 1, -1, -1):
+        item_plain = _plain_config_value(target_items[index])
+        if not isinstance(item_plain, dict):
+            continue
+        item_name = str(item_plain.get(identity_key, ""))
+        if item_name in stale_defaults and item_plain == stale_defaults[item_name]:
+            del target_items[index]
+            removed += 1
+    return removed
+
+
+def _apply_default_value_changes(
+    old_config: TOMLDocument | dict,
+    changes: List[tuple[List[str], Any, Any]],
+    config_name: str,
+    *,
+    log_changes: bool = True,
+) -> bool:
+    config_updated = False
+    for path, old_default, new_default in changes:
+        old_value = get_value_by_path(old_config, path)
+        if old_value == old_default:
+            set_value_by_path(old_config, path, new_default)
+            if log_changes:
+                logger.info(
+                    f"已自动将{config_name}配置 {'.'.join(path)} 的值从旧默认值 "
+                    f"{_safe_config_log_value(old_default, path)} 更新为新默认值 "
+                    f"{_safe_config_log_value(new_default, path)}"
+                )
+            config_updated = True
+    return config_updated
+
+
 def set_value_by_path(d, path, value):
     """设置嵌套字典中指定路径的值"""
     for k in path[:-1]:
@@ -155,7 +292,9 @@ def compare_default_values(new, old, path=None, logs=None, changes=None):
                 )
             elif new[key] != old[key]:
                 logs.append(
-                    f"默认值变化: {'.'.join(path + [str(key)])}  旧默认值: {old[key]}  新默认值: {new[key]}"
+                    f"默认值变化: {'.'.join(path + [str(key)])}  "
+                    f"旧默认值: {_safe_config_log_value(old[key], path + [str(key)])}  "
+                    f"新默认值: {_safe_config_log_value(new[key], path + [str(key)])}"
                 )
                 changes.append((path + [str(key)], old[key], new[key]))
     return logs, changes
@@ -259,29 +398,59 @@ def _update_config_generic(config_name: str, template_name: str):
         # 读取旧配置
         with open(old_config_path, "r", encoding="utf-8") as f:
             old_config = tomlkit.load(f)
+
+        skip_default_compare_log = False
+        if config_name == "model_config" and _model_config_compare_has_legacy_defaults(compare_config, new_config):
+            _logs, legacy_changes = compare_default_values(new_config, compare_config)
+            config_updated = _apply_default_value_changes(
+                old_config,
+                legacy_changes,
+                config_name,
+                log_changes=False,
+            )
+            removed_defaults = 0
+            removed_defaults += _remove_legacy_default_array_items(
+                old_config,
+                compare_config,
+                new_config,
+                "api_providers",
+            )
+            removed_defaults += _remove_legacy_default_array_items(
+                old_config,
+                compare_config,
+                new_config,
+                "models",
+            )
+            config_updated = config_updated or removed_defaults > 0
+            if config_updated:
+                with open(old_config_path, "w", encoding="utf-8") as f:
+                    f.write(format_toml_string(old_config))
+                logger.info(
+                    f"已清理{config_name}中的旧模板默认项: {removed_defaults} 项；"
+                    "用户改过的 provider/model 已保留"
+                )
+            shutil.copy2(template_path, compare_path)
+            compare_config = new_config
+            skip_default_compare_log = True
+            logger.info(
+                f"检测到{config_name}模板对比基线仍是 AggAPI/Gemma 旧默认配置，"
+                "已同步为当前模板，后续启动不再重复输出旧默认值差异"
+            )
+
         logs, changes = compare_default_values(new_config, compare_config)
-        if logs:
+        if logs and not skip_default_compare_log:
             logger.info(f"检测到{config_name}模板默认值变动如下：")
             for log in logs:
                 logger.info(log)
             # 检查旧配置是否等于旧默认值，如果是则更新为新默认值
-            config_updated = False
-            for path, old_default, new_default in changes:
-                old_value = get_value_by_path(old_config, path)
-                if old_value == old_default:
-                    set_value_by_path(old_config, path, new_default)
-                    logger.info(
-                        f"已自动将{config_name}配置 {
-                            '.'.join(path)} 的值从旧默认值 {old_default} 更新为新默认值 {new_default}"
-                    )
-                    config_updated = True
+            config_updated = _apply_default_value_changes(old_config, changes, config_name)
 
             # 如果配置有更新，立即保存到文件
             if config_updated:
                 with open(old_config_path, "w", encoding="utf-8") as f:
                     f.write(format_toml_string(old_config))
                 logger.info(f"已保存更新后的{config_name}配置文件")
-        else:
+        elif not skip_default_compare_log:
             logger.info(f"未检测到{config_name}模板默认值变动")
 
     # 检查 compare 下没有模板，或新模板版本更高，则复制

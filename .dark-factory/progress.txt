@@ -1530,3 +1530,24 @@
 - 变更需要重启主程序后生效。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T07:44:30+08:00 - Task: 修复 model_config 旧默认模板重复提示
+
+### What was done:
+- 定位启动日志中 `AggAPI/gemma-*` 旧默认值反复出现的原因：`template/compare/model_config_template.toml` 仍停留在旧默认模板，且版本号比当前模板还高，导致普通版本比较不会替换 compare 基线。
+- 在配置迁移逻辑中加入旧默认 compare 基线识别：发现 compare 仍是 AggAPI/Gemma 旧默认时，先按默认值迁移当前配置，再把 compare 同步到当前模板。
+- 对 `api_key/token/secret/password/authorization` 等敏感配置日志做脱敏，后续默认值变化日志不再直接打印密钥。
+- 清理逻辑只删除“完全等于旧模板默认值”的 provider/model；用户改过的 GeminiProxy、LMStudio、SiliconFlow 等配置不会被误删。
+- 更新模型运行审计脚本，锁定 `template/compare/model_config_template.toml` 不得再出现旧默认供应商 `AggAPI` 和旧默认模型名。
+
+### Testing:
+- `uv run ruff check src/config/config.py` 通过。
+- `$env:HUOLI_SYNC_CONFIG_ON_IMPORT='1'; uv run python -c "from src.config.config import update_model_config; update_model_config()"` 通过；首次提示旧 compare 基线已同步，后续提示未检测到模板默认值变动。
+- 待本轮提交前继续执行 `uv run ruff check src/config/config.py scripts/model_runtime_audit.py`、`uv run python scripts/model_runtime_audit.py`、`uv run python -m compileall -q src scripts`、`git diff --check`。
+
+### Notes:
+- 这轮只处理配置迁移噪声和旧默认 compare 基线，不改用户真实 `config/model_config.toml` 中的自定义模型和 key。
+- 用户贴出的日志中包含真实 API key，建议后续手动轮换这些 key。
+- 数据库建表日志是新库首次启动的正常现象，不属于本轮修复范围。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
