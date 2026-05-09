@@ -1226,3 +1226,26 @@
 - 变更需要重启主程序/WebUI 后生效；旧进程不会自动加载新缓存逻辑。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T02:15:56+08:00 - Task: 澄清消息适配器连接并修正夜间短句语气
+
+### What was done:
+- 确认日志里的 `[MessageServer] WebSocket 连接建立/断开` 来自平台消息适配器通道，不是已移除的状态监控 `/ws/state-monitor`。
+- 将消息适配器连接/断开/清理日志从 info 降为 debug，并改名为“消息适配器通道”，避免运行日志继续误判为状态页 WebSocket。
+- 为夜间半醒/高熬夜压力状态增加短句困意护栏：当模型生成“啥玩意儿？”“又咋了？”这类精神感短句时，轻量补上“脑子慢/没反应过来/半醒”等状态，不恢复固定“困死了，xxx”模板。
+- 为低信息重复独白增加攻击性词清理：模型写出“发疯/有病”等脑内标签时，收束为“又在重复这句，先看懂再说”。
+- 更新内心独白提示词，明确复读烦躁可以表达，但不要写“发疯/有病”这类攻击性标签。
+- 更新 `scripts/heartflow_state_regression.py`，锁定消息适配器日志命名、夜间短句困意护栏和低信息独白清理契约。
+
+### Testing:
+- `uv run ruff check src/chat/replyer/group_generator.py src/chat/heart_flow/inner_voice.py src/chat/prompts/catalog.py src/common/message/message_server.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，只有工作区 CRLF 提示。
+
+### Notes:
+- `src/common/message/message_server.py` 仍保留实际适配器连接能力；这是 QQ/外部平台消息进入后端的通道，不属于状态监控实时同步通道。
+- 已移除的状态监控 WebSocket 仍由回归断言覆盖：`src/webui/routers/websocket/state_monitor.py` 不存在，状态页前端不再创建 `new WebSocket`。
+- 变更需要重启主程序/WebUI 后生效；旧进程不会自动加载新日志和夜间回复护栏。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

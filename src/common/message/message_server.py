@@ -4,7 +4,7 @@ import json
 import time
 import uuid
 from typing import Any, Callable, Dict, List, Optional, Set
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from starlette.websockets import WebSocketState
@@ -96,7 +96,7 @@ class MessageServer:
         )
         async with self._get_connection_lock():
             self._connections[connection_id] = conn_info
-        self.logger.info(f"WebSocket 连接建立: {connection_id} from {remote_addr}")
+        self.logger.debug(f"消息适配器通道已连接: {connection_id} from {remote_addr}")
         try:
             while True:
                 try:
@@ -111,13 +111,13 @@ class MessageServer:
                     continue
                 await self._dispatch_message(message, conn_info)
         except WebSocketDisconnect:
-            self.logger.info(f"WebSocket 断开: {connection_id}")
+            self.logger.debug(f"消息适配器通道已断开: {connection_id}")
         except Exception as e:
-            self.logger.error(f"WebSocket 错误: {connection_id} - {e}")
+            self.logger.error(f"消息适配器通道错误: {connection_id} - {e}")
         finally:
             async with self._get_connection_lock():
                 self._connections.pop(connection_id, None)
-            self.logger.info(f"连接已清理: {connection_id}")
+            self.logger.debug(f"消息适配器通道已清理: {connection_id}")
 
     async def _dispatch_message(self, message: Dict[str, Any], conn_info: ConnectionInfo) -> None:
         if not message:

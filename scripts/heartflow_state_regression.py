@@ -175,11 +175,17 @@ def check_source_contract() -> Dict[str, Any]:
     prediction_source = (ROOT / "src/chat/heart_flow/speak_prediction_engine.py").read_text(
         encoding="utf-8"
     )
+    message_server_source = (ROOT / "src/common/message/message_server.py").read_text(
+        encoding="utf-8"
+    )
     missing = [stage for stage in REQUIRED_EARLY_STAGES if stage not in loop_source]
     assert not missing, f"缺少 early gate stage: {missing}"
     assert "_store_gate_runtime(" in loop_source, "主循环未调用 gate_runtime 写入层"
     assert "pre_execution" in prediction_source, "预测引擎未区分前置裁定"
     assert "execution_has_verdict" in prediction_source, "预测引擎未显式区分 execution_runtime"
+    assert "WebSocket 连接建立" not in message_server_source
+    assert "WebSocket 断开" not in message_server_source
+    assert "消息适配器通道已连接" in message_server_source
     return {"early_stages": len(REQUIRED_EARLY_STAGES)}
 
 
@@ -1182,7 +1188,14 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
         extra_info=ensured,
         reply_message=type("ReplyMessageProbe", (), {"processed_plain_text": "我的刀盾", "display_message": ""})(),
     )
-    assert sleepy_short == "又咋了？"
+    assert sleepy_short != "又咋了？"
+    assert any(marker in sleepy_short for marker in ("慢", "半醒", "脑子", "反应", "困"))
+    sleepy_confused = DefaultReplyer._apply_sleepy_fast_reply_guard(
+        content="啥玩意儿？",
+        extra_info=ensured,
+        reply_message=type("ReplyMessageProbe", (), {"processed_plain_text": "曹氏你", "display_message": ""})(),
+    )
+    assert "脑子" in sleepy_confused or "反应" in sleepy_confused
     remove_night_cycle(channel_id)
     source = (ROOT / "src/chat/heart_flow/enhanced_modules/scene_planner_bridge_mixin.py").read_text(
         encoding="utf-8"
@@ -1198,6 +1211,28 @@ def check_night_soul_prompt_contract() -> Dict[str, Any]:
         "fast_reply_sleep_denial_guard": True,
         "sleepy_short_reply_guard": True,
     }
+
+
+def check_inner_voice_low_info_tone_contract() -> Dict[str, Any]:
+    from src.chat.heart_flow.inner_voice import BoundaryContext, SelfDialogueEngine
+    from src.common.data_models.heartflow_models import VoiceVerdict
+
+    engine = SelfDialogueEngine("regression-low-info-tone")
+    ctx = BoundaryContext(raw_text="刀盾刀盾", text_length=4, mentioned_me=False)
+    verdict = VoiceVerdict(
+        thinking="又发疯。",
+        reply_desire_level=3,
+        should_reply=False,
+        current_mood="无聊",
+        thinking_source="llm_json",
+    )
+    fixed = engine._stabilize_low_info_reflection(verdict, ctx)
+    assert "发疯" not in fixed.thinking
+    assert any(marker in fixed.thinking for marker in ("重复", "看懂", "没说清楚"))
+    assert "low_info_guard" in fixed.thinking_source
+    prompt_source = (ROOT / "src/chat/prompts/catalog.py").read_text(encoding="utf-8")
+    assert "不要写\"发疯\"" in prompt_source
+    return {"hostile_low_info_thought_softened": True}
 
 
 def check_webui_internal_chat_disabled_contract() -> Dict[str, Any]:
@@ -1849,6 +1884,7 @@ def main() -> None:
         "force_guard": check_force_guard_contract(),
         "night_cycle_persistence": check_night_cycle_persistence_contract(),
         "night_soul_prompt": check_night_soul_prompt_contract(),
+        "inner_voice_low_info_tone": check_inner_voice_low_info_tone_contract(),
         "webui_internal_chat_disabled": check_webui_internal_chat_disabled_contract(),
         "huoli_naming": check_huoli_naming_contract(),
         "admin_identity": check_admin_identity_not_relationship_contract(),

@@ -139,6 +139,34 @@ def _target_asks_sleep(reply_message: Optional[DatabaseMessages]) -> bool:
     return any(marker in text for marker in ("困吗", "不困", "睡不睡", "还醒", "熬夜", "没睡"))
 
 
+def _night_sleepy_short_reply_variant(text: str) -> str:
+    payload = str(text or "").strip()
+    core = payload.rstrip("。！？!?，,；;… ")
+    if not core:
+        return "脑子有点慢，没看懂。"
+    if any(marker in core for marker in ("啥", "什么", "咋", "怎么", "哪", "谁")):
+        tail = "脑子有点慢"
+    elif any(marker in core for marker in ("又", "还", "继续")):
+        tail = "我有点没反应过来"
+    elif len(re.sub(r"[^\w\u4e00-\u9fff]", "", core)) <= 4:
+        tail = "我还半醒着"
+    else:
+        tail = "反应有点慢"
+    return f"{core}...{tail}"
+
+
+def _should_add_sleepy_tone_to_short_reply(text: str) -> bool:
+    payload = str(text or "").strip()
+    if not payload or _contains_sleepy_tone(payload):
+        return False
+    compact = re.sub(r"[\s。！？!?，,；;…]", "", payload)
+    if not compact:
+        return False
+    if len(compact) > 14:
+        return False
+    return True
+
+
 def _is_valid_unknown_word_candidate(word: str) -> bool:
     text = str(word or "").strip()
     if not text:
@@ -3626,7 +3654,7 @@ class DefaultReplyer:
         extra_info: str,
         reply_message: Optional[DatabaseMessages],
     ) -> str:
-        """夜间困倦状态下只拦截明确违背状态的否认，不机械改写普通短句。"""
+        """夜间困倦状态下修正明显违背状态的短句，不套固定前缀。"""
         text = str(content or "").strip()
         if not text:
             return text
@@ -3638,6 +3666,8 @@ class DefaultReplyer:
             or ""
         )
         if not _contains_sleep_denial(text):
+            if _night_state_is_sleepy(extra_info) and _should_add_sleepy_tone_to_short_reply(text):
+                return _night_sleepy_short_reply_variant(text)
             return text
         if any(marker in raw_target for marker in ("困吗", "不困", "睡不睡", "还醒", "熬夜", "没睡")):
             return "困，脑子还没完全醒。"

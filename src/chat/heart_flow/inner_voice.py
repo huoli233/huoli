@@ -822,6 +822,16 @@ class SelfDialogueEngine:
             return verdict
 
         current = str(verdict.thinking or "").strip()
+        hostile_markers = ("发疯", "有病", "神经病", "脑残", "傻逼", "sb")
+        if current and any(marker in current.lower() for marker in hostile_markers):
+            verdict.thinking = "又在重复这句，先看懂再说。"
+            verdict.thinking_source = f"{verdict.thinking_source or 'unknown'}+low_info_guard"
+            if not verdict.current_mood or verdict.current_mood in ("疑惑", "困惑"):
+                verdict.current_mood = "无聊"
+            if verdict.reply_desire_level > 4 and not ctx.mentioned_me:
+                verdict.reply_desire_level = max(1, verdict.reply_desire_level - 2)
+                verdict.should_reply = verdict.reply_desire_level >= 5
+            return verdict
         looks_like_guess = (
             len(current) > 6
             and verdict.reply_desire_level >= 5
