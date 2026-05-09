@@ -1318,3 +1318,26 @@
 - 临时验证服务和临时浏览器进程已停止，验证产生的临时 profile/截图已清理。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T04:20:32+08:00 - Task: 状态页后端时钟改为逐帧刷新
+
+### What was done:
+- 移除状态页后端当前时间的 50ms 节流逻辑。
+- 保留 `requestAnimationFrame` 驱动，让后端时间显示按浏览器动画帧逐帧刷新，而不是固定 50ms 间隔刷新。
+- 更新 WebUI smoke 与心流状态回归断言，防止后端时钟重新引入 `timestamp - last` 这类节流逻辑。
+- 重新构建 dashboard dist 静态产物。
+
+### Testing:
+- `Push-Location web\dashboard; npm run build; Pop-Location` 通过。
+- `uv run ruff check scripts/webui_smoke_test.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python scripts/webui_smoke_test.py` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，只有工作区 CRLF 提示。
+
+### Notes:
+- 这里没有使用 1ms 定时器；浏览器页面真正能展示的是屏幕帧，`requestAnimationFrame` 是最贴近可见实时性的方式。
+- 状态页后端当前时间现在每帧用 `Date.now()` 推进；后端状态值本身仍只在后端产生新状态包时变化。
+- 这次没有恢复状态监控 WebSocket，状态页仍走 HTTP live API。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

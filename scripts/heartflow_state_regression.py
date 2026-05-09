@@ -1722,6 +1722,7 @@ def check_webui_contract() -> Dict[str, Any]:
     assert "低于触发阈值的心理值也显示原始数值" in dashboard_source
     assert "Number(predictionPercent).toFixed(1)" in dashboard_source
     assert "requestAnimationFrame" in dashboard_source
+    assert "timestamp - last" not in dashboard_source
     assert "state_delta" not in dashboard_source
     assert "state_heartbeat" not in dashboard_source
     assert 'type: "refresh"' not in dashboard_source

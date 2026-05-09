@@ -252,6 +252,7 @@ def check_state_monitor_activation_contract() -> dict[str, Any]:
         name for name, fragment in required_dashboard_fragments.items() if fragment not in dashboard_source
     ]
     assert not missing_dashboard, f"状态监控前端常驻连接契约缺失: {missing_dashboard}"
+    assert "timestamp - last" not in dashboard_source, "后端时钟不应再使用 50ms 节流，应按 animation frame 推进"
     assert "new " + "WebSocket" not in dashboard_source, "状态页不应再创建 WebSocket"
     assert "Web" + "Socket" not in dashboard_source, "状态页源码不应残留 WebSocket 状态监控逻辑"
     assert REMOVED_STATE_MONITOR_WS_PATH not in dashboard_source, "状态页不应再连接状态监控 WebSocket"

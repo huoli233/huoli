@@ -888,12 +888,8 @@ export function EmotionDashboard() {
 
   useEffect(() => {
     let frame = 0;
-    let last = 0;
-    const tick = (timestamp: number) => {
-      if (timestamp - last >= 50) {
-        last = timestamp;
-        setClockNowMs(Date.now());
-      }
+    const tick = () => {
+      setClockNowMs(Date.now());
       frame = window.requestAnimationFrame(tick);
     };
     frame = window.requestAnimationFrame(tick);
