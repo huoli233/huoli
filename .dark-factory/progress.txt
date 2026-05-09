@@ -743,3 +743,23 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 这次保留 WebSocket 长连接作为实时事件通道；彻底移除的是固定间隔 heartbeat、前端主动 refresh 和 requires_refresh 回拉，不是删除实时监控 API 本身。
 - 工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt`、多个 `docs/*.md`、`.trae/`。
+
+## 2026-05-09T09:33:21+08:00 - Task: 修复强制回复误走直接快回模板兜底
+
+### What was done:
+- 排查 09:11 日志中 `direct_fast_reply_generation_timeout` 导致 `听着呢，说事。` 本地模板兜底的问题。
+- 将 `force_bypass` / 管理员强制回复 与 `direct_fast_reply_generation` 分流：管理员强制、点名强制、维度 force_reply 现在走完整 replyer 生成预算，不再复用 8 秒直接快回预算。
+- 保留显式 `_direct_fast_reply_generation` 的 8 秒短兜底路径，避免真正快回失去保护。
+- 更新 `scripts/heartflow_state_regression.py`，覆盖管理员强制不走快回、普通强制不走快回、显式快回才走短超时三种情况。
+
+### Testing:
+- `uv run ruff check src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `uv run python -c "import scripts.heartflow_state_regression as r; import json; print(json.dumps(r.check_force_reply_generation_fallback_contract(), ensure_ascii=False, indent=2))"` 通过，返回 `force_reply_full_generation_path=true`。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `uv run python scripts/heartflow_state_regression.py` 仍失败在既有 `check_night_status_label_contract` 的 `last_evaluated_at > 0` 断言，和本轮强制回复生成路径无关。
+- `git diff --check -- src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py scripts/heartflow_state_regression.py` 通过。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 本轮不是删除类改动，没有新增删除分支。
+- 当前分支为 `delete/状态页假实时轮询移除`，本轮只精确暂存心流回复生成与回归脚本；工作区仍存在非本轮改动/删除。

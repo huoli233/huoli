@@ -53,6 +53,14 @@ if TYPE_CHECKING:
     from src.chat.proactive.proactive_decider import ProactiveDecision
 
 class ProactiveReactiveFlowMixin:
+    def _should_use_direct_fast_reply_generation(self, *, force_bypass: bool) -> bool:
+        """只有显式快回任务才使用短超时和本地模板兜底。"""
+        if bool(getattr(self, "_is_admin_forced", False)):
+            return False
+        if force_bypass:
+            return False
+        return bool(getattr(self, "_direct_fast_reply_generation", False))
+
     @staticmethod
     def _pick_runtime_text(key: str, seed_text: str) -> str:
         candidates = _rt_str_list(key)
@@ -250,11 +258,15 @@ class ProactiveReactiveFlowMixin:
                 logger.info(f"{self.log_prefix} 🧯 自省闸门拦截 voice 回复: {restraint.get('reason', 'skip')}")
                 return False
             self._mark_message_content_processing(target_message)
-            force_generation_fallback = bool(force_bypass or getattr(self, "_is_admin_forced", False))
+            forced_reply_generation = bool(force_bypass or getattr(self, "_is_admin_forced", False))
+            direct_fast_reply_generation = self._should_use_direct_fast_reply_generation(
+                force_bypass=force_bypass,
+            )
+            allow_local_generation_fallback = bool(forced_reply_generation or direct_fast_reply_generation)
 
             # 获取目标用户的风格指导
             user_style_guide = ""
-            if target_message and not force_generation_fallback:
+            if target_message and not direct_fast_reply_generation:
                 target_user_id = getattr(target_message, "user_id", "")
                 if target_user_id:
                     user_style_guide = self._get_user_style_guide(target_user_id)
@@ -277,7 +289,7 @@ class ProactiveReactiveFlowMixin:
                 extra_info_parts.append(current_target_block)
             relation_view = self._resolve_relation_view()
             context_execution_block = ""
-            if force_generation_fallback:
+            if direct_fast_reply_generation:
                 extra_info_parts.append("[直接快回] 一句短口语，直接回应当前消息；不做长篇解释，不二次改写，不补充追发。")
                 self._inject_fallback_soul_state(extra_info_parts)
                 self_reference_parts = self._build_self_reference_parts(target_message)
@@ -357,7 +369,7 @@ class ProactiveReactiveFlowMixin:
             from src.chat.replyer.context_block_builder import append_reply_style
 
             append_reply_style(extra_info_parts, style_route)
-            if not force_generation_fallback:
+            if not direct_fast_reply_generation:
                 # 注入多维状态系统的LLM提示词
                 self._inject_dimension_state_prompt(extra_info_parts)
                 _diversity_warn = self._check_reply_diversity()
@@ -393,9 +405,11 @@ class ProactiveReactiveFlowMixin:
 
             generation_failure_reason = "voice_generation_failed"
             force_reply_timeout = _rt_float("heartfc_force_reply_generation_timeout_seconds")
-            if force_generation_fallback:
-                force_reply_timeout = _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds")
-                logger.debug(f"{self.log_prefix} ⚡ 直接快回生成预算={force_reply_timeout:.1f}s")
+            if direct_fast_reply_generation:
+                direct_fast_timeout = _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds")
+                logger.debug(f"{self.log_prefix} ⚡ 直接快回生成预算={direct_fast_timeout:.1f}s")
+            elif forced_reply_generation:
+                logger.debug(f"{self.log_prefix} 👑 强制回复完整生成预算={force_reply_timeout:.1f}s")
             reply_generation = acquire_reply_coordinator().generate_reply(
                 channel_id=self.stream_id,
                 chat_stream=self.chat_stream,
@@ -406,11 +420,22 @@ class ProactiveReactiveFlowMixin:
                 extra_info=extra_info,
                 request_type="voice_driven_reply",
                 think_level=1,
-                fast_path=force_generation_fallback,
-                enable_splitter=not force_generation_fallback,
-                enable_chinese_typo=not force_generation_fallback,
+                fast_path=direct_fast_reply_generation,
+                enable_splitter=not direct_fast_reply_generation,
+                enable_chinese_typo=not direct_fast_reply_generation,
             )
-            if force_generation_fallback:
+            if direct_fast_reply_generation:
+                try:
+                    success, llm_response = await asyncio.wait_for(
+                        reply_generation,
+                        timeout=direct_fast_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    success = False
+                    llm_response = None
+                    generation_failure_reason = "direct_fast_reply_generation_timeout"
+                    logger.warning(f"{self.log_prefix} 💭 直接快回生成超时({direct_fast_timeout:.1f}s)，启用本地短兜底")
+            elif forced_reply_generation:
                 try:
                     success, llm_response = await asyncio.wait_for(
                         reply_generation,
@@ -419,13 +444,13 @@ class ProactiveReactiveFlowMixin:
                 except asyncio.TimeoutError:
                     success = False
                     llm_response = None
-                    generation_failure_reason = "direct_fast_reply_generation_timeout"
-                    logger.warning(f"{self.log_prefix} 💭 直接快回生成超时({force_reply_timeout:.1f}s)，启用本地短兜底")
+                    generation_failure_reason = "force_reply_generation_timeout"
+                    logger.warning(f"{self.log_prefix} 💭 强制回复完整生成超时({force_reply_timeout:.1f}s)，启用本地短兜底")
             else:
                 success, llm_response = await reply_generation
 
             if not success or not llm_response or not llm_response.reply_set:
-                if force_generation_fallback:
+                if allow_local_generation_fallback:
                     llm_response = self._build_forced_reply_fallback_response(target_message, generation_failure_reason)
                     success = True
                     logger.warning(

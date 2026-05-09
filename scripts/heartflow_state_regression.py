@@ -1288,6 +1288,14 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
         "direct_fast_reply_generation_timeout",
     )
     assert direct_fallback.timing["fallback_reason"] == "direct_fast_reply_generation_timeout"
+    force_probe = ProactiveReactiveFlowMixin()
+    assert not force_probe._should_use_direct_fast_reply_generation(force_bypass=True)
+    force_probe._is_admin_forced = True
+    force_probe._direct_fast_reply_generation = True
+    assert not force_probe._should_use_direct_fast_reply_generation(force_bypass=False)
+    direct_probe = ProactiveReactiveFlowMixin()
+    direct_probe._direct_fast_reply_generation = True
+    assert direct_probe._should_use_direct_fast_reply_generation(force_bypass=False)
 
     probe = type(
         "ModelGovernorProbe",
@@ -1386,8 +1394,13 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
     assert "heartfc_background_proactive_success_cooldown_min_seconds" in flow_source
     assert "if gw_ctx.admin_force" in scene_source
     assert "跳过被动策略规划" in scene_source
-    assert "fast_path=force_generation_fallback" in flow_source
-    assert "enable_chinese_typo=not force_generation_fallback" in flow_source
+    assert "_should_use_direct_fast_reply_generation" in flow_source
+    assert "forced_reply_generation = bool(force_bypass or getattr(self, \"_is_admin_forced\", False))" in flow_source
+    assert "direct_fast_reply_generation = self._should_use_direct_fast_reply_generation" in flow_source
+    assert "fast_path=direct_fast_reply_generation" in flow_source
+    assert "enable_chinese_typo=not direct_fast_reply_generation" in flow_source
+    assert "强制回复完整生成预算" in flow_source
+    assert "强制回复完整生成超时" in flow_source
     assert "[直接快回]" in flow_source
     assert "fast_path: bool = False" in coordinator_source
     assert "fast_path: bool = False" in generator_source
@@ -1404,6 +1417,7 @@ def check_force_reply_generation_fallback_contract() -> Dict[str, Any]:
         "admin_model_governor_bypass": True,
         "stale_voice_cache_cleared": True,
         "direct_fast_reply_path": True,
+        "force_reply_full_generation_path": True,
     }
 
 
