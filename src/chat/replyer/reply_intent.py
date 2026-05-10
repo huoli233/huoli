@@ -157,6 +157,33 @@ def coerce_reply_intent_packet(value: Any) -> Optional[ReplyIntentPacket]:
     return None
 
 
+def ensure_reply_intent_packet(
+    value: Any,
+    *,
+    target: str = "",
+    target_text: str = "",
+    trigger_reason: str = "",
+    fast_path: bool = False,
+) -> ReplyIntentPacket:
+    intent = coerce_reply_intent_packet(value)
+    if intent is not None:
+        intent.fast_path = bool(fast_path or intent.fast_path)
+        if target and not intent.target:
+            intent.target = _clean_text(target, 60)
+        if target_text and not intent.target_text:
+            intent.target_text = _clean_text(target_text, 160)
+        if trigger_reason and not intent.trigger_reason:
+            intent.trigger_reason = _clean_text(trigger_reason, 120)
+        intent.avoid_patterns = _dedupe_texts(intent.avoid_patterns or list(GENERIC_FAST_ACK_REPLIES))
+        return intent
+    return relation_to_reply_intent(
+        target=target,
+        target_text=target_text,
+        trigger_reason=trigger_reason or "当前轮需要回应",
+        fast_path=fast_path,
+    )
+
+
 def relation_to_reply_intent(
     *,
     target: str = "",
@@ -328,10 +355,8 @@ def _merge_tone(base: str, extra: str) -> str:
     return f"{base_text}，{extra_text}"
 
 
-def render_reply_intent_block(packet: Optional[ReplyIntentPacket]) -> str:
-    intent = coerce_reply_intent_packet(packet)
-    if intent is None:
-        return ""
+def render_reply_intent_block(packet: ReplyIntentPacket) -> str:
+    intent = packet
     avoid = "、".join(_clean_text(item, 24) for item in intent.avoid_patterns if _clean_text(item, 24))
     lines = [
         "【回复意图包】",

@@ -1713,6 +1713,26 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
 
+## 2026-05-10T10:25:00+08:00 - Task: 移除回复构建新旧双轨兼容
+
+### What was done:
+- 将回复构建链路收口为单一 `ReplyIntentPacket` 主路径：Generator API 入口会统一补齐意图包，群聊/私聊 replyer 内部只渲染 `【回复意图包】`。
+- 移除 fast path 中 `intent_block else 旧低信息护栏/旧身份提示/旧禁句块` 的双轨分支，低信息判断和坏回复拦截改为读取 `ReplyIntentPacket.low_info_strategy`。
+- 删除 `context_block_builder` 中对旧散块 header 的转译兼容表，不再把 `[当前心理状态]`、`[当前对象关系]`、`[直接快回关系语气]` 等旧块压缩进最终回复 prompt。
+- 更新回归脚本，锁定回复构建链路只允许意图包路径，不再允许 `ReplyIntentPacket | Dict`、旧 fast low_info guard fallback 和旧关系/心理散块映射。
+
+### Testing:
+- `.venv\Scripts\python.exe -m py_compile src/chat/replyer/reply_intent.py src/plugin_system/apis/generator_api.py src/chat/heart_flow/reply_coordinator.py src/chat/replyer/private_generator.py src/chat/replyer/group_generator.py src/chat/replyer/context_block_builder.py scripts/heartflow_state_regression.py` 通过。
+- `.venv\Scripts\python.exe -m ruff check src/chat/replyer/reply_intent.py src/plugin_system/apis/generator_api.py src/chat/heart_flow/reply_coordinator.py src/chat/replyer/private_generator.py src/chat/replyer/group_generator.py src/chat/replyer/context_block_builder.py scripts/heartflow_state_regression.py` 通过。
+- `.venv\Scripts\python.exe scripts/heartflow_state_regression.py` 通过，`force_reply_generation_failure` 输出已更新为 `direct_fast_intent_packet_only=true` 和 `reply_context_legacy_blocks_removed=true`。
+- `$env:PYTHONPYCACHEPREFIX=$env:TEMP\huoli_codex_compileall_intent_only; .venv\Scripts\python.exe -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 LF/CRLF 工作区换行提示。
+
+### Notes:
+- 本轮只移除回复构建链路的新旧双轨兼容，不处理插件版本兼容、数据库历史字段、非回复链路旧接口。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
 ## 2026-05-10T10:15:00+08:00 - Task: 深度替换回复构建链路为统一回复意图包
 
 ### What was done:

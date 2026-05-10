@@ -1814,14 +1814,17 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "self_reference_parts = self._build_self_reference_parts(target_message)\n                if self_reference_parts.get(\"self_memory\")" not in flow_source
     assert "fast_path: bool = False" in coordinator_source
     assert "fast_path: bool = False" in generator_source
-    assert "reply_intent: Optional[Any] = None" in coordinator_source
-    assert "reply_intent: Optional[Any] = None" in generator_source
+    assert "reply_intent: Optional[ReplyIntentPacket] = None" in coordinator_source
+    assert "reply_intent: Optional[ReplyIntentPacket] = None" in generator_source
+    assert "ensure_reply_intent_packet(" in generator_source
     assert "fast_path_deadline: Optional[float] = None" in coordinator_source
     assert "fast_path_deadline: Optional[float] = None" in generator_source
     assert "fast_path_deadline: Optional[float] = None" in group_reply_source
     assert "fast_path_deadline: Optional[float] = None" in private_reply_source
-    assert "reply_intent: Optional[ReplyIntentPacket | Dict[str, Any]] = None" in group_reply_source
-    assert "reply_intent: Optional[ReplyIntentPacket | Dict[str, Any]] = None" in private_reply_source
+    assert "reply_intent: Optional[ReplyIntentPacket] = None" in group_reply_source
+    assert "reply_intent: Optional[ReplyIntentPacket] = None" in private_reply_source
+    assert "ReplyIntentPacket | Dict[str, Any]" not in group_reply_source
+    assert "ReplyIntentPacket | Dict[str, Any]" not in private_reply_source
     assert "直接快回跳过动作与工具准备" in coordinator_source
     assert "直接快回跳过临时动作记录" in coordinator_source
     assert "enable_tool=(False if fast_path else global_config.tool.enable_tool)" in coordinator_source
@@ -1832,20 +1835,20 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "self.tool_executor" not in private_reply_source
     assert "if fast_path:\n                person_name = self._message_sender_name(reply_message) or user_id" in group_reply_source
     assert "chat_talking_prompt_fast = \"\"" in group_reply_source
-    assert "fast_low_info_text = text_part if has_text else target" in group_reply_source
-    assert "low_info_guard = self._build_low_info_input_guard(fast_low_info_text)" in group_reply_source
-    assert "low_info_input=bool(low_info_guard) and not bool(intent_block)" in group_reply_source
+    assert "fast_low_info_text = text_part if has_text else target" not in group_reply_source
+    assert "low_info_guard = self._build_low_info_input_guard(fast_low_info_text)" not in group_reply_source
+    assert "low_info_input=bool(low_info_guard) and not bool(intent_block)" not in group_reply_source
+    assert "intent_packet.low_info_strategy not in (\"\", \"none\")" in group_reply_source
     assert "identity=fast_identity_hint" in group_reply_source
-    assert "render_reply_intent_block(reply_intent)" in group_reply_source
+    assert "intent_block = render_reply_intent_block(intent_packet)" in group_reply_source
     assert "以【回复意图包】为准" in group_reply_source
     assert "extra_info_block = fast_extra_info" in group_reply_source
     assert "_looks_reception_fast_reply" in group_reply_source
     assert "fast_path_reception_reply" in group_reply_source
     assert "_looks_generic_ack_fast_reply" in group_reply_source
     assert "fast_path_generic_ack_reply" in group_reply_source
-    assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" in group_reply_source
-    assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" in group_reply_source
-    assert "不要回“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类没接住信息的泛泛附和" in group_reply_source
+    assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" not in group_reply_source
+    assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" not in group_reply_source
     assert "DefaultReplyer._looks_reception_fast_reply(\"好的，你说。\") is True" not in group_reply_source
     assert "[reply_postprocess] 跳过自然化错字和二次改写" in group_reply_source
     assert "_apply_adaptive_recall(content" not in group_reply_source
@@ -1854,28 +1857,36 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "管理员强制快回" not in group_reply_source
     assert "直接快回通道" in group_reply_source
     assert "fast_path=fast_path" in private_reply_source
-    assert "if fast_path:\n            fast_low_info_text = text_part if has_text else target" in private_reply_source
-    assert "low_info_guard = self._build_low_info_input_guard(fast_low_info_text)" in private_reply_source
-    assert "low_info_input=bool(low_info_guard) and not bool(intent_block)" in private_reply_source
+    assert "if fast_path:\n            fast_low_info_text = text_part if has_text else target" not in private_reply_source
+    assert "low_info_guard = self._build_low_info_input_guard(fast_low_info_text)" not in private_reply_source
+    assert "low_info_input=bool(low_info_guard) and not bool(intent_block)" not in private_reply_source
+    assert "intent_packet.low_info_strategy not in (\"\", \"none\")" in private_reply_source
     assert "identity=fast_identity_hint" in private_reply_source
-    assert "render_reply_intent_block(reply_intent)" in private_reply_source
+    assert "intent_block = render_reply_intent_block(intent_packet)" in private_reply_source
     assert "以【回复意图包】为准" in private_reply_source
     assert "extra_info_block = fast_extra_info" in private_reply_source
     assert "_looks_reception_fast_reply" in private_reply_source
     assert "fast_path_reception_reply" in private_reply_source
     assert "_looks_generic_ack_fast_reply" in private_reply_source
     assert "fast_path_generic_ack_reply" in private_reply_source
-    assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" in private_reply_source
-    assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" in private_reply_source
-    assert "不要回“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类没接住信息的泛泛附和" in private_reply_source
+    assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" not in private_reply_source
+    assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" not in private_reply_source
     context_block_source = (ROOT / "src/chat/replyer/context_block_builder.py").read_text(encoding="utf-8")
     assert "【回复意图包】" in context_block_source
     assert "当前立场：" in context_block_source
     assert "情绪语气：" in context_block_source
+    assert "LEGACY_EXTRA_HEADER_PREFIX_MAP" not in context_block_source
+    assert "[当前对象关系]" not in context_block_source
+    assert "[当前心理状态]" not in context_block_source
+    assert "[直接快回关系语气]" not in context_block_source
     reply_intent_source = (ROOT / "src/chat/replyer/reply_intent.py").read_text(encoding="utf-8")
     assert "class ReplyIntentPacket" in reply_intent_source
     assert "def relation_to_reply_intent" in reply_intent_source
+    assert "def ensure_reply_intent_packet" in reply_intent_source
     assert "def render_reply_intent_block" in reply_intent_source
+    assert "GENERIC_FAST_ACK_REPLIES" in reply_intent_source
+    assert "\"好的，你说\"" in reply_intent_source
+    assert "\"嗯，是啊\"" in reply_intent_source
     assert "low_info_strategy = \"带情绪短回\"" in reply_intent_source
     assert "def _pressure_signal" in reply_intent_source
     assert "LAYERED_TONE_TRANSLATIONS" in reply_intent_source
@@ -1922,8 +1933,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "direct_fast_budget_starts_at_generation": True,
         "direct_fast_temp_record_skipped": True,
         "direct_fast_budget_matches_model_timeout": True,
-        "direct_fast_low_info_guard_restored": True,
-        "direct_fast_relation_style_restored": True,
+        "direct_fast_intent_packet_only": True,
+        "reply_context_legacy_blocks_removed": True,
         "direct_fast_reception_reply_blocked": True,
         "direct_fast_generic_ack_reply_blocked": True,
     }

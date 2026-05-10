@@ -5,6 +5,7 @@ from enum import IntEnum
 from typing import Any, Callable, Coroutine, Dict, Optional
 
 from src.common.logger import get_logger
+from src.chat.replyer.reply_intent import ReplyIntentPacket
 
 logger = get_logger("reply_coord")
 
@@ -250,7 +251,7 @@ class ReplyCoordinator:
         think_level: int = 1,
         fast_path: bool = False,
         fast_path_deadline: Optional[float] = None,
-        reply_intent: Optional[Any] = None,
+        reply_intent: Optional[ReplyIntentPacket] = None,
         enable_splitter: bool = True,
         enable_chinese_typo: bool = True,
     ):

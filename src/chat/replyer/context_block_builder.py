@@ -9,9 +9,6 @@ LIGHTWEIGHT_EXTRA_PREFIXES = (
     "补充:",
     "避免复读:",
     "回复形式:",
-    "当前状态:",
-    "关系:",
-    "语气:",
     "这轮:",
     "禁区:",
     "边界:",
@@ -20,7 +17,6 @@ LIGHTWEIGHT_EXTRA_PREFIXES = (
     "当前对象:",
     "最新用户话头:",
     "你上一句:",
-    "直接快回关系语气:",
     "回复目标：",
     "目标内容：",
     "为什么回：",
@@ -37,14 +33,11 @@ LIGHTWEIGHT_EXTRA_PREFIXES = (
 )
 
 LIGHTWEIGHT_EXTRA_INLINE_MARKERS = (
-    "关系=",
     "续接提示:",
     "重复短句判定:",
     "当前对象:",
     "最新用户话头:",
     "你上一句:",
-    "厌烦=",
-    "压力=",
 )
 
 STYLE_GUIDANCE_KEYWORDS = (
@@ -63,80 +56,6 @@ STYLE_GUIDANCE_KEYWORDS = (
     "烦",
     "接话",
 )
-
-LEGACY_EXTRA_HEADER_PREFIX_MAP = {
-    "【回复意图包】": "【回复意图包】",
-    "[前情执行块]": "前情:",
-    "[决策上下文包]": "这轮:",
-    "[避免复读]": "避免复读:",
-    "[回复形式]": "回复形式:",
-    "[主人格摘要]": "当前状态:",
-    "[身份边界]": "边界:",
-    "[接管意图]": "这轮:",
-    "[内心独白执行约束]": "禁区:",
-    "[关系阶段]": "关系:",
-    "[关系信号]": "关系:",
-    "[心理信号]": "当前状态:",
-    "[回复边界]": "边界:",
-    "[表达节奏]": "语气:",
-    "[情绪保护]": "禁区:",
-    "[分层回复模式]": "回复形式:",
-    "[表达长度]": "回复形式:",
-    "[表达细节]": "补充:",
-    "[避免模式]": "禁区:",
-    "[自我风格学习]": "语气:",
-    "[时段调节]": "当前状态:",
-    "[★冷拒模式★]": "语气:",
-    "[★烦躁模式★]": "语气:",
-    "[灵魂指令]": "补充:",
-    "[防御模式]": "边界:",
-    "[当前情感状态]": "当前状态:",
-    "[当前心理状态]": "当前状态:",
-    "[夜间身体状态]": "当前状态:",
-    "[夜间语气约束]": "语气:",
-    "[夜间心境提示]": "当前状态:",
-    "[内心思考]": "补充:",
-    "[当前情绪]": "当前状态:",
-    "[人格约束]": "边界:",
-    "[当前人格片段]": "当前状态:",
-    "[连续对话参考]": "前情:",
-    "[回复长度策略]": "回复形式:",
-    "[精力状态]": "当前状态:",
-    "[主动行为意图]": "这轮:",
-    "[内容规划]": "这轮:",
-    "[当前感受]": "当前状态:",
-    "[当前对象关系]": "关系:",
-    "[直接快回关系语气]": "直接快回关系语气:",
-    "[最近观察]": "补充:",
-    "[投递指令]": "这轮:",
-    "[群聊氛围感知]": "当前状态:",
-    "[⏰凌晨情绪放大]": "当前状态:",
-    "[⚠️独立人格感知]": "边界:",
-    "[🛡️人格底线]": "边界:",
-    "[📏建议长度]": "回复形式:",
-    "[🎬场景风格]": "语气:",
-    "[🚫禁止]": "禁区:",
-    "[😑敷衍厌烦]": "语气:",
-    "[🫠勉强应付]": "语气:",
-    "[😤情绪底色]": "当前状态:",
-    "[😒情绪底色]": "当前状态:",
-    "[★夜间深睡★]": "当前状态:",
-    "[★夜间浅睡★]": "当前状态:",
-    "[★熬穿状态★]": "当前状态:",
-    "[★夜间活跃★]": "当前状态:",
-    "[★社交夜★]": "当前状态:",
-    "[★午夜反思★]": "当前状态:",
-    "[★安静沉思★]": "当前状态:",
-    "[★黎明恢复★]": "当前状态:",
-    "[🌙🧠内心独白]": "补充:",
-    "[🌙🧠烦躁瞥眼]": "当前状态:",
-    "[🌙😤烦躁强制约束]": "禁区:",
-    "[🌙🧠情绪基调]": "当前状态:",
-    "[🌙📊唤醒门槛]": "当前状态:",
-    "[🌙身体状态]": "当前状态:",
-    "[💫灵魂情绪覆盖]": "当前状态:",
-}
-
 
 def _context_view() -> dict:
     try:
@@ -224,29 +143,7 @@ def sanitize_extra_info(extra_info: str, max_tokens: int | None = None) -> str:
             if payload_lines:
                 kept.append("【回复意图包】\n" + "\n".join(payload_lines[:14]))
             continue
-        prefix = LEGACY_EXTRA_HEADER_PREFIX_MAP.get(header, "")
-        if prefix:
-            payload = _compact_context_text(
-                "\n".join(lines[1:]),
-                max_tokens=_context_int("compact_line_max_tokens", 42),
-                priority_keywords=["重要", "当前", "别", "不要", "禁止"],
-            )
-            if payload:
-                kept.append(f"{prefix} {payload}")
-            continue
         for line in lines:
-            legacy_inline = re.match(r"^(\[[^\]]+\])\s*(.*)$", line)
-            if legacy_inline:
-                legacy_prefix = LEGACY_EXTRA_HEADER_PREFIX_MAP.get(legacy_inline.group(1), "")
-                if legacy_prefix:
-                    inline_payload = _compact_context_text(
-                        legacy_inline.group(2),
-                        max_tokens=_context_int("compact_line_max_tokens", 42),
-                        priority_keywords=["重要", "当前", "别", "不要", "禁止"],
-                    )
-                    if inline_payload:
-                        kept.append(f"{legacy_prefix} {inline_payload}")
-                    continue
             if line.startswith(LIGHTWEIGHT_EXTRA_PREFIXES) or any(
                 marker in line for marker in LIGHTWEIGHT_EXTRA_INLINE_MARKERS
             ):

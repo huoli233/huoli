@@ -16,6 +16,7 @@ from src.common.logger import get_logger
 from src.common.data_models.message_data_model import ReplySetModel
 from src.chat.replyer.group_generator import DefaultReplyer
 from src.chat.replyer.private_generator import PrivateReplyer
+from src.chat.replyer.reply_intent import ReplyIntentPacket, ensure_reply_intent_packet
 from src.chat.message_receive.chat_stream import ChatStream
 from src.chat.utils.utils import process_llm_response
 from src.chat.replyer.replyer_manager import replyer_manager
@@ -121,7 +122,7 @@ async def generate_reply(
     reply_time_point: Optional[float] = None,
     fast_path: bool = False,
     fast_path_deadline: Optional[float] = None,
-    reply_intent: Optional[Any] = None,
+    reply_intent: Optional[ReplyIntentPacket] = None,
 ) -> Tuple[bool, Optional["LLMGenerationDataModel"]]:
     """生成回复
 
@@ -179,6 +180,29 @@ async def generate_reply(
                                 cleaned.append(s)
                     if cleaned:
                         unknown_words = cleaned
+
+        target_text = ""
+        target_name = "对方"
+        if reply_message is not None:
+            target_text = str(
+                getattr(reply_message, "processed_plain_text", "")
+                or getattr(reply_message, "plain_text", "")
+                or getattr(reply_message, "content", "")
+                or ""
+            ).strip()
+            target_name = str(
+                getattr(reply_message, "user_nickname", "")
+                or getattr(reply_message, "user_cardname", "")
+                or getattr(reply_message, "user_id", "")
+                or "对方"
+            ).strip()
+        reply_intent = ensure_reply_intent_packet(
+            reply_intent,
+            target=target_name,
+            target_text=target_text,
+            trigger_reason=reply_reason,
+            fast_path=fast_path,
+        )
 
         # 调用回复器生成回复
         success, llm_response = await replyer.generate_reply_with_context(

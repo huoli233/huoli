@@ -54,6 +54,7 @@ from src.chat.replyer.prompt.replyer_prompt import (
 from src.chat.replyer.context_block_builder import build_reply_context_block, sanitize_extra_info as sanitize_reply_extra_info
 from src.chat.replyer.reply_intent import (
     ReplyIntentPacket,
+    ensure_reply_intent_packet,
     render_reply_intent_block,
 )
 from src.chat.replyer.prompt.rewrite_prompt import init_rewrite_prompt, get_rewriter_prompt
@@ -1057,7 +1058,7 @@ class DefaultReplyer:
         use_multi_turn: Optional[bool] = None,
         fast_path: bool = False,
         fast_path_deadline: Optional[float] = None,
-        reply_intent: Optional[ReplyIntentPacket | Dict[str, Any]] = None,
+        reply_intent: Optional[ReplyIntentPacket] = None,
     ) -> Tuple[bool, LLMGenerationDataModel]:
         # sourcery skip: merge-nested-ifs
         """
@@ -1089,6 +1090,13 @@ class DefaultReplyer:
         stream_id = chat_id
         if available_actions is None:
             available_actions = {}
+        reply_intent = ensure_reply_intent_packet(
+            reply_intent,
+            target=self._message_sender_name(reply_message) if reply_message is not None else "对方",
+            target_text=self._message_text(reply_message) if reply_message is not None else "",
+            trigger_reason=reply_reason,
+            fast_path=fast_path,
+        )
 
         # 处理 use_multi_turn 参数：如果为 None，从配置中读取
         if use_multi_turn is None:
@@ -1244,10 +1252,7 @@ class DefaultReplyer:
                 llm_response.timing["almost_zero"] = almost_zero_str
                 fast_low_info_context = False
                 if fast_path:
-                    fast_target_text = self._message_text(reply_message) if reply_message is not None else ""
-                    fast_low_info_context = bool(self._build_low_info_input_guard(fast_target_text)) or (
-                        "【低信息输入约束】" in str(prompt_for_log or prompt or "")
-                    )
+                    fast_low_info_context = bool(reply_intent.low_info_strategy not in ("", "none"))
                 if fast_path and self._looks_reception_fast_reply(content):
                     logger.warning(f"[fast_path] 生成接待话术，取消发送: {content[:30]}")
                     if log_reply:
@@ -3011,7 +3016,7 @@ class DefaultReplyer:
         unknown_words: Optional[List[str]] = None,
         use_multi_turn: bool = False,
         fast_path: bool = False,
-        reply_intent: Optional[ReplyIntentPacket | Dict[str, Any]] = None,
+        reply_intent: Optional[ReplyIntentPacket] = None,
     ) -> Tuple[str | List[Message], List[int], List[str], str]:
         """
         构建回复器上下文
@@ -3062,16 +3067,19 @@ class DefaultReplyer:
         if "[picid:" in target:
             target = self._replace_picids_with_descriptions(target)
 
+        current_text = text_part if has_text else target
+        intent_packet = ensure_reply_intent_packet(
+            reply_intent,
+            target=sender or "对方",
+            target_text=current_text,
+            trigger_reason=reply_reason,
+            fast_path=fast_path,
+        )
+        intent_block = render_reply_intent_block(intent_packet)
+
         if fast_path:
             chat_talking_prompt_fast = ""
-            fast_low_info_text = text_part if has_text else target
-            low_info_guard = self._build_low_info_input_guard(fast_low_info_text)
-            intent_block = render_reply_intent_block(reply_intent)
-            fast_identity_hint = (
-                "按主人格自然口语说；回复时以【回复意图包】为准，别像脚本。"
-                if intent_block
-                else self._build_fast_path_identity_hint()
-            )
+            fast_identity_hint = "按主人格自然口语说；回复时以【回复意图包】为准，别像脚本。"
             prompt_extra_info = self._prune_redundant_context_sources(
                 extra_info,
                 recent_context_present=bool(chat_talking_prompt_fast),
@@ -3080,9 +3088,6 @@ class DefaultReplyer:
                 part
                 for part in (
                     intent_block,
-                    self._sanitize_extra_info(prompt_extra_info) if not intent_block else "",
-                    "" if intent_block else "短句护栏: 不要复读、不要照抄、不要同音改写对方原句；信息不完整就自然追问或轻接一句。",
-                    "" if intent_block else low_info_guard,
                 )
                 if str(part or "").strip()
             )
@@ -3100,7 +3105,7 @@ class DefaultReplyer:
                 reply_target_block = ""
             planner_reasoning = self._build_compact_planner_reasoning(
                 reply_reason,
-                low_info_input=bool(low_info_guard) and not bool(intent_block),
+                low_info_input=intent_packet.low_info_strategy not in ("", "none"),
             )
             sleepy_guard = ""
             if _night_state_is_sleepy(extra_info) or _target_asks_sleep(reply_message):
@@ -3111,15 +3116,7 @@ class DefaultReplyer:
                 )
             fast_behavioral_directive = (
                 "直接快回通道：只按回复意图包说一句自然口语，别解释字段，别二次发挥。"
-                if intent_block
-                else (
-                    "直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
-                    "不要复读、不要照抄、不要同音改写对方原句；不要把对方词尾改成“我/你”当回复。"
-                    "如果信息不完整，轻轻接住或追问半句，不要猜词义。"
-                    "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”。"
-                    "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和。"
-                    f"{sleepy_guard}"
-                )
+                f"{sleepy_guard}"
             )
             prompt = get_group_responder_prompt(
                 think_level=think_level,
@@ -3184,8 +3181,8 @@ class DefaultReplyer:
         )
         chat_talking_prompt_short = self._sanitize_history_prompt_text(chat_talking_prompt_short)
 
-        low_info_guard = self._build_low_info_input_guard(text_part if has_text else target)
-        skip_low_info_tools = self._should_skip_tools_for_low_info_input(text_part if has_text else target, has_text)
+        low_info_guard = ""
+        skip_low_info_tools = has_text and intent_packet.low_info_strategy not in ("", "none")
 
         if skip_low_info_tools and enable_tool:
             logger.info("[reply_fast_context] 低信息短句跳过工具链")
@@ -3389,10 +3386,9 @@ class DefaultReplyer:
         except Exception as _e:
             logger.debug(f"{self.log_prefix} unknown异常: {_e}")
         recent_reply_guard = self._build_recent_reply_guard(target, sanitized_messages_short)
-        intent_block = render_reply_intent_block(reply_intent)
         planner_reasoning = self._build_compact_planner_reasoning(
             reply_reason,
-            low_info_input=bool(low_info_guard) and not bool(intent_block),
+            low_info_input=intent_packet.low_info_strategy not in ("", "none"),
         )
         behavioral_directive = self._build_compact_behavioral_directive(
             behavioral_directive=raw_behavioral_directive,

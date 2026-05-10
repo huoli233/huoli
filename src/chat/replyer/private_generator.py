@@ -49,6 +49,7 @@ from src.chat.replyer.context_block_builder import (
 )
 from src.chat.replyer.reply_intent import (
     ReplyIntentPacket,
+    ensure_reply_intent_packet,
     render_reply_intent_block,
 )
 from src.chat.replyer.prompt.rewrite_prompt import init_rewrite_prompt, get_rewriter_prompt
@@ -725,7 +726,7 @@ class PrivateReplyer:
         log_reply: bool = True,
         fast_path: bool = False,
         fast_path_deadline: Optional[float] = None,
-        reply_intent: Optional[ReplyIntentPacket | Dict[str, Any]] = None,
+        reply_intent: Optional[ReplyIntentPacket] = None,
     ) -> Tuple[bool, LLMGenerationDataModel]:
         # sourcery skip: merge-nested-ifs
         """
@@ -751,6 +752,13 @@ class PrivateReplyer:
             reply_time_point = time.time()
         if available_actions is None:
             available_actions = {}
+        reply_intent = ensure_reply_intent_packet(
+            reply_intent,
+            target=self._message_sender_name(reply_message) if reply_message is not None else "对方",
+            target_text=self._message_text(reply_message) if reply_message is not None else "",
+            trigger_reason=reply_reason,
+            fast_path=fast_path,
+        )
         try:
             if fast_path and fast_path_deadline is not None and time.monotonic() >= fast_path_deadline:
                 logger.warning("[fast_path] 私聊快回预算已耗尽，跳过prompt构建")
@@ -863,9 +871,8 @@ class PrivateReplyer:
                         )
                 fast_low_info_context = False
                 if fast_path:
-                    fast_target_text = self._message_text(reply_message) if reply_message is not None else ""
-                    fast_low_info_context = bool(self._build_low_info_input_guard(fast_target_text)) or (
-                        "【低信息输入约束】" in str(llm_response.prompt or prompt or "")
+                    fast_low_info_context = bool(
+                        reply_intent and reply_intent.low_info_strategy not in ("", "none")
                     )
                 if fast_path and self._looks_reception_fast_reply(llm_response.content or ""):
                     logger.warning(f"[fast_path] 私聊生成接待话术，取消发送: {str(llm_response.content or '')[:30]}")
@@ -1471,7 +1478,7 @@ class PrivateReplyer:
         enable_tool: bool = True,
         unknown_words: Optional[List[str]] = None,
         fast_path: bool = False,
-        reply_intent: Optional[ReplyIntentPacket | Dict[str, Any]] = None,
+        reply_intent: Optional[ReplyIntentPacket] = None,
     ) -> Tuple[str, List[int]]:
         """
         构建回复器上下文
@@ -1522,22 +1529,22 @@ class PrivateReplyer:
         if "[picid:" in target:
             target = self._replace_picids_with_descriptions(target)
 
+        current_text = text_part if has_text else target
+        intent_packet = ensure_reply_intent_packet(
+            reply_intent,
+            target=sender or "对方",
+            target_text=current_text,
+            trigger_reason=reply_reason,
+            fast_path=fast_path,
+        )
+        intent_block = render_reply_intent_block(intent_packet)
+
         if fast_path:
-            fast_low_info_text = text_part if has_text else target
-            low_info_guard = self._build_low_info_input_guard(fast_low_info_text)
-            intent_block = render_reply_intent_block(reply_intent)
-            fast_identity_hint = (
-                "按主人格自然口语说；回复时以【回复意图包】为准，别像脚本。"
-                if intent_block
-                else self._build_fast_path_identity_hint()
-            )
+            fast_identity_hint = "按主人格自然口语说；回复时以【回复意图包】为准，别像脚本。"
             fast_extra_info = "\n".join(
                 part
                 for part in (
                     intent_block,
-                    sanitize_extra_info(extra_info, max_tokens=70) if not intent_block else "",
-                    "" if intent_block else "短句护栏: 不要复读、不要照抄、不要同音改写对方原句；信息不完整就自然追问或轻接一句。",
-                    "" if intent_block else low_info_guard,
                 )
                 if str(part or "").strip()
             )
@@ -1555,19 +1562,9 @@ class PrivateReplyer:
                 reply_target_block = f"这轮对方说：{target}"
             planner_reasoning = self._build_compact_planner_reasoning(
                 reply_reason,
-                low_info_input=bool(low_info_guard) and not bool(intent_block),
+                low_info_input=intent_packet.low_info_strategy not in ("", "none"),
             )
-            fast_reply_style = (
-                "直接快回通道：只按回复意图包说一句自然口语，别解释字段，别二次发挥。"
-                if intent_block
-                else (
-                    "直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
-                    "不要复读、不要照抄、不要同音改写对方原句；不要把对方词尾改成“我/你”当回复。"
-                    "如果信息不完整，轻轻接住或追问半句，不要猜词义。"
-                    "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”。"
-                    "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和。"
-                )
-            )
+            fast_reply_style = "直接快回通道：只按回复意图包说一句自然口语，别解释字段，别二次发挥。"
             prompt = get_private_responder_prompt(
                 sender_name=sender or "对方",
                 identity=fast_identity_hint,
@@ -1732,11 +1729,9 @@ class PrivateReplyer:
             text_part if has_text else target,
             sanitized_messages_short,
         )
-        low_info_guard = self._build_low_info_input_guard(text_part if has_text else target)
-        intent_block = render_reply_intent_block(reply_intent)
         planner_reasoning = self._build_compact_planner_reasoning(
             reply_reason,
-            low_info_input=bool(low_info_guard) and not bool(intent_block),
+            low_info_input=intent_packet.low_info_strategy not in ("", "none"),
         )
         prompt_extra_info = self._prune_redundant_context_sources(
             extra_info,
@@ -1748,7 +1743,6 @@ class PrivateReplyer:
                 intent_block,
                 emotional_context,
                 self._sanitize_extra_info(prompt_extra_info),
-                "" if intent_block else low_info_guard,
             )
             if str(part or "").strip()
         )
