@@ -55,6 +55,7 @@ from src.chat.replyer.context_block_builder import build_reply_context_block, sa
 from src.chat.replyer.reply_intent import (
     ReplyIntentPacket,
     ensure_reply_intent_packet,
+    is_low_info_input,
     render_reply_intent_block,
 )
 from src.chat.replyer.prompt.rewrite_prompt import init_rewrite_prompt, get_rewriter_prompt
@@ -699,6 +700,28 @@ class DefaultReplyer:
             builder.add_text_content(directive)
             return [*prompt, builder.build()]
         return f"{prompt}\n\n{directive}"
+
+    @classmethod
+    def _fallback_fast_reply_for_bad_output(
+        cls,
+        reason: str,
+        target_text: str,
+        allow_followup: bool,
+    ) -> str:
+        """坏输出重试失败时的确定性兜底，避免继续发复读、泛评或违规追问。"""
+        normalized = cls._normalize_repeat_guard_text(target_text)
+        if not normalized:
+            return "先放着吧"
+        if not allow_followup:
+            return "先别猜了"
+        if reason in {
+            "fast_path_echo_target_reply",
+            "fast_path_unsupported_positive_reply",
+            "fast_path_generic_ack_reply",
+            "fast_path_reception_reply",
+        }:
+            return "你指哪块？"
+        return "有点没接上"
 
     def _classify_fast_bad_reply(
         self,
@@ -1393,11 +1416,14 @@ class DefaultReplyer:
                 llm_response.timing["timing_logs"] = timing_logs
                 llm_response.timing["almost_zero"] = almost_zero_str
                 fast_low_info_context = False
-                if fast_path:
-                    fast_low_info_context = bool(reply_intent.low_info_strategy not in ("", "none"))
                 fast_target_text = ""
                 if fast_path and reply_message is not None:
                     fast_target_text = self._message_text(reply_message)
+                if fast_path:
+                    fast_low_info_context = bool(
+                        reply_intent.low_info_strategy not in ("", "none")
+                        or is_low_info_input(fast_target_text)
+                    )
                 fast_allow_followup = bool(reply_intent.allow_followup)
                 bad_fast_reply = self._classify_fast_bad_reply(
                     content,
@@ -1442,6 +1468,24 @@ class DefaultReplyer:
                         fast_target_text,
                         fast_allow_followup,
                     )
+                    if retry_bad_reply:
+                        fallback_content = self._fallback_fast_reply_for_bad_output(
+                            retry_bad_reply,
+                            fast_target_text,
+                            fast_allow_followup,
+                        )
+                        fallback_bad_reply = self._classify_fast_bad_reply(
+                            fallback_content,
+                            fast_low_info_context,
+                            fast_target_text,
+                            fast_allow_followup,
+                        )
+                        if not fallback_bad_reply:
+                            logger.warning(
+                                f"[fast_path] 重试仍不合格({retry_bad_reply})，改用确定性兜底: {fallback_content}"
+                            )
+                            retry_content = fallback_content
+                            retry_bad_reply = ""
                     llm_response.content = retry_content
                     llm_response.reasoning = retry_reasoning
                     llm_response.model = retry_model_name
@@ -3250,18 +3294,41 @@ class DefaultReplyer:
         intent_block = render_reply_intent_block(intent_packet)
 
         if fast_path:
-            chat_talking_prompt_fast = ""
+            message_list_before_fast = get_raw_msg_before_timestamp_with_chat(
+                chat_id=chat_id,
+                timestamp=reply_time_point or time.time(),
+                limit=6,
+                filter_intercept_message_level=1,
+            )
+            sanitized_messages_fast = self._sanitize_prompt_history_messages(message_list_before_fast)
+            chat_talking_prompt_fast = self._sanitize_history_prompt_text(
+                build_readable_messages(
+                    sanitized_messages_fast,
+                    replace_bot_name=True,
+                    timestamp_mode="relative",
+                    read_mark=0.0,
+                    show_actions=True,
+                    long_time_notice=False,
+                )
+            )
             fast_identity_hint = "按主人格自然口语说；回复时以【回复意图包】为准，别像脚本。"
             prompt_extra_info = self._prune_redundant_context_sources(
                 extra_info,
                 recent_context_present=bool(chat_talking_prompt_fast),
             )
-            fast_extra_info = "\n".join(
-                part
-                for part in (
-                    intent_block,
-                )
-                if str(part or "").strip()
+            fast_extra_info = build_reply_context_block(
+                recent_context=chat_talking_prompt_fast,
+                relevant_context="",
+                extra_info="\n".join(
+                    part
+                    for part in (
+                        intent_block,
+                        self._sanitize_extra_info(prompt_extra_info),
+                    )
+                    if str(part or "").strip()
+                ),
+                recent_reply_guard=self._build_recent_reply_guard(current_text, sanitized_messages_fast),
+                max_total_tokens=220,
             )
             extra_info_block = fast_extra_info
             if sender:
@@ -3299,7 +3366,7 @@ class DefaultReplyer:
                 extra_info_block=extra_info_block,
                 jargon_explanation="",
                 identity=fast_identity_hint,
-                dialogue_prompt="",
+                dialogue_prompt=chat_talking_prompt_fast,
                 time_block="",
                 reply_target_block=reply_target_block,
                 reply_style="",
@@ -3309,7 +3376,7 @@ class DefaultReplyer:
                 length_guide="请用一句短话回复，通常不超过20个字。",
                 behavioral_directive=fast_behavioral_directive,
             )
-            return prompt, [], ["快回上下文: 0.0s"], ""
+            return prompt, [], [f"快回上下文: {len(sanitized_messages_fast)}条"], ""
 
         message_list_before_now_long = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_id,

@@ -195,6 +195,54 @@ class ProactiveReactiveFlowMixin:
                     return "；".join(compacted)
         return "；".join(compacted)
 
+    def _build_direct_fast_reply_context_reference(
+        self,
+        *,
+        target_message: Any,
+        relation_view: Dict[str, Any],
+        repetition_signal: Optional[Dict[str, Any]],
+    ) -> str:
+        """直接快回也要有最小上下文，避免低信息句凭空生成敷衍话。"""
+        lines: List[str] = []
+        decision_packet = self._build_decision_context_packet(
+            list(getattr(self, "_last_decision_incoming_messages", []) or [target_message]),
+            repetition_signal=repetition_signal,
+        )
+        packet_context = str(decision_packet.compact_context() or "").strip()
+        if packet_context:
+            lines.append(packet_context)
+        self_memory = self._build_self_reply_memory()
+        if self_memory:
+            lines.append(f"你刚刚说过: {self_memory.replace(chr(10), '；')[:160]}")
+        target_text = str(
+            getattr(target_message, "processed_plain_text", "")
+            or getattr(target_message, "plain_text", "")
+            or getattr(target_message, "content", "")
+            or ""
+        ).strip()
+        target_uid = str(getattr(target_message, "user_id", "") or "").strip()
+        normalized_target = self._normalize_repeat_text(target_text)
+        repeat_count = self._count_recent_user_repeats(normalized_target, target_uid)
+        if repeat_count >= 2:
+            lines.append(f"对方近几轮已重复这句或近似说法{repeat_count}次")
+            lines.append("按重复短句/可能玩梗/等你接前情理解，不要当新话题热情追问")
+        if relation_view:
+            relation_bits = []
+            for key, label in (
+                ("custom_label", "关系"),
+                ("social_value", "社交"),
+                ("trust_value", "信任"),
+                ("annoyance_value", "厌烦"),
+                ("psychological_pressure", "压力"),
+            ):
+                value = relation_view.get(key)
+                if value in (None, ""):
+                    continue
+                relation_bits.append(f"{label}={value}")
+            if relation_bits:
+                lines.append("当前对象: " + " ".join(str(bit)[:40] for bit in relation_bits[:5]))
+        return "\n".join(line for line in lines if str(line or "").strip())
+
     @staticmethod
     def _pick_runtime_text(key: str, seed_text: str) -> str:
         candidates = _rt_str_list(key)
@@ -302,7 +350,10 @@ class ProactiveReactiveFlowMixin:
                     cached_relation = self._normalize_relation_snapshot(
                         getattr(self, "_last_relation_snapshot", {}) or {}
                     )
-                    relation_view = self._inject_realtime_emotion(cached_relation)
+                    relation_view = self._merge_current_target_relation_snapshot(
+                        cached_relation,
+                        str(getattr(target_message, "user_id", "") or "").strip(),
+                    )
                 except Exception:
                     relation_view = {}
             else:
@@ -317,6 +368,13 @@ class ProactiveReactiveFlowMixin:
                 ).strip()
                 if target_text:
                     extra_info_parts.append(f"这轮: 只回应当前消息「{target_text[:120]}」")
+                direct_fast_context_reference = self._build_direct_fast_reply_context_reference(
+                    target_message=target_message,
+                    relation_view=relation_view,
+                    repetition_signal=repetition_signal,
+                )
+                if direct_fast_context_reference:
+                    extra_info_parts.append(direct_fast_context_reference)
                 logger.debug(f"{self.log_prefix} ⚡ 直接快回跳过慢上下文构建")
             else:
                 decision_context_packet = self._build_decision_context_packet(

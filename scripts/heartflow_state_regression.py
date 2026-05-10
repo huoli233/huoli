@@ -1782,6 +1782,12 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "fast_path_deadline=direct_fast_deadline" in flow_source
     assert "reply_intent=reply_intent_packet" in flow_source
     assert "reply_intent_packet.reference_info = self._compose_reply_intent_reference(" in flow_source
+    assert "def _build_direct_fast_reply_context_reference" in flow_source
+    assert "对方近几轮已重复这句或近似说法" in flow_source
+    assert "当前对象: " in flow_source
+    heartflow_source = (ROOT / "src/chat/heart_flow/heartflow.py").read_text(encoding="utf-8")
+    assert "核心模块预热完成" in heartflow_source
+    assert "inspect.isawaitable" in heartflow_source
     assert "get_night_cycle(self.stream_id).night_behavior_summary()" in flow_source
     assert "drowsiness >= 55.0" in flow_source
     assert "half_asleep >= 0.35" in flow_source
@@ -1826,7 +1832,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "self._append_direct_fast_relation_style(extra_info_parts, relation_view)" not in flow_source
     assert "[当前对象关系]" not in flow_source
     assert "[直接快回关系语气]" not in flow_source
-    assert "relation_view = self._inject_realtime_emotion(cached_relation)" in flow_source
+    assert "relation_view = self._merge_current_target_relation_snapshot(" in flow_source
+    assert "str(getattr(target_message, \"user_id\", \"\") or \"\").strip()" in flow_source
     assert "self._inject_fallback_soul_state(extra_info_parts)" not in flow_source
     assert "if not direct_fast_reply_generation:\n                append_reply_style(extra_info_parts, style_route)" in flow_source
     assert "if direct_fast_reply_generation:\n                extra_info = \"\\n\".join" in flow_source
@@ -1875,7 +1882,9 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "self.tool_executor" not in group_reply_source
     assert "self.tool_executor" not in private_reply_source
     assert "if fast_path:\n                person_name = self._message_sender_name(reply_message) or user_id" in group_reply_source
-    assert "chat_talking_prompt_fast = \"\"" in group_reply_source
+    assert "chat_talking_prompt_fast = \"\"" not in group_reply_source
+    assert "message_list_before_fast = get_raw_msg_before_timestamp_with_chat" in group_reply_source
+    assert "快回上下文: {len(sanitized_messages_fast)}条" in group_reply_source
     assert "fast_low_info_text = text_part if has_text else target" not in group_reply_source
     assert "low_info_guard = self._build_low_info_input_guard(fast_low_info_text)" not in group_reply_source
     assert "low_info_input=bool(low_info_guard) and not bool(intent_block)" not in group_reply_source
@@ -1898,6 +1907,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "_classify_fast_bad_reply" in group_reply_source
     assert "_looks_forbidden_followup_fast_reply" in group_reply_source
     assert "fast_path_forbidden_followup_reply" in group_reply_source
+    assert "or is_low_info_input(fast_target_text)" in group_reply_source
     assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" not in group_reply_source
     assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" not in group_reply_source
     assert "DefaultReplyer._looks_reception_fast_reply(\"好的，你说。\") is True" not in group_reply_source
@@ -1916,6 +1926,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "intent_block = render_reply_intent_block(intent_packet)" in private_reply_source
     assert "以【回复意图包】为准" in private_reply_source
     assert "extra_info_block = fast_extra_info" in private_reply_source
+    assert "message_list_before_fast = get_raw_msg_before_timestamp_with_chat" in private_reply_source
     assert "if not intent_packet.reference_info:" in private_reply_source
     assert "_looks_reception_fast_reply" in private_reply_source
     assert "fast_path_reception_reply" in private_reply_source
@@ -1930,6 +1941,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "_classify_fast_bad_reply" in private_reply_source
     assert "_looks_forbidden_followup_fast_reply" in private_reply_source
     assert "fast_path_forbidden_followup_reply" in private_reply_source
+    assert "or is_low_info_input(fast_target_text)" in private_reply_source
     assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" not in private_reply_source
     assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" not in private_reply_source
     assert "def _is_low_info_guarded_verdict" in inner_voice_source
@@ -1942,6 +1954,12 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "【回复意图包】" in context_block_source
     assert "当前立场：" in context_block_source
     assert "情绪语气：" in context_block_source
+    assert "REPLY_INTENT_LINE_PREFIXES" in context_block_source
+    assert "parts.append((intent_text, 5))" in context_block_source
+    assert "REPLY_INTENT_FIELD_PRIORITY" in context_block_source
+    assert "def _compact_reply_intent_lines" in context_block_source
+    assert "if \"【回复意图包】\" in result:" in context_block_source
+    assert "if \"【回复意图包】\" in line or line.startswith(REPLY_INTENT_LINE_PREFIXES):" in context_block_source
     assert "LEGACY_EXTRA_HEADER_PREFIX_MAP" not in context_block_source
     assert "[当前对象关系]" not in context_block_source
     assert "[当前心理状态]" not in context_block_source
@@ -1972,6 +1990,9 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     )
     assert 'normalized["trust_value"] = self._safe_relation_float(source, "trust_score", "trust_value", "trust"' in runtime_state_source
     assert 'normalized["trust_score"] = source_trust_score' in runtime_state_source
+    assert "def _merge_current_target_relation_snapshot" in runtime_state_source
+    assert "tick_snapshot.to_relation_dict()" in runtime_state_source
+    assert "merged[key] = self._merge_relation_signal" in runtime_state_source
     resource_feedback_source = (
         ROOT / "src/chat/heart_flow/enhanced_modules/loop_resource_feedback_mixin.py"
     ).read_text(encoding="utf-8")
@@ -2053,6 +2074,43 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "上一版只是复述目标内容" in private_retry_prompt
     assert "不允许追问" in private_retry_prompt
     assert "挺好/不错/那挺好/还行" in private_retry_prompt
+    assert DefaultReplyer._fallback_fast_reply_for_bad_output(
+        "fast_path_unsupported_positive_reply",
+        "我的刀盾",
+        allow_followup=False,
+    ) == "先别猜了"
+    assert PrivateReplyer._fallback_fast_reply_for_bad_output(
+        "fast_path_echo_target_reply",
+        "我的刀盾",
+        allow_followup=True,
+    ) == "你指哪块？"
+    assert "message_list_before_fast = get_raw_msg_before_timestamp_with_chat" in group_reply_source
+    assert "chat_talking_prompt_fast" in group_reply_source
+    assert "max_total_tokens=220" in group_reply_source
+    assert "message_list_before_fast = get_raw_msg_before_timestamp_with_chat" in private_reply_source
+    assert "dialogue_prompt=chat_talking_prompt_fast" in private_reply_source
+    assert "改用确定性兜底" in group_reply_source
+    assert "改用确定性兜底" in private_reply_source
+    from src.chat.replyer.context_block_builder import build_reply_context_block
+
+    repeated_context = build_reply_context_block(
+        recent_context="1分钟前, 你的阿哈: 我的刀盾\n刚刚, 你: 先别猜了",
+        relevant_context="",
+        extra_info=(
+            "【回复意图包】\n"
+            "目标内容：我的刀盾\n"
+            "当前立场：对方在重复低信息短句(3次)，像在刷同一句\n"
+            "低信息策略：带情绪短回\n"
+            "允许追问：否\n"
+            "追问限制：禁止追问，禁止问句和问号\n"
+            "按这个意图包自然说一句"
+        ),
+        recent_reply_guard="不要重复你最近说过的短句",
+        max_total_tokens=220,
+    )
+    assert "低信息策略" in repeated_context
+    assert "允许追问：否" in repeated_context
+    assert "追问限制" in repeated_context
     assert "_cond_tasks" not in group_reply_source
     assert "_reply_context_tasks" in group_reply_source
     assert "asyncio.gather(*_reply_context_tasks)" in group_reply_source
@@ -2088,6 +2146,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "low_info_inner_voice_no_continue_topic": True,
         "low_info_inner_voice_intents_cleared": True,
         "direct_fast_intent_blocks_target_echo": True,
+        "direct_fast_min_context_prompt": True,
+        "direct_fast_bad_reply_deterministic_fallback": True,
     }
 
 
@@ -2289,11 +2349,15 @@ def check_recent_repeat_memory_contract() -> Dict[str, Any]:
     assert repeat_signal["latest_matches_repeat"] is True
     assert repeat_signal["low_info_cluster"] is True
     assert repeat_signal["exact_repeat_count"] == 2
+    topic_normalized = repeat_probe._normalize_topic_text("我的刀盾。")
+    repeat_normalized = repeat_probe._normalize_repeat_text("我的刀盾。")
+    assert topic_normalized == repeat_normalized
     return {
         "recent_input_remembered": True,
         "current_message_not_double_counted": True,
         "same_user_repeat_counted": True,
         "single_message_repeat_uses_recent_memory": True,
+        "topic_and_repeat_normalization_aligned": True,
     }
 
 

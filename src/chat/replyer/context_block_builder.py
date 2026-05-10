@@ -40,6 +40,56 @@ LIGHTWEIGHT_EXTRA_INLINE_MARKERS = (
     "你上一句:",
 )
 
+REPLY_INTENT_LINE_PREFIXES = (
+    "回复目标：",
+    "目标内容：",
+    "为什么回：",
+    "当前立场：",
+    "情绪语气：",
+    "关系态度：",
+    "长度策略：",
+    "低信息策略：",
+    "引用策略：",
+    "允许追问：",
+    "心情底色：",
+    "必要参考：",
+    "禁用模式：",
+    "追问限制：",
+    "澄清方式：",
+    "按这个意图包",
+)
+
+REPLY_INTENT_PRIORITY_KEYWORDS = [
+    "回复目标",
+    "目标内容",
+    "当前立场",
+    "情绪语气",
+    "关系态度",
+    "长度策略",
+    "低信息策略",
+    "允许追问",
+    "必要参考",
+    "禁用模式",
+    "追问限制",
+    "澄清方式",
+    "不要",
+    "禁止",
+]
+
+REPLY_INTENT_FIELD_PRIORITY = (
+    "目标内容：",
+    "当前立场：",
+    "情绪语气：",
+    "关系态度：",
+    "长度策略：",
+    "低信息策略：",
+    "允许追问：",
+    "必要参考：",
+    "追问限制：",
+    "澄清方式：",
+    "禁用模式：",
+)
+
 STYLE_GUIDANCE_KEYWORDS = (
     "自然",
     "口语",
@@ -139,9 +189,9 @@ def sanitize_extra_info(extra_info: str, max_tokens: int | None = None) -> str:
             continue
         header = lines[0]
         if header == "【回复意图包】":
-            payload_lines = [line for line in lines[1:] if line.strip()]
+            payload_lines = _select_reply_intent_payload_lines(lines)[1:]
             if payload_lines:
-                kept.append("【回复意图包】\n" + "\n".join(payload_lines[:14]))
+                kept.append("【回复意图包】\n" + "\n".join(payload_lines))
             continue
         for line in lines:
             if line.startswith(LIGHTWEIGHT_EXTRA_PREFIXES) or any(
@@ -174,6 +224,8 @@ def sanitize_extra_info(extra_info: str, max_tokens: int | None = None) -> str:
     result = "\n".join(deduped[: _context_int("max_extra_blocks", 8)])
     current_tokens = estimate_token_count(result)
     if current_tokens > max_tokens:
+        if "【回复意图包】" in result:
+            return _compact_reply_intent_lines(result.splitlines(), max_tokens)
         priority_keywords = ["重要", "关键", "注意", "当前", "问题"]
         result = budget_aware_trim(result, max_tokens, priority_keywords)
     return result
@@ -228,6 +280,70 @@ def _compact_context_text(text: str, max_tokens: int, priority_keywords: List[st
     return "；".join(compact_lines)
 
 
+def _compact_reply_intent_lines(lines: List[str], max_tokens: int) -> str:
+    """意图包字段按语义保底，避免长立场挤掉追问/低信息约束。"""
+    if not lines:
+        return ""
+    by_prefix: dict[str, str] = {}
+    header = ""
+    for raw_line in lines:
+        fragments = [part for part in str(raw_line or "").split("；") if str(part or "").strip()]
+        for fragment in fragments:
+            line = _normalize_context_line(fragment)
+            if not line:
+                continue
+            if line == "【回复意图包】":
+                header = line
+                continue
+            for prefix in REPLY_INTENT_FIELD_PRIORITY:
+                if line.startswith(prefix):
+                    limit = 86
+                    if prefix in {"禁用模式：", "必要参考："}:
+                        limit = 72
+                    elif prefix in {"追问限制：", "澄清方式："}:
+                        limit = 64
+                    by_prefix[prefix] = _compact_context_text(line[:limit], 36, REPLY_INTENT_PRIORITY_KEYWORDS)
+                    break
+    ordered = [header or "【回复意图包】"]
+    for prefix in REPLY_INTENT_FIELD_PRIORITY:
+        value = by_prefix.get(prefix, "")
+        if value:
+            ordered.append(value)
+    result = "；".join(line for line in ordered if line)
+    if estimate_token_count(result) <= max_tokens:
+        return result
+    must_keep = [
+        ordered[0],
+        by_prefix.get("目标内容：", ""),
+        by_prefix.get("当前立场：", ""),
+        by_prefix.get("低信息策略：", ""),
+        by_prefix.get("允许追问：", ""),
+        by_prefix.get("追问限制：", "") or by_prefix.get("澄清方式：", ""),
+    ]
+    result = "；".join(line for line in must_keep if line)
+    if estimate_token_count(result) <= max_tokens:
+        return result
+    return _compact_context_text(result, max_tokens, REPLY_INTENT_PRIORITY_KEYWORDS)
+
+
+def _select_reply_intent_payload_lines(lines: List[str]) -> List[str]:
+    """从完整意图包中按字段优先级挑选关键行。"""
+    selected: List[str] = []
+    header_seen = False
+    for line in lines:
+        fragments = [part for part in str(line or "").split("；") if str(part or "").strip()]
+        for fragment in fragments:
+            payload = str(fragment or "").strip()
+            if payload == "【回复意图包】":
+                header_seen = True
+                continue
+            if payload.startswith(REPLY_INTENT_FIELD_PRIORITY):
+                selected.append(payload)
+    if not header_seen and not selected:
+        return []
+    return ["【回复意图包】", *selected[: len(REPLY_INTENT_FIELD_PRIORITY)]]
+
+
 def _ensure_lightweight_prefix(text: str, default_prefix: str = "补充:") -> str:
     payload = str(text or "").strip()
     if not payload:
@@ -261,8 +377,29 @@ def build_reply_context_block(
         relevant_text = _compact_context_text(relevant_text, relevant_budget, priority_keywords)
         if relevant_text:
             parts.append((f"前情: {relevant_text}", 2))
-    sanitized_extra = sanitize_extra_info(extra_info, max_tokens=int(max_total_tokens * 0.25))
+    extra_budget = int(max_total_tokens * 0.25)
+    if "【回复意图包】" in str(extra_info or ""):
+        extra_budget = max(extra_budget, int(max_total_tokens * 0.55), 96)
+    sanitized_extra = sanitize_extra_info(extra_info, max_tokens=extra_budget)
     if sanitized_extra:
+        intent_lines: List[str] = []
+        other_lines: List[str] = []
+        for raw_line in sanitized_extra.splitlines():
+            line = str(raw_line or "").strip()
+            if not line:
+                continue
+            if "【回复意图包】" in line or line.startswith(REPLY_INTENT_LINE_PREFIXES):
+                intent_lines.append(line)
+            else:
+                other_lines.append(line)
+        if intent_lines:
+            intent_text = _compact_reply_intent_lines(
+                intent_lines,
+                max(96, int(max_total_tokens * 0.55)),
+            )
+            if intent_text:
+                parts.append((intent_text, 5))
+        sanitized_extra = "\n".join(other_lines)
         compact_extra = _compact_context_text(
             sanitized_extra,
             int(max_total_tokens * 0.2),

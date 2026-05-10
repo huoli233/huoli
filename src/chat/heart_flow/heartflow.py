@@ -1,6 +1,7 @@
 import asyncio
 import traceback
 import time as _tm
+import inspect
 from typing import Any, Optional, Dict, List
 
 from src.chat.message_receive.chat_stream import (
@@ -509,17 +510,23 @@ class Heartflow:
 
     def _warm_core_services(self) -> None:
         """提前实例化首轮回复常用模块。"""
+        success_count = 0
+        failed_count = 0
         try:
             from src.core.module_coordinator import discover_modules
 
             discover_modules()
+            success_count += 1
         except Exception as exc:
+            failed_count += 1
             logger.debug(f"[心流] 模块协调预热异常: {exc}")
         try:
             from src.chat.prompts.soul_config_loader import preload
 
             preload()
+            success_count += 1
         except Exception as exc:
+            failed_count += 1
             logger.debug(f"[心流] 灵魂配置预热异常: {exc}")
 
         warmers = []
@@ -649,9 +656,17 @@ class Heartflow:
             logger.debug(f"异常: {_e}")
         for warmer in warmers:
             try:
-                warmer()
+                warmed = warmer()
+                success_count += 1
+                if inspect.isawaitable(warmed):
+                    safe_create_task(
+                        warmed,
+                        name=f"heartflow_core_warm_{getattr(warmer, '__name__', 'module')}",
+                    )
             except Exception as exc:
+                failed_count += 1
                 logger.debug(f"[心流] 预热模块失败: {exc}")
+        logger.info(f"[心流] 核心模块预热完成：成功={success_count} 失败={failed_count}")
 
     async def _handle_quiet_period(self, channel_id: str) -> None:
         """静默巡查触发后仅唤醒频道主链，不再直接派发主动发言。"""

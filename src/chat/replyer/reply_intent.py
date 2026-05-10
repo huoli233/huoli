@@ -29,6 +29,15 @@ UNSUPPORTED_FAST_POSITIVE_REPLIES = (
     "可以",
     "行吧",
     "好吧",
+    "挺不错",
+    "挺不错的",
+    "那不错",
+    "那还行",
+    "也行",
+    "可以啊",
+    "那可以",
+    "挺稳",
+    "挺厉害",
 )
 
 TARGET_ECHO_AVOID_PATTERNS = (
@@ -441,7 +450,18 @@ def relation_to_reply_intent(
         allow = False
         tone = _merge_tone(tone, "别热情，带一点不想猜的感觉")
         length_policy = "一句短话，不能追问，不能照抄"
-        avoid.extend(["刀盾是什么", "是什么", "什么意思", "啥意思", "说清楚", "继续说"])
+        avoid.extend(
+            [
+                "刀盾是什么",
+                "是什么",
+                "什么意思",
+                "啥意思",
+                "说清楚",
+                "继续说",
+                "没看懂",
+                "不太懂",
+            ]
+        )
         repeat_ref = f"重复信号={repeat_reason}" if repeat_reason else "重复信号=同一短句反复出现"
         reference_info = _clean_text(
             "；".join(part for part in (reference_info, repeat_ref, "按复读/低信息处理，不按新话题理解") if part),

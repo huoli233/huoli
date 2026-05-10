@@ -629,6 +629,13 @@ class ProactiveContextPromptMixin:
             if not normalized_latest or not latest_uid:
                 return result
             recorded_repeat_count = self._count_recent_user_repeats(normalized_latest, latest_uid)
+            if recorded_repeat_count < 2:
+                normalized_repeat = self._normalize_repeat_text(latest_text)
+                if normalized_repeat and normalized_repeat != normalized_latest:
+                    recorded_repeat_count = max(
+                        recorded_repeat_count,
+                        self._count_recent_user_repeats(normalized_repeat, latest_uid),
+                    )
             is_low_info = len(normalized_latest) <= 8 or len(latest_text) <= 8
             if recorded_repeat_count < 2 or not is_low_info:
                 return result

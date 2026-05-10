@@ -271,6 +271,68 @@ class RuntimeStateTraceMixin:
             normalized.pop("pressure", None)
         return normalized
 
+    @staticmethod
+    def _merge_relation_signal(base_value: Any, candidate_value: Any) -> float:
+        """关系快照合并时保留更有信号的数值，避免快回拿到旧的弱值。"""
+        try:
+            base_float = float(base_value or 0.0)
+        except (TypeError, ValueError):
+            base_float = 0.0
+        try:
+            candidate_float = float(candidate_value or 0.0)
+        except (TypeError, ValueError):
+            candidate_float = 0.0
+        if abs(candidate_float) > abs(base_float):
+            return candidate_float
+        return base_float
+
+    def _merge_current_target_relation_snapshot(
+        self,
+        relation_snapshot: Optional[Dict[str, Any]],
+        target_user_id: str = "",
+    ) -> Dict[str, Any]:
+        """把当前目标的世界快照/实时情绪合并进关系视图，供回复意图包使用。"""
+        merged = self._normalize_relation_snapshot(relation_snapshot or {})
+        target_uid = str(target_user_id or "").strip()
+        tick_snapshot = getattr(self, "_tick_world_snapshot", None)
+        try:
+            if tick_snapshot is not None:
+                target_user = getattr(tick_snapshot, "target_user", None)
+                snapshot_uid = str(getattr(target_user, "user_id", "") or "").strip()
+                if target_user is not None and (not target_uid or not snapshot_uid or snapshot_uid == target_uid):
+                    snapshot_relation = self._normalize_relation_snapshot(tick_snapshot.to_relation_dict())
+                    for key in (
+                        "social_value",
+                        "trust_value",
+                        "affection",
+                        "annoyance_value",
+                        "psychological_pressure",
+                        "trauma_score",
+                    ):
+                        merged[key] = self._merge_relation_signal(merged.get(key), snapshot_relation.get(key))
+                    for key in (
+                        "custom_label",
+                        "relationship",
+                        "relationship_label",
+                        "personal_impression",
+                        "mood",
+                    ):
+                        value = str(snapshot_relation.get(key, "") or "").strip()
+                        if value and value not in {"普通", "陌生", "陌生人", "未知"}:
+                            merged[key] = value
+                    for key in ("relationship_level", "interaction_count", "attribute_influences"):
+                        value = snapshot_relation.get(key)
+                        if value not in (None, "", {}, []):
+                            merged[key] = value
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 当前目标关系快照合并失败: {exc}")
+        try:
+            merged = self._inject_realtime_emotion(merged)
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 当前目标实时情绪合并失败: {exc}")
+            merged = self._normalize_relation_snapshot(merged)
+        return self._normalize_relation_snapshot(merged)
+
     def _prime_external_proactive_trace(self, source: str, desire_level: Optional[float] = None) -> None:
         """主循环外主动回复也要有独立 trace，避免沿用上一轮旁路/独白状态。"""
         self._reset_decision_trace()

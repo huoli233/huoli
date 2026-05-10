@@ -2002,3 +2002,29 @@
 - 变更需要重启主程序后生效。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T12:36:20+08:00 - Task: 修复直接快回复读、泛评和关系快照断线
+
+### What was done:
+- 复现用户日志里的核心问题：`ReplyIntentPacket` 在 `build_reply_context_block()` 中被压成单行后没有被识别，最终 prompt 只剩最近对话和避免复读，低信息策略、禁止追问、禁用模式被挤掉。
+- 修复上下文构建器：单行/多行 `【回复意图包】` 都按最高优先级保留，并在 token 压缩时保底保留目标内容、当前立场、低信息策略、允许追问、追问限制/澄清方式。
+- 群聊/私聊快回恢复最近 6 条轻量聊天上下文和近期 bot 短句 guard，避免 `我的刀盾`、`在` 这类短句只靠空意图包生成。
+- 群聊/私聊快回增加坏输出重试后的确定性兜底：禁止继续发送复读、泛泛附和、无依据泛评和违规追问。
+- 群聊/私聊快回坏输出识别增加双保险：即使上游意图包缺失低信息标志，只要目标消息本身是低信息短句，也启用复读/泛评/客服话术拦截。
+- 直接快回的关系视图从单纯 `_last_relation_snapshot` 升级为合并当前目标世界快照和实时情绪，避免面板里有好感/信任/压力，但意图包仍拿旧值。
+- 启动预热增加核心模块预热成功/失败日志，并支持 awaitable warmer 后台启动，减少首条用户消息才懒加载核心单例的现象。
+- 更新回归脚本，锁定意图包不被裁剪、重复低信息不追问、坏快回不发送、关系合并进意图包、启动预热日志等契约。
+
+### Testing:
+- `.\.venv\Scripts\python.exe scripts\heartflow_state_regression.py` 通过。
+- `.\.venv\Scripts\python.exe -m py_compile src\chat\replyer\context_block_builder.py src\chat\replyer\reply_intent.py src\chat\replyer\group_generator.py src\chat\replyer\private_generator.py src\chat\heart_flow\enhanced_modules\proactive_reactive_flow_mixin.py src\chat\heart_flow\enhanced_modules\proactive_context_prompt_mixin.py src\chat\heart_flow\enhanced_modules\runtime_state_trace_mixin.py src\chat\heart_flow\heartflow.py scripts\heartflow_state_regression.py` 通过。
+- `.\.venv\Scripts\python.exe -m ruff check ...` 针对本轮相关 9 个文件通过。
+- `.\.venv\Scripts\python.exe -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 LF/CRLF 工作区提示。
+
+### Notes:
+- 这次定位到的直接原因不是“模型心情不好”，而是最终 prompt 契约断线：意图包被压缩后没被识别，关系/重复/追问规则没有稳定进入最终生成。
+- `那挺好` 这类泛评现在在低信息快回中会被拦截；如果重试仍坏，会改用确定性兜底或取消发送。
+- 重复刷同一句时，意图包会禁止追问；首次低信息且非重复时仍允许半句克制澄清，避免只剩敷衍短句。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`，本轮不触碰。
