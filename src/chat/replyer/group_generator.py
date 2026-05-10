@@ -621,6 +621,65 @@ class DefaultReplyer:
         return False
 
     @classmethod
+    def _augment_fast_retry_prompt(cls, prompt: str | List[Message], reason: str, bad_reply: str, target_text: str) -> str | List[Message]:
+        reason_map = {
+            "fast_path_echo_target_reply": "上一版只是复述目标内容，不合格。",
+            "fast_path_generic_ack_reply": "上一版是空泛附和，没有接住这轮意思。",
+            "fast_path_reception_reply": "上一版是接待话术，像客服，不合格。",
+        }
+        directive = (
+            f"{reason_map.get(reason, '上一版快回不合格。')}"
+            f" 不要再输出“{cls._clip_prompt_hint(bad_reply, 32)}”。"
+            f" 目标消息是“{cls._clip_prompt_hint(target_text, 32)}”，"
+            "这次换一个自然短句；可以表达没看懂、让对方说清楚，或冷一点收住，但绝对不要照抄目标。"
+        )
+        if isinstance(prompt, list):
+            builder = MessageBuilder()
+            builder.set_role(RoleType.User)
+            builder.add_text_content(directive)
+            return [*prompt, builder.build()]
+        return f"{prompt}\n\n{directive}"
+
+    def _classify_fast_bad_reply(self, content: str, fast_low_info_context: bool, fast_target_text: str) -> str:
+        if self._looks_reception_fast_reply(content):
+            return "fast_path_reception_reply"
+        if fast_low_info_context and self._looks_generic_ack_fast_reply(content):
+            return "fast_path_generic_ack_reply"
+        if fast_low_info_context and self._looks_echo_target_fast_reply(content, fast_target_text):
+            return "fast_path_echo_target_reply"
+        return ""
+
+    def _log_fast_bad_reply(
+        self,
+        *,
+        prompt: Any,
+        content: str,
+        model_name: str,
+        timing: Optional[Dict[str, Any]],
+        reasoning_content: Optional[str],
+        think_level: int,
+        error: str,
+        log_reply: bool,
+    ) -> None:
+        if not log_reply:
+            return
+        try:
+            PlanReplyLogger.log_reply(
+                chat_id=self.chat_stream.stream_id,
+                prompt=prompt,
+                output=content,
+                processed_output=None,
+                model=model_name,
+                timing=timing,
+                reasoning=reasoning_content,
+                think_level=think_level,
+                error=error,
+                success=False,
+            )
+        except Exception:
+            logger.exception("记录reply日志失败")
+
+    @classmethod
     def _should_drop_prompt_bot_history(cls, text: str) -> bool:
         payload = str(text or "").strip()
         if not payload:
@@ -1268,66 +1327,60 @@ class DefaultReplyer:
                 fast_target_text = ""
                 if fast_path and reply_message is not None:
                     fast_target_text = self._message_text(reply_message)
-                if fast_path and self._looks_reception_fast_reply(content):
-                    logger.warning(f"[fast_path] 生成接待话术，取消发送: {content[:30]}")
-                    if log_reply:
-                        try:
-                            PlanReplyLogger.log_reply(
-                                chat_id=self.chat_stream.stream_id,
-                                prompt=prompt,
-                                output=content,
-                                processed_output=None,
-                                model=model_name,
-                                timing=llm_response.timing,
-                                reasoning=reasoning_content,
-                                think_level=think_level,
-                                error="fast_path_reception_reply",
-                                success=False,
-                            )
-                        except Exception:
-                            logger.exception("记录reply日志失败")
-                    llm_response.content = ""
-                    return False, llm_response
-                if fast_path and fast_low_info_context and self._looks_generic_ack_fast_reply(content):
-                    logger.warning(f"[fast_path] 低信息输入生成泛泛附和，取消发送: {content[:30]}")
-                    if log_reply:
-                        try:
-                            PlanReplyLogger.log_reply(
-                                chat_id=self.chat_stream.stream_id,
-                                prompt=prompt,
-                                output=content,
-                                processed_output=None,
-                                model=model_name,
-                                timing=llm_response.timing,
-                                reasoning=reasoning_content,
-                                think_level=think_level,
-                                error="fast_path_generic_ack_reply",
-                                success=False,
-                            )
-                        except Exception:
-                            logger.exception("记录reply日志失败")
-                    llm_response.content = ""
-                    return False, llm_response
-                if fast_path and fast_low_info_context and self._looks_echo_target_fast_reply(content, fast_target_text):
-                    logger.warning(f"[fast_path] 低信息输入生成原句复读，取消发送: {content[:30]}")
-                    if log_reply:
-                        try:
-                            PlanReplyLogger.log_reply(
-                                chat_id=self.chat_stream.stream_id,
-                                prompt=prompt,
-                                output=content,
-                                processed_output=None,
-                                model=model_name,
-                                timing=llm_response.timing,
-                                reasoning=reasoning_content,
-                                think_level=think_level,
-                                error="fast_path_echo_target_reply",
-                                success=False,
-                            )
-                        except Exception:
-                            logger.exception("记录reply日志失败")
-                    llm_response.content = ""
-                    return False, llm_response
+                bad_fast_reply = self._classify_fast_bad_reply(content, fast_low_info_context, fast_target_text)
+                if fast_path and bad_fast_reply:
+                    logger.warning(f"[fast_path] 生成不合格快回({bad_fast_reply})，准备重试: {content[:30]}")
+                    self._log_fast_bad_reply(
+                        prompt=prompt,
+                        content=content,
+                        model_name=model_name,
+                        timing=llm_response.timing,
+                        reasoning_content=reasoning_content,
+                        think_level=think_level,
+                        error=bad_fast_reply,
+                        log_reply=log_reply,
+                    )
+                    can_retry = fast_path_deadline is None or time.monotonic() < fast_path_deadline
+                    if not can_retry:
+                        logger.warning("[fast_path] 快回预算不足，无法重试不合格回复")
+                        llm_response.content = ""
+                        return False, llm_response
+                    retry_prompt = self._augment_fast_retry_prompt(original_prompt, bad_fast_reply, content, fast_target_text)
+                    retry_content, retry_reasoning, retry_model_name, retry_tool_call = await self.llm_generate_content(retry_prompt)
+                    logger.info(f"[fast_path] 重试生成内容: {retry_content}")
+                    retry_content = self._apply_sleepy_fast_reply_guard(
+                        content=retry_content or "",
+                        extra_info=extra_info,
+                        reply_message=reply_message,
+                    )
+                    retry_bad_reply = self._classify_fast_bad_reply(
+                        retry_content,
+                        fast_low_info_context,
+                        fast_target_text,
+                    )
+                    llm_response.content = retry_content
+                    llm_response.reasoning = retry_reasoning
+                    llm_response.model = retry_model_name
+                    llm_response.tool_calls = retry_tool_call
+                    llm_response.prompt = self._format_messages_for_log(retry_prompt) if isinstance(retry_prompt, list) else retry_prompt
+                    prompt = retry_prompt
+                    if retry_bad_reply:
+                        logger.warning(f"[fast_path] 重试仍不合格({retry_bad_reply})，取消发送: {retry_content[:30]}")
+                        self._log_fast_bad_reply(
+                            prompt=llm_response.prompt,
+                            content=retry_content,
+                            model_name=retry_model_name,
+                            timing=llm_response.timing,
+                            reasoning_content=retry_reasoning,
+                            think_level=think_level,
+                            error=f"{retry_bad_reply}_after_retry",
+                            log_reply=log_reply,
+                        )
+                        llm_response.content = ""
+                        return False, llm_response
+                    content = retry_content
+                    reasoning_content = retry_reasoning
+                    model_name = retry_model_name
                 try:
                     if log_reply:
                         PlanReplyLogger.log_reply(

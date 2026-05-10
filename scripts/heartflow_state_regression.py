@@ -1878,6 +1878,9 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "fast_path_generic_ack_reply" in group_reply_source
     assert "_looks_echo_target_fast_reply" in group_reply_source
     assert "fast_path_echo_target_reply" in group_reply_source
+    assert "_augment_fast_retry_prompt" in group_reply_source
+    assert "重试生成内容" in group_reply_source
+    assert "_classify_fast_bad_reply" in group_reply_source
     assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" not in group_reply_source
     assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" not in group_reply_source
     assert "DefaultReplyer._looks_reception_fast_reply(\"好的，你说。\") is True" not in group_reply_source
@@ -1903,9 +1906,14 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "fast_path_generic_ack_reply" in private_reply_source
     assert "_looks_echo_target_fast_reply" in private_reply_source
     assert "fast_path_echo_target_reply" in private_reply_source
+    assert "_augment_fast_retry_prompt" in private_reply_source
+    assert "私聊重试生成内容" in private_reply_source
+    assert "_classify_fast_bad_reply" in private_reply_source
     assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" not in private_reply_source
     assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" not in private_reply_source
-    assert 'low_info_guarded = "low_info_guard" in' in inner_voice_source
+    assert "def _is_low_info_guarded_verdict" in inner_voice_source
+    assert "verdict.intents = []" in inner_voice_source
+    assert "low_info_guarded = self._is_low_info_guarded_verdict(verdict)" in inner_voice_source
     assert "vague_low_info_thread = any(" in inner_voice_source
     assert "and not low_info_guarded" in inner_voice_source
     assert "and not vague_low_info_thread" in inner_voice_source
@@ -1928,6 +1936,9 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "\"好的，你说\"" in reply_intent_source
     assert "\"嗯，是啊\"" in reply_intent_source
     assert "不要照抄目标内容" in reply_intent_source
+    assert "def _first_nonzero_float" in reply_intent_source
+    assert "relation.get(\"trust_score\")" in reply_intent_source
+    assert "relation.get(\"relationship_label\")" in reply_intent_source
     assert "low_info_strategy = \"带情绪短回\"" in reply_intent_source
     assert "def _pressure_signal" in reply_intent_source
     assert "LAYERED_TONE_TRANSLATIONS" in reply_intent_source
@@ -1960,6 +1971,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert PrivateReplyer._looks_echo_target_fast_reply("我的刀盾", "我的刀盾") is True
     assert PrivateReplyer._looks_echo_target_fast_reply("在", "在") is True
     assert PrivateReplyer._looks_echo_target_fast_reply("没看懂", "我的刀盾") is False
+    assert "上一版只是复述目标内容" in DefaultReplyer._augment_fast_retry_prompt("原prompt", "fast_path_echo_target_reply", "我的刀盾？", "我的刀盾")
+    assert "上一版只是复述目标内容" in PrivateReplyer._augment_fast_retry_prompt("原prompt", "fast_path_echo_target_reply", "我的刀盾？", "我的刀盾")
     assert "_cond_tasks" not in group_reply_source
     assert "_reply_context_tasks" in group_reply_source
     assert "asyncio.gather(*_reply_context_tasks)" in group_reply_source
@@ -1985,8 +1998,10 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "direct_fast_reception_reply_blocked": True,
         "direct_fast_generic_ack_reply_blocked": True,
         "direct_fast_echo_target_reply_blocked": True,
+        "direct_fast_bad_reply_retried": True,
         "direct_fast_night_hint_realtime": True,
         "low_info_inner_voice_no_continue_topic": True,
+        "low_info_inner_voice_intents_cleared": True,
         "direct_fast_intent_blocks_target_echo": True,
     }
 
@@ -2077,6 +2092,23 @@ def check_reply_intent_packet_contract() -> Dict[str, Any]:
     assert "好的，你说" in block
     assert repeated.allow_followup is False
 
+    trust_score_priority = relation_to_reply_intent(
+        target="测试用户",
+        target_text="我的刀盾",
+        trigger_reason="强制触发进入回复",
+        relation_view={
+            "affection": 5.0,
+            "trust_value": 1.0,
+            "trust_score": 3.9,
+            "relationship_label": "有些熟悉",
+            "annoyance_value": 0,
+            "psychological_pressure": 6.9,
+        },
+        fast_path=True,
+    )
+    assert "信任3.9" in trust_score_priority.relation_attitude
+    assert "有些熟悉" in trust_score_priority.relation_attitude
+
     return {
         "low_info_light_question": low_info.low_info_strategy,
         "annoyed_short_reply": annoyed.low_info_strategy,
@@ -2085,6 +2117,7 @@ def check_reply_intent_packet_contract() -> Dict[str, Any]:
         "layered_tense_mode": layered_tense.allow_followup is False,
         "sleepy_tone": True,
         "generic_ack_blocked": True,
+        "trust_score_priority": True,
     }
 
 

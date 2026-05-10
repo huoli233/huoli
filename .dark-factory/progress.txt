@@ -855,6 +855,30 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`，本轮提交不会纳入这些文件。
 
+## 2026-05-10T11:13:20+08:00 - Task: 修复直接快回拦截后不重试
+
+### What was done:
+- 根据用户 11:02 日志确认：上一轮已经成功拦截 `我的刀盾？` 这类目标原句复读，没有继续发坏回复；但拦截后直接返回生成失败，导致本轮未回复。
+- 群聊和私聊 fast_path 增加一次预算内重试：命中接待话术、泛泛附和或原句复读时，先记录坏草稿，再把“上一版不合格”的约束追加到同一个统一意图包 prompt 内重跑一次。
+- 重试仍然命中坏输出时才取消发送，避免本地模板兜底和旧兼容双轨。
+- `ReplyIntentPacket` 关系态度修正信任字段优先级：优先读取 `trust_score`，再读旧 `trust_value/trust`，避免日志中 `信任=3.9` 进入意图包后变成 `信任1.0`。
+- `ReplyIntentPacket` 关系标签补充 `relationship_label/relationship_stage`，避免“有些熟悉”掉成默认“普通”。
+- `inner_voice` 对 `low_info_guard` 或“信息太少/没说清楚/看不出”类保护性独白清空行为意图，日志里的 `intents=1` 会变成 `intents=0`，不再进意图池。
+- 更新 `scripts/heartflow_state_regression.py`，锁定快回坏输出重试、低信息独白清空意图、信任优先级三类合约。
+
+### Testing:
+- `$env:PYTHONDONTWRITEBYTECODE='1'; .\.venv\Scripts\python.exe -m py_compile ...` 通过。
+- `.\.venv\Scripts\python.exe -m ruff check ...` 通过。
+- `$env:PYTHONDONTWRITEBYTECODE='1'; .\.venv\Scripts\python.exe scripts/heartflow_state_regression.py` 通过，新增 `direct_fast_bad_reply_retried=true`、`low_info_inner_voice_intents_cleared=true`、`trust_score_priority=true`。
+- `$env:PYTHONDONTWRITEBYTECODE='1'; $env:PYTHONPYCACHEPREFIX=Join-Path $env:TEMP 'huoli_codex_compileall_fast_retry'; .\.venv\Scripts\python.exe -m compileall -q src scripts` 通过。
+- `git diff --check -- ...` 通过，仅有既有 LF/CRLF 工作区提示。
+
+### Notes:
+- 这轮修复的是“拦截后不重试导致 no_reply”，不是把坏回复替换成本地固定话术。
+- 如果重试仍坏，仍会取消发送，避免发出复读/客服腔/空泛附和。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`，本轮提交不会纳入这些文件。
+
 ## 2026-05-09T15:44:00+08:00 - Task: 移除回复生成失败本地兜底发送
 
 ### What was done:

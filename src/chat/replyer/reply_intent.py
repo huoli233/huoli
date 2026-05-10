@@ -65,6 +65,14 @@ def _safe_float(value: Any, default: float = 0.0) -> float:
         return default
 
 
+def _first_nonzero_float(*values: Any, default: float = 0.0) -> float:
+    for value in values:
+        parsed = _safe_float(value, default)
+        if abs(parsed) >= 1e-6:
+            return parsed
+    return default
+
+
 def _as_text_list(value: Any) -> List[str]:
     if value is None:
         return []
@@ -259,7 +267,11 @@ def relation_to_reply_intent(
     relation = relation_view or {}
     mode = response_mode or {}
     affection = _safe_float(relation.get("affection"))
-    trust = _safe_float(relation.get("trust_value", relation.get("trust_score")))
+    trust = _first_nonzero_float(
+        relation.get("trust_score"),
+        relation.get("trust_value"),
+        relation.get("trust"),
+    )
     annoyance = _safe_float(relation.get("annoyance_value", relation.get("annoyance")))
     pressure = _safe_float(relation.get("psychological_pressure", relation.get("pressure")))
     trauma = _safe_float(relation.get("trauma_score"))
@@ -267,6 +279,8 @@ def relation_to_reply_intent(
     relation_label = _clean_text(
         relation.get("personal_impression")
         or relation.get("relationship")
+        or relation.get("relationship_label")
+        or relation.get("relationship_stage")
         or relation.get("legacy_relationship_label")
         or relation.get("custom_label")
         or "普通"

@@ -405,6 +405,8 @@ class SelfDialogueEngine:
                 raw_text,
                 next_action=verdict.next_action,
             )
+            if self._is_low_info_guarded_verdict(verdict):
+                verdict.intents = []
             # 挂载最强未完成意图
             verdict.dominant_unfinished_intent = dominant_intent_data
             # 更新跨轮持久状态
@@ -914,6 +916,22 @@ class SelfDialogueEngine:
             verdict.thinking = self._compress_thought(normalized)
             verdict.thinking_source = f"{verdict.thinking_source or 'unknown'}+single_speaker_guard"
         return verdict
+
+    @staticmethod
+    def _is_low_info_guarded_verdict(verdict: VoiceVerdict) -> bool:
+        source = str(getattr(verdict, "thinking_source", "") or "")
+        if "low_info_guard" in source:
+            return True
+        thinking = str(getattr(verdict, "thinking", "") or "")
+        return any(
+            marker in thinking
+            for marker in (
+                "信息太少",
+                "没说清楚",
+                "看不出",
+                "先按没说清楚处理",
+            )
+        )
 
     # ---- 情感分析 ----
 
@@ -1609,7 +1627,7 @@ class SelfDialogueEngine:
         # 检测未完成话头 → 自动注入意图池实现跨轮回收
         thinking_text = str(verdict.thinking or "")
         thinking_lower = thinking_text.lower()
-        low_info_guarded = "low_info_guard" in str(getattr(verdict, "thinking_source", "") or "")
+        low_info_guarded = self._is_low_info_guarded_verdict(verdict)
         vague_low_info_thread = any(
             marker in thinking_text
             for marker in (
