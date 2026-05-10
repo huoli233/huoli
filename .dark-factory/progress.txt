@@ -1667,6 +1667,30 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
 
+## 2026-05-10T08:36:47+08:00 - Task: 对齐直接快回与模型响应超时预算
+
+### What was done:
+- 继续排查用户新日志中的 `direct_fast_reply_generation_timeout`：本轮已经进入 LLM 等待阶段，但直接快回外层只给 8 秒，而模型响应层 `response_request_timeout_seconds` 是 18 秒，导致外层先取消 Gemini 请求。
+- 新增共享运行时预算函数：读取模型响应层预算，将直接快回生成预算对齐到 `模型响应预算 + 2s`，并受强制回复预算上限约束。
+- 直接快回整段外层超时改为基于有效生成预算计算，不再固定 `min(15s, 配置+7s)`，避免外层整体超时又早于生成预算。
+- 将当前配置与模板中的 `heartfc_direct_fast_reply_generation_timeout_seconds` 从 8 秒调整为 20 秒，和当前 GeminiProxy 响应预算匹配。
+- 更新心流回归契约，锁定直接快回预算必须覆盖模型响应层预算。
+
+### Testing:
+- `uv run ruff check src\chat\heart_flow\enhanced_modules\shared_runtime.py src\chat\heart_flow\enhanced_modules\proactive_reactive_flow_mixin.py src\chat\heart_flow\enhanced_modules\loop_main_driver_mixin.py scripts\heartflow_state_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新增 `direct_fast_budget_matches_model_timeout=true`。
+- `uv run python scripts\config_profile_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+- 本地预算探针结果：`model_response_timeout=18.0`、`direct_fast_generation_timeout=20.0`、`direct_fast_total_timeout=27.0`。
+
+### Notes:
+- 这次新日志说明上一轮已经解决“LLM 前预算耗尽”，现在失败点变成“LLM 请求被 8 秒外层超时提前取消”。
+- 修复后如果 Gemini 在 18 秒响应预算内返回，心流不会再在 8 秒处取消；如果 18 秒后仍无响应，会交给模型层记录真实请求超时。
+- 变更需要重启主程序后生效。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
 ## 2026-05-10T08:22:05+08:00 - Task: 优化心流状态栏困倦显示
 
 ### What was done:

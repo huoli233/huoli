@@ -205,6 +205,35 @@ def _rt_float(key: str, default: Any = _RT_MISSING) -> float:
         return 0.0
 
 
+def _model_response_timeout_budget(default: float = 18.0) -> float:
+    """读取模型响应层的实际超时预算，用于避免上层提前取消。"""
+    try:
+        from src.config.core_config_engine import get_core_config
+
+        values = get_core_config().resolve_module_view("model_routing").values
+        cap = float(values.get("response_request_timeout_seconds", default) or default)
+        floor = float(values.get("response_request_timeout_floor_seconds", 5.0) or 5.0)
+        return max(floor, cap)
+    except Exception as exc:
+        logger.debug(f"读取模型响应超时预算失败: {exc}")
+        return float(default)
+
+
+def _direct_fast_reply_generation_timeout() -> float:
+    """直接快回生成预算必须覆盖模型响应层预算，否则会在 LLM 返回前被上层取消。"""
+    configured = max(0.5, _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds", 20.0))
+    model_budget = _model_response_timeout_budget()
+    force_budget = max(configured, _rt_float("heartfc_force_reply_generation_timeout_seconds", 35.0))
+    return min(force_budget, max(configured, model_budget + 2.0))
+
+
+def _direct_fast_reply_total_timeout() -> float:
+    """直接快回整段预算，给生成前轻量构建和取消传播留少量余量。"""
+    generation_timeout = _direct_fast_reply_generation_timeout()
+    force_budget = max(generation_timeout, _rt_float("heartfc_force_reply_generation_timeout_seconds", 35.0))
+    return max(5.0, min(force_budget + 5.0, generation_timeout + 7.0))
+
+
 def _rt_int(key: str, default: Any = _RT_MISSING) -> int:
     """从 runtime_tuning 读取整数参数，失败时返回默认值。"""
     try:

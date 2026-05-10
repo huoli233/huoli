@@ -1700,10 +1700,11 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
     private_reply_source = (ROOT / "src/chat/replyer/private_generator.py").read_text(encoding="utf-8")
     tool_executor_source = (ROOT / "src/plugin_system/core/tool_use.py").read_text(encoding="utf-8")
+    shared_runtime_source = (ROOT / "src/chat/heart_flow/enhanced_modules/shared_runtime.py").read_text(encoding="utf-8")
     core_config_source = (ROOT / "config/core_config.toml").read_text(encoding="utf-8")
     core_template_source = (ROOT / "template/core_config_template.toml").read_text(encoding="utf-8")
     assert "heartfc_force_reply_generation_timeout_seconds" in flow_source
-    assert "heartfc_direct_fast_reply_generation_timeout_seconds" in flow_source
+    assert "heartfc_direct_fast_reply_generation_timeout_seconds" in shared_runtime_source
     assert "tool_executor_llm_timeout_seconds" in tool_executor_source
     assert "tool_executor_llm_timeout_seconds" in core_config_source
     assert "tool_executor_llm_timeout_seconds" in core_template_source
@@ -1755,8 +1756,11 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "_queue_direct_fastlane_inner_state_refresh" in loop_source
     assert "回复成功后后台补感知/独白已排队" in loop_source
     assert "self._refresh_direct_fastlane_inner_state(decision_messages, ambient_info, now)" not in loop_source
-    assert "_voice_reply_timeout = max(" in loop_source
-    assert "min(15.0, _rt_float(\"heartfc_direct_fast_reply_generation_timeout_seconds\") + 7.0)" in loop_source
+    assert "_voice_reply_timeout = _direct_fast_reply_total_timeout()" in loop_source
+    assert "_direct_fast_reply_generation_timeout" in flow_source
+    assert "def _model_response_timeout_budget" in shared_runtime_source
+    assert "heartfc_direct_fast_reply_generation_timeout_seconds = 20.0" in core_config_source
+    assert "heartfc_direct_fast_reply_generation_timeout_seconds = 20.0" in core_template_source
     assert "direct_fast_reply_total_timeout" in loop_source
     assert "直接快回整体超时" in loop_source
     assert "direct_fast_deadline = time.monotonic() + direct_fast_timeout" in flow_source
@@ -1840,6 +1844,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "direct_fast_soul_state_uses_cache": True,
         "direct_fast_budget_starts_at_generation": True,
         "direct_fast_temp_record_skipped": True,
+        "direct_fast_budget_matches_model_timeout": True,
     }
 
 

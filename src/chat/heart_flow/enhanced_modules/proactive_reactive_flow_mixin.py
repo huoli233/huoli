@@ -29,6 +29,7 @@ from src.chat.heart_flow.enhanced_modules.shared_runtime import (
     _rt_int,
     _rt_float,
     _rt_str_list,
+    _direct_fast_reply_generation_timeout,
     _parallel_stage_timeout,
     _llm_upgrade_timeout,
     _TICK_FLOOR_SEC,
@@ -154,7 +155,7 @@ class ProactiveReactiveFlowMixin:
             direct_fast_timeout: Optional[float] = None
             direct_fast_deadline: Optional[float] = None
             if direct_fast_reply_generation:
-                direct_fast_timeout = max(0.5, _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds"))
+                direct_fast_timeout = _direct_fast_reply_generation_timeout()
             else:
                 target_message = self._select_preferred_reply_message(target_message, list(incoming_batch[-10:]))
             if target_message is None:
@@ -344,7 +345,7 @@ class ProactiveReactiveFlowMixin:
             force_reply_timeout = _rt_float("heartfc_force_reply_generation_timeout_seconds")
             if direct_fast_reply_generation:
                 if direct_fast_timeout is None:
-                    direct_fast_timeout = max(0.5, _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds"))
+                    direct_fast_timeout = _direct_fast_reply_generation_timeout()
                 direct_fast_deadline = time.monotonic() + direct_fast_timeout
                 _remaining_fast_budget = max(0.0, direct_fast_deadline - time.monotonic())
                 if _remaining_fast_budget <= 0.0:
