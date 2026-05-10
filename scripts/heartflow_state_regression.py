@@ -1540,7 +1540,9 @@ def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     create_block = source[source.index("async def _create_chat_instance") : source.index("    # ---- 清理 ----")]
     assert "self._warm_core_services()" in startup_block
     assert "self._schedule_startup_warmup()" in startup_block
-    assert "get_chat_manager().streams.values()" in warmup_block
+    assert "chat_manager = get_chat_manager()" in warmup_block
+    assert "await chat_manager.load_all_streams()" in warmup_block
+    assert "chat_manager.streams.values()" in warmup_block
     assert "startup_all" in warmup_block
     assert "prewarm_chat(stream.stream_id" in warmup_block
     assert "启动频道预热完成" in warmup_block
@@ -1551,6 +1553,11 @@ def check_heartflow_startup_no_channel_prewarm_contract() -> Dict[str, Any]:
     assert "get_perception_generator" in source
     assert "get_bot_identity_manager" in source
     assert "get_group_persona_manager" in source
+    assert "get_active_user_manager" in source
+    assert "get_self_awareness" in source
+    assert "def _prebind_stream_context" in source
+    assert "bind_stream_context(str(chat_id))" in source
+    assert "self._prebind_stream_context(chat_id)" in create_block
     assert "回复发送前耗时" in loop_source
     assert "结算收尾耗时" in loop_source
     assert "启动频道运行实例" in create_block
@@ -1882,6 +1889,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "fast_path_reception_reply" in group_reply_source
     assert "_looks_generic_ack_fast_reply" in group_reply_source
     assert "fast_path_generic_ack_reply" in group_reply_source
+    assert "_looks_unsupported_positive_fast_reply" in group_reply_source
+    assert "fast_path_unsupported_positive_reply" in group_reply_source
     assert "_looks_echo_target_fast_reply" in group_reply_source
     assert "fast_path_echo_target_reply" in group_reply_source
     assert "_augment_fast_retry_prompt" in group_reply_source
@@ -1912,6 +1921,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "fast_path_reception_reply" in private_reply_source
     assert "_looks_generic_ack_fast_reply" in private_reply_source
     assert "fast_path_generic_ack_reply" in private_reply_source
+    assert "_looks_unsupported_positive_fast_reply" in private_reply_source
+    assert "fast_path_unsupported_positive_reply" in private_reply_source
     assert "_looks_echo_target_fast_reply" in private_reply_source
     assert "fast_path_echo_target_reply" in private_reply_source
     assert "_augment_fast_retry_prompt" in private_reply_source
@@ -1986,6 +1997,10 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert DefaultReplyer._looks_generic_ack_fast_reply("对啊") is True
     assert DefaultReplyer._looks_generic_ack_fast_reply("确实") is True
     assert DefaultReplyer._looks_generic_ack_fast_reply("有点没看懂") is False
+    assert DefaultReplyer._looks_unsupported_positive_fast_reply("那挺好。") is True
+    assert DefaultReplyer._looks_unsupported_positive_fast_reply("挺好") is True
+    assert DefaultReplyer._looks_unsupported_positive_fast_reply("不错啊") is True
+    assert DefaultReplyer._looks_unsupported_positive_fast_reply("有点没看懂") is False
     assert DefaultReplyer._looks_echo_target_fast_reply("我的刀盾", "我的刀盾") is True
     assert DefaultReplyer._looks_echo_target_fast_reply("在", "在") is True
     assert DefaultReplyer._looks_echo_target_fast_reply("没看懂", "我的刀盾") is False
@@ -1994,6 +2009,9 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert PrivateReplyer._looks_generic_ack_fast_reply("嗯，是啊。") is True
     assert PrivateReplyer._looks_generic_ack_fast_reply("嗯嗯") is True
     assert PrivateReplyer._looks_generic_ack_fast_reply("啥意思") is False
+    assert PrivateReplyer._looks_unsupported_positive_fast_reply("那挺好。") is True
+    assert PrivateReplyer._looks_unsupported_positive_fast_reply("还行") is True
+    assert PrivateReplyer._looks_unsupported_positive_fast_reply("没看懂") is False
     assert PrivateReplyer._looks_echo_target_fast_reply("我的刀盾", "我的刀盾") is True
     assert PrivateReplyer._looks_echo_target_fast_reply("在", "在") is True
     assert PrivateReplyer._looks_echo_target_fast_reply("没看懂", "我的刀盾") is False
@@ -2017,8 +2035,10 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     )
     assert "上一版只是复述目标内容" in group_retry_prompt
     assert "不允许追问" in group_retry_prompt
+    assert "挺好/不错/那挺好/还行" in group_retry_prompt
     assert "上一版只是复述目标内容" in private_retry_prompt
     assert "不允许追问" in private_retry_prompt
+    assert "挺好/不错/那挺好/还行" in private_retry_prompt
     assert "_cond_tasks" not in group_reply_source
     assert "_reply_context_tasks" in group_reply_source
     assert "asyncio.gather(*_reply_context_tasks)" in group_reply_source
@@ -2043,6 +2063,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "reply_context_legacy_blocks_removed": True,
         "direct_fast_reception_reply_blocked": True,
         "direct_fast_generic_ack_reply_blocked": True,
+        "direct_fast_unsupported_positive_reply_blocked": True,
         "direct_fast_echo_target_reply_blocked": True,
         "direct_fast_bad_reply_retried": True,
         "direct_fast_forbidden_followup_blocked": True,

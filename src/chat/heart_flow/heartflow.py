@@ -257,6 +257,16 @@ class Heartflow:
             logger.debug(f"[心流] 触发聊天预热 {chat_id}: {reason}")
         return task
 
+    @staticmethod
+    def _prebind_stream_context(chat_id: Any) -> None:
+        """提前注册流上下文，避免首轮回复才初始化并发守卫。"""
+        try:
+            from src.llm_models.utils_model import bind_stream_context
+
+            bind_stream_context(str(chat_id))
+        except Exception as exc:
+            logger.debug(f"[心流] 流上下文预绑定失败 {chat_id}: {exc}")
+
     async def _create_chat_instance(
         self,
         chat_id: Any,
@@ -287,6 +297,7 @@ class Heartflow:
                 group_id=getattr(chat_stream.group_info, "group_id", None),
             ):
                 raise ValueError(f"拒绝为 WebUI 内部管理连接创建心流实例: {chat_id}")
+            self._prebind_stream_context(chat_id)
             if chat_stream.group_info:
                 new_chat = EnhancedHeartFChatting(chat_id=chat_id)
             else:
@@ -459,9 +470,14 @@ class Heartflow:
         """后台预热核心模块，并启动数据库里已存在的真实频道运行实例。"""
         await asyncio.sleep(0.2)
         self._warm_core_services()
+        chat_manager = get_chat_manager()
+        try:
+            await chat_manager.load_all_streams()
+        except Exception as exc:
+            logger.warning(f"[心流] 启动频道预热加载历史聊天流失败: {exc}")
         streams = [
             stream
-            for stream in list(get_chat_manager().streams.values())
+            for stream in list(chat_manager.streams.values())
             if not self._should_skip_prewarm(stream, reason="startup_all")
         ]
         if not streams:
@@ -573,6 +589,18 @@ class Heartflow:
             )
 
             warmers.append(get_psychological_core)
+        except Exception as _e:
+            logger.debug(f"异常: {_e}")
+        try:
+            from src.modules.active_user_manager import get_active_user_manager
+
+            warmers.append(get_active_user_manager)
+        except Exception as _e:
+            logger.debug(f"异常: {_e}")
+        try:
+            from src.modules.recall.self_awareness import get_self_awareness
+
+            warmers.append(get_self_awareness)
         except Exception as _e:
             logger.debug(f"异常: {_e}")
         try:

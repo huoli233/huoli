@@ -596,6 +596,40 @@ class DefaultReplyer:
         )
 
     @classmethod
+    def _looks_unsupported_positive_fast_reply(cls, text: str) -> bool:
+        payload = str(text or "").strip()
+        if not payload:
+            return False
+        normalized = cls._normalize_repeat_guard_text(payload)
+        if not normalized:
+            return False
+        exact_bad = {
+            "那挺好",
+            "挺好",
+            "挺好的",
+            "挺不错",
+            "挺不错的",
+            "那不错",
+            "不错",
+            "不错啊",
+            "还行",
+            "那还行",
+            "也行",
+            "可以",
+            "可以啊",
+            "那可以",
+            "行吧",
+            "好吧",
+            "挺可以",
+            "挺稳",
+            "挺厉害",
+        }
+        if normalized in exact_bad:
+            return True
+        positive_markers = ("挺好", "不错", "还行", "可以", "挺稳", "挺厉害")
+        return len(normalized) <= 8 and any(marker in normalized for marker in positive_markers)
+
+    @classmethod
     def _looks_echo_target_fast_reply(cls, reply_text: str, target_text: str) -> bool:
         reply = cls._normalize_repeat_guard_text(reply_text)
         target = cls._normalize_repeat_guard_text(target_text)
@@ -643,11 +677,13 @@ class DefaultReplyer:
         reason_map = {
             "fast_path_echo_target_reply": "上一版只是复述目标内容，不合格。",
             "fast_path_generic_ack_reply": "上一版是空泛附和，没有接住这轮意思。",
+            "fast_path_unsupported_positive_reply": "上一版在没有依据时做了正向评价，不合格。",
             "fast_path_reception_reply": "上一版是接待话术，像客服，不合格。",
             "fast_path_forbidden_followup_reply": "上一版变成追问了，但本轮意图不允许追问。",
         }
         followup_rule = (
-            " 不允许追问：不要问“是什么/怎么/啥意思”，不要加问号，只给短态度或短判断。"
+            " 不允许追问：不要问“是什么/怎么/啥意思”，不要加问号；也不要评价“挺好/不错/那挺好/还行”，"
+            "只表达没接到、先放着或不往下猜。"
             if not allow_followup
             else " 可以很轻地问半句，但仍然不能照抄目标。"
         )
@@ -675,6 +711,8 @@ class DefaultReplyer:
             return "fast_path_reception_reply"
         if fast_low_info_context and self._looks_forbidden_followup_fast_reply(content, allow_followup):
             return "fast_path_forbidden_followup_reply"
+        if fast_low_info_context and self._looks_unsupported_positive_fast_reply(content):
+            return "fast_path_unsupported_positive_reply"
         if fast_low_info_context and self._looks_generic_ack_fast_reply(content):
             return "fast_path_generic_ack_reply"
         if fast_low_info_context and self._looks_echo_target_fast_reply(content, fast_target_text):
@@ -813,6 +851,7 @@ class DefaultReplyer:
             "不要说“没活了”“找茬”“挑衅”“阴阳怪气”，这些属于无证据脑补。"
             "如果已经是重复短句，不要机械说“又来这句”或“没反应过来”，换成更自然的一句。"
             "不要回“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类没接住信息的泛泛附和。"
+            "也不要在没依据时评价“那挺好”“挺好”“不错”“还行”。"
         )
 
     @classmethod
@@ -820,7 +859,7 @@ class DefaultReplyer:
         return (
             "按主人格自然口语说，别像脚本。"
             "不要复读、照抄、同音改写原句，也别把对方词尾改成我/你。"
-            "禁回: 好的你说、你说、继续说、收到、请问、当然、是啊、对啊、确实、嗯嗯。"
+            "禁回: 好的你说、你说、继续说、收到、请问、当然、是啊、对啊、确实、嗯嗯、那挺好、挺好、不错、还行。"
         )
 
     @classmethod
