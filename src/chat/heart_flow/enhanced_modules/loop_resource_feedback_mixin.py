@@ -1275,17 +1275,16 @@ class LoopResourceFeedbackMixin:
         except Exception:
             _energy = "?"
         _np = getattr(self, "_cached_night_phase", None)
-        _np_label = "清醒"
+        _body_status_label = "清醒"
         if _np:
-            _np_label = _np.label() if hasattr(_np, "label") else str(_np)
+            _body_status_label = _np.label() if hasattr(_np, "label") else str(_np)
         _sw_info = getattr(self, "_night_soft_wake_info", None)
         if _sw_info and isinstance(_sw_info, dict):
             _sw_action = _sw_info.get("action", "")
             if _sw_action in ("soft_wake", "grumpy_glance"):
-                _sw_mood = _sw_info.get("mood", "")
-                _np_label = f"😴迷糊({(_sw_mood[:4] if _sw_mood else '刚醒')})"
+                _body_status_label = "😴刚醒"
             elif _sw_action == "full_wake":
-                _np_label = f"🌙夜醒({_sw_info.get('mood', '清醒')[:4]})"
+                _body_status_label = "🌙夜醒"
         else:
             try:
                 from src.core.night_cycle_system import get_night_cycle
@@ -1300,43 +1299,51 @@ class LoopResourceFeedbackMixin:
                 if _half > 0.2 or _daily_fatigue_val > 25 or _drowsy_val > 15:
                     _hour_now = datetime.datetime.now().hour
                     if _half > 0.6 or _daily_fatigue_val > 70:
-                        _np_label = f"😵💫极疲(疲{_daily_fatigue_val:.0f}%困{_drowsy_val:.0f})"
-                    elif _half > 0.35 or _daily_fatigue_val > 45 or (1 <= _hour_now < 7 and _daily_fatigue_val > 30):
-                        _np_label = f"😴半醒(疲{_daily_fatigue_val:.0f}%压{_pressure_val:.0f})"
-                    elif _drowsy_val > 30 or (1 <= _hour_now < 6 and _daily_fatigue_val > 20):
-                        _np_label = f"😪困倦(D{_drowsy_val:.0f}P{_pressure_val:.0f})"
+                        _body_status_label = "😵很累"
+                    elif _half > 0.35 or _daily_fatigue_val > 55 or _pressure_val > 45:
+                        _body_status_label = "😴半醒"
+                    elif _drowsy_val >= 45 or (1 <= _hour_now < 6 and _daily_fatigue_val > 20):
+                        _body_status_label = "😪有点困"
                     elif 1 <= _hour_now < 7:
-                        _np_label = f"⚡夜深{_hour_now}点"
+                        _body_status_label = "🌙夜深"
+                    elif 7 <= _hour_now < 10 and (_drowsy_val > 25 or _daily_fatigue_val > 25 or _reserve_val < 35):
+                        _body_status_label = "🙂刚醒"
                     else:
-                        _np_label = f"⚡低能(疲{_daily_fatigue_val:.0f}%储{_reserve_val:.0f})"
+                        _body_status_label = "清醒"
             except Exception as _exc:
                 logger.debug(f"非关键异常: {_exc}")
         _hour = datetime.datetime.now().hour
         _is_deep_night = 0 <= _hour < 6 or _hour >= 23
-        _is_early_morning = 6 <= _hour < 9
         if _is_deep_night:
-            _time_icon = "🌙"
-        elif _is_early_morning:
-            _time_icon = "🌅"
+            _time_period_label = "🌙深夜"
+        elif 6 <= _hour < 8:
+            _time_period_label = "🌅清晨"
+        elif 8 <= _hour < 11:
+            _time_period_label = "🌅上午"
+        elif 11 <= _hour < 13:
+            _time_period_label = "☀️中午"
+        elif 13 <= _hour < 18:
+            _time_period_label = "☀️下午"
         else:
-            _time_icon = "☀️"
+            _time_period_label = "🌙晚上"
         try:
             _snap = self._resolve_relation_view()
             _mood_val = float(_snap.get("mood_value", 0.5) or 0.5)
             _ann_val = float(_snap.get("annoyance_value", 0) or 0)
             if _ann_val >= 50:
-                _mood_icon = "😤"
+                _mood_label = "😤烦躁"
             elif _ann_val >= 25:
-                _mood_icon = "😒"
+                _mood_label = "😒不爽"
             elif _mood_val < 0.3:
-                _mood_icon = "😐"
+                _mood_label = "😐低落"
             elif _mood_val > 0.7:
-                _mood_icon = "😊"
+                _mood_label = "😊轻松"
             else:
-                _mood_icon = "😌"
+                _mood_label = "😌平静"
         except Exception:
-            _mood_icon = "😌"
-        return f"🔋{_energy} | {_mood_icon}{_np_label} | 👁扫描 | 👀观察 | {_time_icon}{_np_label} | 🛡️安全"
+            _mood_label = "😌平静"
+        _current_state_label = _body_status_label if _body_status_label != "清醒" else _mood_label
+        return f"🔋{_energy} | {_current_state_label} | 👁扫描 | 👀观察 | {_time_period_label} | 🛡️安全"
 
     async def _emit_target_profile(self, target_uid: str) -> None:
         """第二层：当前对象印象面板 - 对当前交互目标的心理关系快照

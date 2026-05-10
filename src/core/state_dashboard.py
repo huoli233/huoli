@@ -109,7 +109,7 @@ class InnerMoodState(Enum):
             "bored": "有些无聊",
             "restless": "躁动不安",
             "annoyed": "有点烦躁",
-            "drowsy": "困倦昏沉",
+            "drowsy": "有点困",
             "irritated": "易怒敏感",
             "overwhelmed": "不堪重负",
         }.get(self.value, "")

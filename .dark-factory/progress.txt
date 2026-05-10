@@ -1642,3 +1642,25 @@
 - 预期效果：直接快回应在灵魂摘要前置阶段明显缩短，并能继续进入 LLM 生成，而不是在前置阶段耗尽预算。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T08:22:05+08:00 - Task: 优化心流状态栏困倦显示
+
+### What was done:
+- 定位状态栏出现 `😌😪困倦(D30P0)` 的原因：fallback 状态栏把同一个夜间/身体状态标签同时拼进情绪槽和时间槽，并把困意/压力内部调试值直接暴露给日志。
+- 将 fallback 状态栏改为清晰槽位：精力、当前感受、扫描、观察、时间段、安全。
+- 去掉 `D/P/疲/储` 等内部编码和数值，不再输出 `D30P0`、`低能(疲0%储50)` 这类调试文本。
+- 将轻度白天残留困意弱化为 `刚醒` 或 `清醒`，只在更明确的夜间/高困意场景显示 `有点困`、`半醒`、`很累`。
+- 将统一仪表盘里的 `drowsy` 用户可见名称从 `困倦昏沉` 改为 `有点困`，避免缓存快照路径继续输出旧名称。
+- 在回归脚本中增加源码契约，锁定状态栏不得恢复内部编码和重复拼接。
+
+### Testing:
+- `uv run ruff check src\chat\heart_flow\enhanced_modules\loop_resource_feedback_mixin.py src\core\state_dashboard.py scripts\heartflow_state_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新增状态栏内部编码/重复拼接回归断言。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 预期效果：类似 08:18 的状态栏会变成 `🔋100% | 🙂刚醒 | 👁扫描 | 👀观察 | 🌅上午 | 🛡️安全` 或 `🔋100% | 😌平静 | 👁扫描 | 👀观察 | 🌅上午 | 🛡️安全`，不会再有 `😌😪困倦(D30P0)`。
+- 这次只改日志/状态栏显示层，不删除夜间节律、困意计算或回复语气约束。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

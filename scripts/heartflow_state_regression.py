@@ -819,11 +819,23 @@ def check_night_status_label_contract() -> Dict[str, Any]:
     feedback_source = (ROOT / "src/chat/heart_flow/enhanced_modules/loop_resource_feedback_mixin.py").read_text(
         encoding="utf-8"
     )
+    dashboard_source = (ROOT / "src/core/state_dashboard.py").read_text(encoding="utf-8")
     bot_lifecycle_source = (ROOT / "src/chat/heart_flow/enhanced_modules/scene_bot_lifecycle_mixin.py").read_text(
         encoding="utf-8"
     )
     assert "record_overnight_activity" in feedback_source and '"think"' in feedback_source
     assert "record_overnight_activity" in feedback_source and '"peek"' in feedback_source
+    assert "D{_drowsy_val" not in feedback_source
+    assert "P{_pressure_val" not in feedback_source
+    assert "疲{_daily_fatigue_val" not in feedback_source
+    assert "储{_reserve_val" not in feedback_source
+    assert "困倦(D" not in feedback_source
+    assert "{_mood_icon}{_np_label}" not in feedback_source
+    assert "{_time_icon}{_np_label}" not in feedback_source
+    assert "_body_status_label" in feedback_source
+    assert "_time_period_label" in feedback_source
+    assert '"drowsy": "有点困"' in dashboard_source
+    assert '"drowsy": "困倦昏沉"' not in dashboard_source
     assert 'record_overnight_activity("chat", 1.0)' in bot_lifecycle_source
 
     detail = _build_circadian_detail(
