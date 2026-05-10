@@ -19,6 +19,18 @@ GENERIC_FAST_ACK_REPLIES = (
     "当然",
 )
 
+UNSUPPORTED_FAST_POSITIVE_REPLIES = (
+    "那挺好",
+    "挺好",
+    "挺好的",
+    "不错",
+    "不错啊",
+    "还行",
+    "可以",
+    "行吧",
+    "好吧",
+)
+
 TARGET_ECHO_AVOID_PATTERNS = (
     "不要照抄目标内容",
     "不要把目标消息原样发回去",
@@ -314,7 +326,12 @@ def relation_to_reply_intent(
     )
     tone = "普通口语"
     length_policy = "一句短口语" if fast_path else "自然短句"
-    avoid = list(GENERIC_FAST_ACK_REPLIES) + list(TARGET_ECHO_AVOID_PATTERNS) + layered_avoid
+    avoid = (
+        list(GENERIC_FAST_ACK_REPLIES)
+        + list(UNSUPPORTED_FAST_POSITIVE_REPLIES)
+        + list(TARGET_ECHO_AVOID_PATTERNS)
+        + layered_avoid
+    )
 
     if blocked or trauma >= 5:
         stance = "保持防备，只给低承诺回应"
@@ -390,15 +407,20 @@ def relation_to_reply_intent(
             low_info_strategy = "观察不回"
             stance = "对方信息太少，本来不想接；被迫回复也只给很低承诺短句"
             allow = False
-        elif annoyance >= 35 or pressure_level >= 45 or trust < 15:
+        elif annoyance >= 35:
             low_info_strategy = "带情绪短回"
+            stance = "对方信息太少，你有点烦，只短短接一下，不追着服务"
+            allow = False
+        elif pressure_level >= 45 or trust < 15:
+            low_info_strategy = "克制澄清"
             if annoyance >= 35:
                 stance = "对方信息太少，你有点烦，只短短接一下，不追着服务"
             elif pressure_level >= 45:
-                stance = "对方信息太少，而且压力上来了，只短短接一下，不追着服务"
+                stance = "对方信息太少，而且压力上来了；可以只问半句确认，不要替他补剧情"
             else:
-                stance = "对方信息太少，你不太信任对方，只短短接一下，不追着服务"
-            allow = False
+                stance = "对方信息太少，你不太信任对方；可以谨慎问半句，不要热情服务"
+            length_policy = "一句短澄清，不主动展开"
+            allow = True
         elif not allow:
             low_info_strategy = "带情绪短回"
             stance = f"信息不完整，{stance}，只短短接一下，不追着服务"
@@ -480,5 +502,7 @@ def render_reply_intent_block(packet: ReplyIntentPacket) -> str:
         lines.append(f"禁用模式：{avoid}")
     if not intent.allow_followup:
         lines.append("追问限制：禁止追问，禁止问句和问号；只给短态度或短判断。")
+    elif intent.low_info_strategy in {"克制澄清", "轻追问"}:
+        lines.append("澄清方式：只允许半句轻问或短确认，不许评价、不许服务式接待、不许展开。")
     lines.append("按这个意图包自然说一句；不要复述字段名，不要照抄目标内容，不要解释规则，只输出要发的话。")
     return "\n".join(lines)

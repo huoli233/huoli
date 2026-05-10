@@ -831,6 +831,31 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
 
+## 2026-05-10T12:03:42+08:00 - Task: 排查并修复低信息快回上下文/追问/重复链路
+
+### What was done:
+- 根据用户日志继续深排：确认敷衍并非单纯模型问题，而是意图包在低信息、低信任/压力高时直接 `allow_followup=False`，导致模型不能追问也不能展开，只能硬凑短句。
+- 将低信息策略拆分：有厌烦或重复时仍然“带情绪短回/禁止追问”；只有低信任或压力高但未重复、未厌烦的低信息，改为“克制澄清”，允许半句短确认。
+- 新增 `UNSUPPORTED_FAST_POSITIVE_REPLIES` 进入统一意图包禁用模式，让 `那挺好/挺好/不错/还行/可以` 不只存在于回复器拦截里，而是进入最终 prompt 契约。
+- `render_reply_intent_block()` 增加“澄清方式”规则：低信息可澄清时只允许半句轻问或短确认，不许评价、不许服务式接待、不许展开。
+- 修复重复检测只看本轮 incoming 的断点：当本轮只有一条消息时，会合并 `_recent_user_inputs` 的最近输入缓存判断同一用户短句重复。
+- 管理员强制唤醒新增安全锁：低信息重复达到 3 次时，不再穿透强制回复，避免被迫继续生成敷衍句。
+- 更新回归脚本，覆盖低信息克制澄清、重复单条合并历史缓存、管理员重复安全锁和统一禁用评价短句。
+
+### Testing:
+- `.venv\Scripts\python.exe -m py_compile src/chat/replyer/reply_intent.py src/chat/heart_flow/enhanced_modules/proactive_context_prompt_mixin.py src/chat/heart_flow/enhanced_modules/runtime_state_trace_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `.venv\Scripts\python.exe -m ruff check src/chat/replyer/reply_intent.py src/chat/heart_flow/enhanced_modules/proactive_context_prompt_mixin.py src/chat/heart_flow/enhanced_modules/runtime_state_trace_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `.venv\Scripts\python.exe scripts/heartflow_state_regression.py` 通过，新增 `direct_fast_low_info_clarification_allowed=true`、`direct_fast_admin_repeat_guarded=true`、`single_message_repeat_uses_recent_memory=true`。
+- `$env:PYTHONDONTWRITEBYTECODE='1'; .venv\Scripts\python.exe -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 LF/CRLF 工作区提示。
+
+### Notes:
+- 这轮修的是上下文工程和策略翻译断点：第一次短低信息可以谨慎问清楚，重复短低信息才收住或被安全锁挡住。
+- 预期效果：`我的刀盾` 第一次不再被压力/低信任直接禁追问；多次重复时不再被管理员强制硬逼着继续回废话。
+- 变更需要重启主程序后生效。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
 ## 2026-05-10T11:49:40+08:00 - Task: 修复启动懒加载与低信息无依据评价快回
 
 ### What was done:

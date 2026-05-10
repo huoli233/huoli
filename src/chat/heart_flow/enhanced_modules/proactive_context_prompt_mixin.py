@@ -622,6 +622,30 @@ class ProactiveContextPromptMixin:
         stats = self._collect_topic_signals(messages)
         human_entries = stats["human_entries"]
         if len(human_entries) < 2:
+            latest_msg = self._get_latest_human_message(list(messages or []))
+            latest_text = self._extract_message_content(latest_msg).strip() if latest_msg is not None else ""
+            latest_uid = str(getattr(latest_msg, "user_id", "") or "").strip() if latest_msg is not None else ""
+            normalized_latest = self._normalize_topic_text(latest_text)
+            if not normalized_latest or not latest_uid:
+                return result
+            recorded_repeat_count = self._count_recent_user_repeats(normalized_latest, latest_uid)
+            is_low_info = len(normalized_latest) <= 8 or len(latest_text) <= 8
+            if recorded_repeat_count < 2 or not is_low_info:
+                return result
+            result.update(
+                {
+                    "detected": True,
+                    "reason": f"同一用户短句重复({recorded_repeat_count}次)",
+                    "exact_repeat_count": recorded_repeat_count,
+                    "repeat_user_count": 1,
+                    "dominant_tokens": [],
+                    "low_info_cluster": True,
+                    "latest_matches_repeat": True,
+                }
+            )
+            if not hasattr(self, "_signal_cache"):
+                self._signal_cache = {}
+            self._signal_cache[_cache_key] = result
             return result
 
         exact_threshold = _rt_float("repetition_exact_threshold", 2.0)
@@ -676,6 +700,14 @@ class ProactiveContextPromptMixin:
 
         if not result["detected"]:
             return result
+
+        if result["latest_matches_repeat"] and result["low_info_cluster"]:
+            recorded_count = self._count_recent_user_repeats(
+                str(latest_entry.get("normalized", "") or ""),
+                latest_user,
+            )
+            if recorded_count > int(result.get("exact_repeat_count", 0) or 0):
+                result["exact_repeat_count"] = recorded_count
 
         if _single_user_spam and result["exact_repeat_count"] >= single_spam_threshold:
             result["reason"] = f"同一人连续复读({result['exact_repeat_count']}次)"

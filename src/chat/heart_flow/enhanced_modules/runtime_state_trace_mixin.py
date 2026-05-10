@@ -304,6 +304,14 @@ class RuntimeStateTraceMixin:
             return f"behavior:{_behavior_category}"
         if _behavior_category == "hostile" and _behavior_severity >= 0.85:
             return f"behavior:{_behavior_category}@{_behavior_severity:.2f}"
+        if (
+            repetition_signal
+            and repetition_signal.get("detected")
+            and repetition_signal.get("latest_matches_repeat")
+            and repetition_signal.get("low_info_cluster")
+            and int(repetition_signal.get("exact_repeat_count", 0) or 0) >= 3
+        ):
+            return str(repetition_signal.get("reason", "") or "低信息重复输入")
         for _hard_reason in ("情绪拒绝", "讨厌度屏蔽", "极端创伤"):
             if _hard_reason in _reason_text:
                 return _reason_text or _hard_reason

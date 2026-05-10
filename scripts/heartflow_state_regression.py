@@ -1953,14 +1953,17 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "def ensure_reply_intent_packet" in reply_intent_source
     assert "def render_reply_intent_block" in reply_intent_source
     assert "GENERIC_FAST_ACK_REPLIES" in reply_intent_source
+    assert "UNSUPPORTED_FAST_POSITIVE_REPLIES" in reply_intent_source
     assert "TARGET_ECHO_AVOID_PATTERNS" in reply_intent_source
     assert "\"好的，你说\"" in reply_intent_source
     assert "\"嗯，是啊\"" in reply_intent_source
+    assert "\"那挺好\"" in reply_intent_source
     assert "不要照抄目标内容" in reply_intent_source
     assert "def _first_nonzero_float" in reply_intent_source
     assert "relation.get(\"trust_score\")" in reply_intent_source
     assert "relation.get(\"relationship_label\")" in reply_intent_source
     assert "追问限制：禁止追问" in reply_intent_source
+    assert "澄清方式：只允许半句轻问或短确认" in reply_intent_source
     assert "repeated_short_input" in reply_intent_source
     assert "按复读/低信息处理，不按新话题理解" in reply_intent_source
     assert "不能追问，不能照抄" in reply_intent_source
@@ -1976,6 +1979,17 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "def _count_recorded_user_repeats" in resource_feedback_source
     assert "def _has_current_user_input_record" in resource_feedback_source
     assert "self._latest_user_input_record = dict(record)" in resource_feedback_source
+    proactive_context_source = (ROOT / "src/chat/heart_flow/enhanced_modules/proactive_context_prompt_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    runtime_trace_source = (ROOT / "src/chat/heart_flow/enhanced_modules/runtime_state_trace_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    assert "recorded_repeat_count = self._count_recent_user_repeats" in proactive_context_source
+    assert "\"latest_matches_repeat\": True" in proactive_context_source
+    assert "recorded_count = self._count_recent_user_repeats" in proactive_context_source
+    assert "低信息重复输入" in runtime_trace_source
+    assert "int(repetition_signal.get(\"exact_repeat_count\", 0) or 0) >= 3" in runtime_trace_source
     assert "low_info_strategy = \"带情绪短回\"" in reply_intent_source
     assert "def _pressure_signal" in reply_intent_source
     assert "LAYERED_TONE_TRANSLATIONS" in reply_intent_source
@@ -2068,6 +2082,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "direct_fast_bad_reply_retried": True,
         "direct_fast_forbidden_followup_blocked": True,
         "direct_fast_repeat_signal_enters_intent": True,
+        "direct_fast_low_info_clarification_allowed": True,
+        "direct_fast_admin_repeat_guarded": True,
         "direct_fast_night_hint_realtime": True,
         "low_info_inner_voice_no_continue_topic": True,
         "low_info_inner_voice_intents_cleared": True,
@@ -2111,7 +2127,9 @@ def check_reply_intent_packet_contract() -> Dict[str, Any]:
         relation_view={"affection": 3, "trust_value": 2, "annoyance_value": 0, "psychological_pressure": 70},
         fast_path=True,
     )
-    assert guarded.allow_followup is False
+    assert guarded.allow_followup is True
+    assert guarded.low_info_strategy == "克制澄清"
+    assert "澄清方式" in render_reply_intent_block(guarded)
     assert "距离" in guarded.stance or "压力" in guarded.stance or "信息太少" in guarded.stance
 
     pressure_legacy_scale = relation_to_reply_intent(
@@ -2121,7 +2139,8 @@ def check_reply_intent_packet_contract() -> Dict[str, Any]:
         relation_view={"affection": 44, "trust_value": 10, "annoyance_value": 0, "psychological_pressure": 8.2},
         fast_path=True,
     )
-    assert pressure_legacy_scale.allow_followup is False
+    assert pressure_legacy_scale.allow_followup is True
+    assert pressure_legacy_scale.low_info_strategy == "克制澄清"
     assert "压力" in pressure_legacy_scale.stance or "距离" in pressure_legacy_scale.stance
     assert "热情" in pressure_legacy_scale.tone or "绷" in pressure_legacy_scale.tone
 
@@ -2159,6 +2178,7 @@ def check_reply_intent_packet_contract() -> Dict[str, Any]:
     block = render_reply_intent_block(repeated)
     assert "嗯，是啊" in block
     assert "好的，你说" in block
+    assert "那挺好" in block
     assert "追问限制：禁止追问" in block
     assert repeated.allow_followup is False
 
@@ -2204,8 +2224,8 @@ def check_reply_intent_packet_contract() -> Dict[str, Any]:
     return {
         "low_info_light_question": low_info.low_info_strategy,
         "annoyed_short_reply": annoyed.low_info_strategy,
-        "guarded_no_followup": guarded.allow_followup is False,
-        "legacy_pressure_scale": pressure_legacy_scale.allow_followup is False,
+        "guarded_low_info_clarification": guarded.allow_followup is True,
+        "legacy_pressure_scale_clarification": pressure_legacy_scale.allow_followup is True,
         "layered_tense_mode": layered_tense.allow_followup is False,
         "sleepy_tone": True,
         "generic_ack_blocked": True,
@@ -2234,10 +2254,46 @@ def check_recent_repeat_memory_contract() -> Dict[str, Any]:
     probe._remember_recent_user_input(normalized, "u1")
     assert probe._count_recent_user_repeats(normalized, "u1") == 2
     assert probe._count_recent_user_repeats(normalized, "u2") == 1
+    from src.chat.heart_flow.enhanced_modules.proactive_context_prompt_mixin import (
+        ProactiveContextPromptMixin,
+    )
+
+    class _RepeatProbe(ProactiveContextPromptMixin, LoopResourceFeedbackMixin):
+        def __init__(self) -> None:
+            self._recent_user_inputs = []
+            self._latest_user_input_record = {}
+            self._signal_cache = {}
+
+        @staticmethod
+        def _is_bot_message_obj(msg) -> bool:
+            return False
+
+        @staticmethod
+        def _get_decision_message_source(msg) -> str:
+            return "incoming"
+
+        @staticmethod
+        def _get_latest_human_message(messages):
+            return messages[-1] if messages else None
+
+        @staticmethod
+        def _extract_message_content(msg) -> str:
+            return str(getattr(msg, "processed_plain_text", "") or "")
+
+    repeat_probe = _RepeatProbe()
+    repeat_probe._remember_recent_user_input(normalized, "u1")
+    repeat_probe._latest_user_input_record = {}
+    msg = type("Msg", (), {"user_id": "u1", "processed_plain_text": "我的刀盾"})()
+    repeat_signal = repeat_probe._analyze_repetition_pressure([msg])
+    assert repeat_signal["detected"] is True
+    assert repeat_signal["latest_matches_repeat"] is True
+    assert repeat_signal["low_info_cluster"] is True
+    assert repeat_signal["exact_repeat_count"] == 2
     return {
         "recent_input_remembered": True,
         "current_message_not_double_counted": True,
         "same_user_repeat_counted": True,
+        "single_message_repeat_uses_recent_memory": True,
     }
 
 
