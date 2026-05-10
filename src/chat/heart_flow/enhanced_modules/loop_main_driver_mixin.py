@@ -243,6 +243,10 @@ class LoopMainDriverMixin:
         self._cached_voice = vval
         self._last_voice_ts = now
         self._align_states_with_inner_voice(vval, source="direct_fastlane_background")
+        last_intent = getattr(self, "_last_reply_intent_packet", None)
+        if last_intent is not None and not bool(getattr(last_intent, "allow_followup", True)):
+            logger.debug(f"{self.log_prefix} 直接快回意图不允许续接，跳过后台意图池写入")
+            return
         voice_key = self._build_inner_voice_message_key(messages)
         if self._mark_voice_intention_ingested(voice_key):
             try:
@@ -1387,15 +1391,15 @@ class LoopMainDriverMixin:
         voice_conclusion = self._cached_voice
         if _is_direct_reply_fastlane:
             voice_conclusion = VoiceVerdict(
-                thinking="先接住当前这句话，不展开。",
+                thinking="直接快回由统一回复意图包决定表达姿态。",
                 reply_desire_level=6,
                 should_reply=True,
                 next_action="reply",
-                current_mood="平静",
+                current_mood="按关系情绪收敛",
                 is_valid=True,
                 comprehension_confidence=0.6,
                 needs_upgrade=False,
-                thinking_source="direct_fastlane_synthetic",
+                thinking_source="direct_fastlane_intent_packet",
             )
         if run_voice:
             _vval = _result_map.get("voice")

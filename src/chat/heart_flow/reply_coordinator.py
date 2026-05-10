@@ -250,6 +250,7 @@ class ReplyCoordinator:
         think_level: int = 1,
         fast_path: bool = False,
         fast_path_deadline: Optional[float] = None,
+        reply_intent: Optional[Any] = None,
         enable_splitter: bool = True,
         enable_chinese_typo: bool = True,
     ):
@@ -294,6 +295,7 @@ class ReplyCoordinator:
             enable_chinese_typo=enable_chinese_typo,
             fast_path=fast_path,
             fast_path_deadline=fast_path_deadline,
+            reply_intent=reply_intent,
         )
 
     def select_reply_target(

@@ -1713,6 +1713,29 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
 
+## 2026-05-10T10:15:00+08:00 - Task: 深度替换回复构建链路为统一回复意图包
+
+### What was done:
+- 新增 `ReplyIntentPacket` 统一回复意图契约，把回复目标、触发原因、当前立场、情绪语气、关系态度、长度策略、禁用模式、引用策略、快回标记和是否允许追问集中传给 replyer。
+- heartflow 的 voice-driven/直接快回链路改为构建意图包，不再拼散落的 `[当前对象关系]`、`[当前心理状态]`、`[直接快回关系语气]`，也不再使用 `direct_fastlane_synthetic` 固定独白作为最终表达动机。
+- 群聊/私聊 replyer、Generator API、ReplyCoordinator 全链路增加 `reply_intent` 参数，fast path 和普通路径都优先渲染 `【回复意图包】`。
+- 将 `annoyance/trust/affection/pressure/trauma/get_layered_response_mode()` 收敛成中文 stance/tone/length/avoid，管理员强制回复只覆盖是否回复，不覆盖情绪和关系态度。
+- 兼容历史日志里 0-10 压力显示与情绪系统 0-100 压力阈值，避免 `压力=8.x` 被当成平静。
+- 直接快回后台补独白写意图池前检查 `allow_followup`，低信息、高压力、低信任等场景不再无脑追加 `continue_topic`。
+- 更新回归脚本，增加低信息、高厌烦、高压力低信任、管理员强制、夜间困倦、重复短句/泛泛附和、prompt contract 等契约断言。
+
+### Testing:
+- `.venv\Scripts\python.exe -m py_compile src/chat/replyer/reply_intent.py src/plugin_system/apis/generator_api.py src/chat/heart_flow/reply_coordinator.py src/chat/replyer/private_generator.py src/chat/replyer/group_generator.py src/chat/replyer/context_block_builder.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `.venv\Scripts\python.exe -m ruff check src/chat/replyer/reply_intent.py src/plugin_system/apis/generator_api.py src/chat/heart_flow/reply_coordinator.py src/chat/replyer/private_generator.py src/chat/replyer/group_generator.py src/chat/replyer/context_block_builder.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py src/chat/heart_flow/enhanced_modules/loop_main_driver_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `.venv\Scripts\python.exe scripts/heartflow_state_regression.py` 通过，新增 `reply_intent_packet` 合同检查。
+- `$env:PYTHONPYCACHEPREFIX=$env:TEMP\huoli_codex_compileall_reply_intent; .venv\Scripts\python.exe -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅提示既有 LF/CRLF 工作区换行警告。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 本轮只 stage 回复意图包相关文件；不碰用户遗留删除项：`.gitmessage-cn.txt`、多个 `docs/*.md`，也不纳入 `.trae/`。
+- 变更需要重启主程序后生效。
+
 ## 2026-05-10T08:50:31+08:00 - Task: 修复直接快回低信息短句复读与乱改写
 
 ### What was done:

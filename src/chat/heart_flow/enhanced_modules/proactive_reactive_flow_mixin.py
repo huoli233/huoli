@@ -11,6 +11,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from src.chat.utils.timer_calculator import Timer
 from src.chat.replyer.context_block_builder import build_reply_context_block
+from src.chat.replyer.reply_intent import (
+    ReplyIntentPacket,
+    relation_to_reply_intent,
+)
 from src.chat.heart_flow.heartFC_chat import HeartFChatting
 from src.chat.heart_flow.energy_manager import EnergyChainDimension
 from src.chat.heart_flow.heartfc_thresholds import get_heartfc_thresholds
@@ -58,108 +62,65 @@ class ProactiveReactiveFlowMixin:
             return False
         return bool(getattr(self, "_direct_fast_reply_generation", False) or force_bypass)
 
-    def _append_direct_fast_soul_state(self, extra_parts: List[str], relation_view: Dict[str, Any]) -> None:
-        """直接快回只读内存缓存，避免冷启动情绪/夜间系统把短回复拖死。"""
-        night_summary = getattr(self, "_cached_night_summary", {}) or {}
-        try:
-            hour = int(night_summary.get("current_hour", datetime.datetime.now().hour) or datetime.datetime.now().hour) % 24
-            time_label = str(night_summary.get("time_band_label", "") or night_summary.get("phase_label", "") or "")
-            drowsiness = float(night_summary.get("drowsiness_value", night_summary.get("drowsiness", 0.0)) or 0.0)
-            overnight_pressure = float(night_summary.get("overnight_pressure", 0.0) or 0.0)
-            half_asleep = float(night_summary.get("half_asleep_level", 0.0) or 0.0)
-            sleep_debt = float(night_summary.get("sleep_debt", 0.0) or 0.0)
-            dawn_like = 5 <= hour < 8 or str(night_summary.get("time_band", "") or "") == "dawn"
-            if dawn_like or drowsiness >= 20.0 or overnight_pressure >= 20.0 or half_asleep >= 0.2:
-                label = time_label or ("清晨" if dawn_like else "夜间")
-                extra_parts.append(
-                    "[夜间身体状态] "
-                    f"现在约{hour}点({label})，困意={drowsiness:.0f}，熬夜压力={overnight_pressure:.0f}，"
-                    f"半醒={half_asleep:.2f}，睡眠债={sleep_debt:.2f}。"
-                )
-                if dawn_like:
-                    extra_parts.append("[夜间语气约束] 回复短一点、轻一点，像刚醒的人，不要精神饱满。")
-                else:
-                    extra_parts.append("[夜间语气约束] 回复带一点累或迟钝，不展开。")
-        except Exception as exc:
-            logger.debug(f"{self.log_prefix} 直接快回夜间缓存读取失败: {exc}")
-
-        emo_state = getattr(self, "_resolved_emo_state", None)
-        try:
-            annoyance = float(relation_view.get("annoyance_value", 0.0) or 0.0)
-            pressure = float(relation_view.get("psychological_pressure", 0.0) or 0.0)
-            if emo_state is not None:
-                annoyance = max(annoyance, float(getattr(emo_state, "annoyance", 0.0) or 0.0))
-                pressure = max(pressure, float(getattr(emo_state, "psychological_pressure", 0.0) or 0.0))
-        except Exception:
-            annoyance = 0.0
-            pressure = 0.0
-        if annoyance >= 50:
-            mood_desc = "很不爽"
-            feeling = "非常烦躁和不耐烦"
-        elif annoyance >= 20:
-            mood_desc = "有些烦躁"
-            feeling = "有些不耐烦"
-        else:
-            mood_desc = "平静"
-            feeling = "感到平静"
-        extra_parts.append(f"[当前心理状态] 烦躁度{annoyance:.0f}，压力{pressure:.0f}，回复{mood_desc}。")
-        extra_parts.append(f"[当前情感状态] {feeling}")
-
-    def _append_direct_fast_relation_style(self, extra_parts: List[str], relation_view: Dict[str, Any]) -> None:
-        """直接快回补最小关系风格，避免绕过好感/信任/厌烦后变成客服接话。"""
-        view = relation_view or {}
-        try:
-            affection = float(view.get("affection", 0.0) or 0.0)
-            trust = float(view.get("trust_value", 0.0) or 0.0)
-            annoyance = float(view.get("annoyance_value", 0.0) or 0.0)
-            pressure = float(view.get("psychological_pressure", 0.0) or 0.0)
-            trauma = float(view.get("trauma_score", 0.0) or 0.0)
-        except Exception:
-            affection, trust, annoyance, pressure, trauma = 0.0, 0.0, 0.0, 0.0, 0.0
-        relation_label = str(
-            view.get("personal_impression")
-            or view.get("relationship")
-            or view.get("legacy_relationship_label")
-            or view.get("custom_label")
+    def _build_reply_intent_packet(
+        self,
+        *,
+        target_message: Any,
+        relation_view: Dict[str, Any],
+        reply_reason: str,
+        direct_fast_reply_generation: bool,
+        style_route: Optional[Dict[str, Any]] = None,
+    ) -> ReplyIntentPacket:
+        target_uid = str(getattr(target_message, "user_id", "") or "").strip()
+        target_name = str(
+            getattr(target_message, "user_nickname", "")
+            or getattr(target_message, "user_cardname", "")
+            or target_uid
+            or "对方"
+        ).strip()
+        target_text = str(
+            getattr(target_message, "processed_plain_text", "")
+            or getattr(target_message, "plain_text", "")
+            or getattr(target_message, "content", "")
             or ""
         ).strip()
-        if not relation_label:
+        response_mode: Dict[str, Any] = {}
+        if target_uid:
             try:
-                level = int(view.get("relationship_level", 2) or 2)
-            except Exception:
-                level = 2
-            relation_label = {
-                0: "关系紧张",
-                1: "不太熟悉",
-                2: "有些熟悉",
-                3: "比较熟悉",
-                4: "关系亲密",
-                5: "非常信任",
-            }.get(level, "有些熟悉")
-        extra_parts.append(
-            "[当前对象关系] "
-            f"关系={relation_label}，好感={affection:.1f}，信任={trust:.1f}，"
-            f"厌烦={annoyance:.1f}，压力={pressure:.1f}。"
-        )
+                from src.modules.modcore.dynamic_persona.emotion_tracker import get_emotion_tracker
 
-        style_lines: List[str] = []
-        blocked = bool(view.get("is_user_blocked", False))
-        if blocked or trauma >= 5:
-            style_lines.append("你对对方有防备，短回也要留距离，别热情接待。")
-        elif annoyance >= 70:
-            style_lines.append("你现在明显烦，回得短、冷一点，别装配合。")
-        elif annoyance >= 35:
-            style_lines.append("你有点不耐烦，语气可以淡一点，但别攻击。")
-        elif trust < 15:
-            style_lines.append("你对对方信任很低，别主动展开，别显得熟络。")
-        elif affection <= 10:
-            style_lines.append("你对对方好感不高，正常短回，不要服务式接话。")
-        elif affection >= 55 and trust >= 35:
-            style_lines.append("你对对方印象不错，可以稍微松一点，但仍然短。")
-        if pressure >= 7:
-            style_lines.append("心理压力已经顶上来，回复别殷勤，少解释。")
-        style_lines.append("不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”这类接待话术。")
-        extra_parts.append("[直接快回关系语气] " + " ".join(style_lines[:3]))
+                response_mode = get_emotion_tracker(self.stream_id).get_layered_response_mode(target_uid) or {}
+            except Exception as exc:
+                logger.debug(f"{self.log_prefix} 回复意图包读取分层响应模式失败: {exc}")
+        night_hint = ""
+        if direct_fast_reply_generation:
+            night_summary = getattr(self, "_cached_night_summary", {}) or {}
+            try:
+                drowsiness = float(night_summary.get("drowsiness_value", night_summary.get("drowsiness", 0.0)) or 0.0)
+                overnight_pressure = float(night_summary.get("overnight_pressure", 0.0) or 0.0)
+                half_asleep = float(night_summary.get("half_asleep_level", 0.0) or 0.0)
+                if drowsiness >= 20.0 or overnight_pressure >= 20.0 or half_asleep >= 0.2:
+                    night_hint = "困倦或半醒"
+            except Exception:
+                night_hint = ""
+        quote_policy = str((style_route or {}).get("quote_policy", "none") or "none")
+        packet = relation_to_reply_intent(
+            target=target_name,
+            target_text=target_text,
+            trigger_reason=reply_reason,
+            relation_view=relation_view,
+            response_mode=response_mode,
+            reference_info=str(getattr(self, "_latest_memory_hint", "") or ""),
+            quote_policy=quote_policy,
+            fast_path=direct_fast_reply_generation,
+            night_hint=night_hint,
+        )
+        logger.info(
+            f"{self.log_prefix} [回复意图包] 立场={packet.stance} 语气={packet.tone} "
+            f"低信息={packet.low_info_strategy} 追问={'是' if packet.allow_followup else '否'}"
+        )
+        self._last_reply_intent_packet = packet
+        return packet
 
     @staticmethod
     def _pick_runtime_text(key: str, seed_text: str) -> str:
@@ -277,9 +238,6 @@ class ProactiveReactiveFlowMixin:
                 relation_view = self._resolve_relation_view()
             context_execution_block = ""
             if direct_fast_reply_generation:
-                extra_info_parts.append("[直接快回] 一句短口语，直接回应当前消息；不做长篇解释，不二次改写，不补充追发。")
-                self._append_direct_fast_relation_style(extra_info_parts, relation_view)
-                self._append_direct_fast_soul_state(extra_info_parts, relation_view)
                 target_text = str(
                     getattr(target_message, "processed_plain_text", "")
                     or getattr(target_message, "plain_text", "")
@@ -287,7 +245,7 @@ class ProactiveReactiveFlowMixin:
                     or ""
                 ).strip()
                 if target_text:
-                    extra_info_parts.append(f"[当前消息] {target_text[:120]}")
+                    extra_info_parts.append(f"这轮: 只回应当前消息「{target_text[:120]}」")
                 logger.debug(f"{self.log_prefix} ⚡ 直接快回跳过慢上下文构建")
             else:
                 decision_context_packet = self._build_decision_context_packet(
@@ -337,7 +295,7 @@ class ProactiveReactiveFlowMixin:
                     "quote_message": False,
                     "quote_policy": "none",
                     "target_user_id": str(getattr(target_message, "user_id", "") or "").strip(),
-                    "reason": "直接快回固定直回",
+                    "reason": "直接快回按回复意图包直回",
                 }
             else:
                 style_route = acquire_reply_coordinator().resolve_style_route(
@@ -354,6 +312,13 @@ class ProactiveReactiveFlowMixin:
                     harassment_signal=harassment_signal,
                     is_bot_message=self._is_bot_message_obj,
                 )
+            reply_intent_packet = self._build_reply_intent_packet(
+                target_message=target_message,
+                relation_view=relation_view,
+                reply_reason=reply_reason,
+                direct_fast_reply_generation=direct_fast_reply_generation,
+                style_route=style_route,
+            )
             from src.chat.replyer.context_block_builder import append_reply_style
 
             if not direct_fast_reply_generation:
@@ -431,6 +396,7 @@ class ProactiveReactiveFlowMixin:
                 fast_path_deadline=direct_fast_deadline,
                 enable_splitter=not direct_fast_reply_generation,
                 enable_chinese_typo=not direct_fast_reply_generation,
+                reply_intent=reply_intent_packet,
             )
             if direct_fast_reply_generation:
                 try:

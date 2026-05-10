@@ -1748,7 +1748,9 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "直接快回链路" in loop_source
     assert "self._direct_fast_reply_generation = bool(_is_direct_reply_fastlane)" in loop_source
     assert "直接快回，不等待前台感知/独白" in loop_source
-    assert "direct_fastlane_synthetic" in loop_source
+    assert "direct_fastlane_synthetic" not in loop_source
+    assert "direct_fastlane_intent_packet" in loop_source
+    assert "统一回复意图包决定表达姿态" in loop_source
     assert "使用缓存关系快照，不等待关系计算" in loop_source
     assert "直接快回跳过维度网关" in loop_source
     assert "src={_gateway_src}" in loop_source
@@ -1770,19 +1772,19 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "                direct_fast_deadline = time.monotonic() + direct_fast_timeout"
     ) not in flow_source
     assert "fast_path_deadline=direct_fast_deadline" in flow_source
+    assert "reply_intent=reply_intent_packet" in flow_source
+    assert "def _build_reply_intent_packet" in flow_source
+    assert "relation_to_reply_intent(" in flow_source
+    assert "get_layered_response_mode" in flow_source
+    assert "[回复意图包]" in flow_source
     assert "直接快回预算已耗尽" in flow_source
     assert "来源=voice_driven_fast" in flow_source
-    assert "def _append_direct_fast_soul_state" in flow_source
-    assert "self._append_direct_fast_soul_state(extra_info_parts, relation_view)" in flow_source
-    assert "def _append_direct_fast_relation_style" in flow_source
-    assert "self._append_direct_fast_relation_style(extra_info_parts, relation_view)" in flow_source
-    assert (
-        "self._append_direct_fast_relation_style(extra_info_parts, relation_view)\n"
-        "                self._append_direct_fast_soul_state(extra_info_parts, relation_view)"
-    ) in flow_source
-    assert "[当前对象关系]" in flow_source
-    assert "[直接快回关系语气]" in flow_source
-    assert "不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" in flow_source
+    assert "def _append_direct_fast_soul_state" not in flow_source
+    assert "self._append_direct_fast_soul_state(extra_info_parts, relation_view)" not in flow_source
+    assert "def _append_direct_fast_relation_style" not in flow_source
+    assert "self._append_direct_fast_relation_style(extra_info_parts, relation_view)" not in flow_source
+    assert "[当前对象关系]" not in flow_source
+    assert "[直接快回关系语气]" not in flow_source
     assert "relation_view = self._inject_realtime_emotion(cached_relation)" in flow_source
     assert "self._inject_fallback_soul_state(extra_info_parts)" not in flow_source
     assert "if not direct_fast_reply_generation:\n                append_reply_style(extra_info_parts, style_route)" in flow_source
@@ -1806,17 +1808,20 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "强制回复完整生成预算" in flow_source
     assert "强制回复完整生成超时" in flow_source
     assert "取消发送" in flow_source
-    assert "[直接快回]" in flow_source
     assert "直接快回跳过慢上下文构建" in flow_source
     assert "target_text[:120]" in flow_source
-    assert "if direct_fast_reply_generation:\n                extra_info_parts.append(\"[直接快回]" in flow_source
+    assert "if direct_fast_reply_generation:\n                extra_info_parts.append(\"[直接快回]" not in flow_source
     assert "self_reference_parts = self._build_self_reference_parts(target_message)\n                if self_reference_parts.get(\"self_memory\")" not in flow_source
     assert "fast_path: bool = False" in coordinator_source
     assert "fast_path: bool = False" in generator_source
+    assert "reply_intent: Optional[Any] = None" in coordinator_source
+    assert "reply_intent: Optional[Any] = None" in generator_source
     assert "fast_path_deadline: Optional[float] = None" in coordinator_source
     assert "fast_path_deadline: Optional[float] = None" in generator_source
     assert "fast_path_deadline: Optional[float] = None" in group_reply_source
     assert "fast_path_deadline: Optional[float] = None" in private_reply_source
+    assert "reply_intent: Optional[ReplyIntentPacket | Dict[str, Any]] = None" in group_reply_source
+    assert "reply_intent: Optional[ReplyIntentPacket | Dict[str, Any]] = None" in private_reply_source
     assert "直接快回跳过动作与工具准备" in coordinator_source
     assert "直接快回跳过临时动作记录" in coordinator_source
     assert "enable_tool=(False if fast_path else global_config.tool.enable_tool)" in coordinator_source
@@ -1829,13 +1834,11 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "chat_talking_prompt_fast = \"\"" in group_reply_source
     assert "fast_low_info_text = text_part if has_text else target" in group_reply_source
     assert "low_info_guard = self._build_low_info_input_guard(fast_low_info_text)" in group_reply_source
-    assert "low_info_input=bool(low_info_guard)" in group_reply_source
+    assert "low_info_input=bool(low_info_guard) and not bool(intent_block)" in group_reply_source
     assert "identity=fast_identity_hint" in group_reply_source
-    assert "禁回: 好的你说、你说、继续说、收到、请问、当然" in group_reply_source
+    assert "render_reply_intent_block(reply_intent)" in group_reply_source
+    assert "以【回复意图包】为准" in group_reply_source
     assert "extra_info_block = fast_extra_info" in group_reply_source
-    assert "不要复读、不要照抄、不要同音改写对方原句" in group_reply_source
-    assert "不要把对方词尾改成“我/你”当回复" in group_reply_source
-    assert "信息不完整就自然追问或轻接一句" in group_reply_source
     assert "_looks_reception_fast_reply" in group_reply_source
     assert "fast_path_reception_reply" in group_reply_source
     assert "_looks_generic_ack_fast_reply" in group_reply_source
@@ -1853,11 +1856,11 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "fast_path=fast_path" in private_reply_source
     assert "if fast_path:\n            fast_low_info_text = text_part if has_text else target" in private_reply_source
     assert "low_info_guard = self._build_low_info_input_guard(fast_low_info_text)" in private_reply_source
-    assert "low_info_input=bool(low_info_guard)" in private_reply_source
+    assert "low_info_input=bool(low_info_guard) and not bool(intent_block)" in private_reply_source
     assert "identity=fast_identity_hint" in private_reply_source
-    assert "禁回: 好的你说、你说、继续说、收到、请问、当然" in private_reply_source
+    assert "render_reply_intent_block(reply_intent)" in private_reply_source
+    assert "以【回复意图包】为准" in private_reply_source
     assert "extra_info_block = fast_extra_info" in private_reply_source
-    assert "不要复读、不要照抄、不要同音改写对方原句" in private_reply_source
     assert "_looks_reception_fast_reply" in private_reply_source
     assert "fast_path_reception_reply" in private_reply_source
     assert "_looks_generic_ack_fast_reply" in private_reply_source
@@ -1866,10 +1869,19 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" in private_reply_source
     assert "不要回“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类没接住信息的泛泛附和" in private_reply_source
     context_block_source = (ROOT / "src/chat/replyer/context_block_builder.py").read_text(encoding="utf-8")
-    assert "[当前对象关系]" in context_block_source
-    assert "[直接快回关系语气]" in context_block_source
-    assert "厌烦=" in context_block_source
-    assert "压力=" in context_block_source
+    assert "【回复意图包】" in context_block_source
+    assert "当前立场：" in context_block_source
+    assert "情绪语气：" in context_block_source
+    reply_intent_source = (ROOT / "src/chat/replyer/reply_intent.py").read_text(encoding="utf-8")
+    assert "class ReplyIntentPacket" in reply_intent_source
+    assert "def relation_to_reply_intent" in reply_intent_source
+    assert "def render_reply_intent_block" in reply_intent_source
+    assert "low_info_strategy = \"带情绪短回\"" in reply_intent_source
+    assert "def _pressure_signal" in reply_intent_source
+    assert "LAYERED_TONE_TRANSLATIONS" in reply_intent_source
+    assert "LAYERED_STANCE_OVERRIDES" in reply_intent_source
+    assert "明显不耐烦，不主动配合延长话题" in reply_intent_source
+    assert "不熟也不太信任，保持距离" in reply_intent_source
     reply_prompt_source = (ROOT / "src/chat/replyer/prompt/replyer_prompt.py").read_text(encoding="utf-8")
     private_prompt_source = (ROOT / "src/chat/replyer/prompt/replyer_private_prompt.py").read_text(encoding="utf-8")
     assert "\"好感\", \"信任\", \"厌烦\", \"压力\", \"禁回\"" in reply_prompt_source
@@ -1914,6 +1926,103 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "direct_fast_relation_style_restored": True,
         "direct_fast_reception_reply_blocked": True,
         "direct_fast_generic_ack_reply_blocked": True,
+    }
+
+
+def check_reply_intent_packet_contract() -> Dict[str, Any]:
+    from src.chat.replyer.reply_intent import (
+        relation_to_reply_intent,
+        render_reply_intent_block,
+    )
+
+    low_info = relation_to_reply_intent(
+        target="测试用户",
+        target_text="嗯",
+        trigger_reason="强制触发进入回复",
+        relation_view={"affection": 20, "trust_value": 30, "annoyance_value": 0, "psychological_pressure": 0},
+        fast_path=True,
+    )
+    assert low_info.low_info_strategy == "轻追问"
+    assert low_info.allow_followup is True
+    assert "回复意图包" in render_reply_intent_block(low_info)
+
+    annoyed = relation_to_reply_intent(
+        target="测试用户",
+        target_text="嗯",
+        trigger_reason="强制触发进入回复",
+        relation_view={"affection": 10, "trust_value": 10, "annoyance_value": 75, "psychological_pressure": 20},
+        fast_path=True,
+    )
+    assert annoyed.low_info_strategy == "带情绪短回"
+    assert annoyed.allow_followup is False
+    assert "不耐烦" in annoyed.stance or "信息太少" in annoyed.stance
+    assert "冷" in annoyed.tone or "淡" in annoyed.tone
+
+    guarded = relation_to_reply_intent(
+        target="测试用户",
+        target_text="继续",
+        trigger_reason="管理员强制触发",
+        relation_view={"affection": 3, "trust_value": 2, "annoyance_value": 0, "psychological_pressure": 70},
+        fast_path=True,
+    )
+    assert guarded.allow_followup is False
+    assert "距离" in guarded.stance or "压力" in guarded.stance or "信息太少" in guarded.stance
+
+    pressure_legacy_scale = relation_to_reply_intent(
+        target="测试用户",
+        target_text="我来了",
+        trigger_reason="管理员强制触发",
+        relation_view={"affection": 44, "trust_value": 10, "annoyance_value": 0, "psychological_pressure": 8.2},
+        fast_path=True,
+    )
+    assert pressure_legacy_scale.allow_followup is False
+    assert "压力" in pressure_legacy_scale.stance or "距离" in pressure_legacy_scale.stance
+    assert "热情" in pressure_legacy_scale.tone or "绷" in pressure_legacy_scale.tone
+
+    layered_tense = relation_to_reply_intent(
+        target="测试用户",
+        target_text="看看这个",
+        trigger_reason="关系状态触发",
+        relation_view={"affection": 50, "trust_value": 50, "annoyance_value": 0, "psychological_pressure": 0},
+        response_mode={"tone": "tense", "response_length": "concise", "avoid_patterns": ["温柔语气"]},
+        fast_path=True,
+    )
+    assert layered_tense.allow_followup is False
+    assert "压力" in layered_tense.stance
+    assert "绷" in layered_tense.tone
+    assert "温柔语气" in render_reply_intent_block(layered_tense)
+
+    sleepy = relation_to_reply_intent(
+        target="测试用户",
+        target_text="还醒着吗",
+        trigger_reason="被提及",
+        relation_view={"affection": 50, "trust_value": 50, "annoyance_value": 0, "psychological_pressure": 0},
+        fast_path=True,
+        night_hint="困倦或半醒",
+    )
+    assert "困倦" in sleepy.tone
+    assert "短一点" in sleepy.length_policy
+
+    repeated = relation_to_reply_intent(
+        target="测试用户",
+        target_text="啊",
+        trigger_reason="低信息重复",
+        relation_view={"affection": 0, "trust_value": 0, "annoyance_value": 40, "psychological_pressure": 50},
+        fast_path=True,
+    )
+    block = render_reply_intent_block(repeated)
+    assert "嗯，是啊" in block
+    assert "好的，你说" in block
+    assert repeated.allow_followup is False
+
+    return {
+        "low_info_light_question": low_info.low_info_strategy,
+        "annoyed_short_reply": annoyed.low_info_strategy,
+        "guarded_no_followup": guarded.allow_followup is False,
+        "legacy_pressure_scale": pressure_legacy_scale.allow_followup is False,
+        "layered_tense_mode": layered_tense.allow_followup is False,
+        "sleepy_tone": True,
+        "generic_ack_blocked": True,
     }
 
 
@@ -2179,6 +2288,7 @@ def main() -> None:
         "heartflow_startup_prewarm": check_heartflow_startup_no_channel_prewarm_contract(),
         "heartflow_gateway_naming": check_heartflow_gateway_naming_contract(),
         "force_reply_generation_failure": check_force_reply_generation_failure_contract(),
+        "reply_intent_packet": check_reply_intent_packet_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),
         "night_status_labels": check_night_status_label_contract(),

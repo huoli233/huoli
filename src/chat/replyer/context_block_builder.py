@@ -3,6 +3,7 @@ from typing import List, Tuple
 
 
 LIGHTWEIGHT_EXTRA_PREFIXES = (
+    "【回复意图包】",
     "最近对话:",
     "前情:",
     "补充:",
@@ -20,6 +21,19 @@ LIGHTWEIGHT_EXTRA_PREFIXES = (
     "最新用户话头:",
     "你上一句:",
     "直接快回关系语气:",
+    "回复目标：",
+    "目标内容：",
+    "为什么回：",
+    "当前立场：",
+    "情绪语气：",
+    "关系态度：",
+    "长度策略：",
+    "低信息策略：",
+    "引用策略：",
+    "允许追问：",
+    "心情底色：",
+    "必要参考：",
+    "禁用模式：",
 )
 
 LIGHTWEIGHT_EXTRA_INLINE_MARKERS = (
@@ -51,6 +65,7 @@ STYLE_GUIDANCE_KEYWORDS = (
 )
 
 LEGACY_EXTRA_HEADER_PREFIX_MAP = {
+    "【回复意图包】": "【回复意图包】",
     "[前情执行块]": "前情:",
     "[决策上下文包]": "这轮:",
     "[避免复读]": "避免复读:",
@@ -204,6 +219,11 @@ def sanitize_extra_info(extra_info: str, max_tokens: int | None = None) -> str:
         if not lines:
             continue
         header = lines[0]
+        if header == "【回复意图包】":
+            payload_lines = [line for line in lines[1:] if line.strip()]
+            if payload_lines:
+                kept.append("【回复意图包】\n" + "\n".join(payload_lines[:14]))
+            continue
         prefix = LEGACY_EXTRA_HEADER_PREFIX_MAP.get(header, "")
         if prefix:
             payload = _compact_context_text(

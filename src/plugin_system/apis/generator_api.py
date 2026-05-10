@@ -121,6 +121,7 @@ async def generate_reply(
     reply_time_point: Optional[float] = None,
     fast_path: bool = False,
     fast_path_deadline: Optional[float] = None,
+    reply_intent: Optional[Any] = None,
 ) -> Tuple[bool, Optional["LLMGenerationDataModel"]]:
     """生成回复
 
@@ -144,6 +145,7 @@ async def generate_reply(
         reply_time_point: 回复时间点
         fast_path: 是否使用快回复路径，跳过非关键后处理
         fast_path_deadline: 快回路径的单调时钟截止点，超过后不再继续构建或调用模型
+        reply_intent: 统一回复意图包，供回复器按单一姿态生成可见回复
     Returns:
         Tuple[bool, List[Tuple[str, Any]], Optional[str]]: (是否成功, 回复集合, 提示词)
     """
@@ -194,6 +196,7 @@ async def generate_reply(
             log_reply=False,
             fast_path=fast_path,
             fast_path_deadline=fast_path_deadline,
+            reply_intent=reply_intent,
         )
         if not success:
             logger.warning("[GeneratorAPI] 回复生成失败")
