@@ -1763,3 +1763,26 @@
 - 变更需要重启主程序后生效。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T09:37:49+08:00 - Task: 修复直接快回低信息泛泛附和
+
+### What was done:
+- 根据用户 09:31 日志确认：`[当前对象关系]` 已进入 prompt，关系情绪没有再被吞；真正失败点是低信息输入下模型生成了 `嗯，是啊。` 这类泛泛附和，并且旧拦截只覆盖 `好的，你说` 等接待话术。
+- 群聊 `DefaultReplyer` 新增 `_looks_generic_ack_fast_reply()`，识别 `嗯，是啊`、`是啊`、`对啊`、`确实`、`嗯嗯`、`对的`、`是的` 等空泛附和。
+- 私聊 `PrivateReplyer` 同步新增同名检测，保持群聊/私聊直接快回行为一致。
+- 群聊/私聊 fast_path 在低信息上下文中命中泛泛附和时，记录 `fast_path_generic_ack_reply` 并返回生成失败，不再发送。
+- 低信息护栏、快回身份提示、快回风格提示增加明确禁回：不要用 `嗯，是啊`、`是啊`、`对啊`、`确实`、`嗯嗯` 这类没接住信息的附和句。
+- 回归脚本新增源码契约和行为断言，锁定泛泛附和拦截不能再被删除。
+
+### Testing:
+- `uv run ruff check src\chat\replyer\group_generator.py src\chat\replyer\private_generator.py scripts\heartflow_state_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新增 `direct_fast_generic_ack_reply_blocked=true`。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 LF/CRLF 工作区提示。
+
+### Notes:
+- `phase_tracker` 的 18 秒超时是后台阶段追踪请求超时，不是本轮发送 `嗯，是啊。` 的直接原因；发送链路来自 `voice_driven_fast`。
+- 这轮没有恢复慢 DB 历史、工具链或完整人格构建，也没有用本地模板替换生成回复；只拦截坏输出并让上层取消发送。
+- 变更需要重启主程序后生效。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

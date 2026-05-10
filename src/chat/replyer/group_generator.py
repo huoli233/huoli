@@ -559,6 +559,38 @@ class DefaultReplyer:
         return any(marker in payload for marker in ("好的，你说", "好的你说", "你继续说", "继续说吧"))
 
     @classmethod
+    def _looks_generic_ack_fast_reply(cls, text: str) -> bool:
+        payload = str(text or "").strip()
+        if not payload:
+            return False
+        normalized = cls._normalize_repeat_guard_text(payload)
+        if not normalized:
+            return False
+        exact_bad = {
+            "嗯是啊",
+            "是啊",
+            "对啊",
+            "确实",
+            "嗯嗯",
+            "啊对",
+            "对的",
+            "是的",
+            "嗯对",
+            "嗯对啊",
+            "确实啊",
+            "可不是",
+            "就是",
+            "也是",
+            "对",
+            "是",
+        }
+        if normalized in exact_bad:
+            return True
+        return len(normalized) <= 5 and any(
+            marker in normalized for marker in ("是啊", "对啊", "确实", "嗯嗯", "对的", "是的", "啊对")
+        )
+
+    @classmethod
     def _looks_hostile_history_reply(cls, text: str) -> bool:
         payload = str(text or "").strip()
         if not payload:
@@ -672,6 +704,7 @@ class DefaultReplyer:
             "不要出现“复读机”“一次性说全”“你到底想说啥”“建议您”等表达。"
             "不要说“没活了”“找茬”“挑衅”“阴阳怪气”，这些属于无证据脑补。"
             "如果已经是重复短句，不要机械说“又来这句”或“没反应过来”，换成更自然的一句。"
+            "不要回“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类没接住信息的泛泛附和。"
         )
 
     @classmethod
@@ -679,7 +712,7 @@ class DefaultReplyer:
         return (
             "按主人格自然口语说，别像脚本。"
             "不要复读、照抄、同音改写原句，也别把对方词尾改成我/你。"
-            "禁回: 好的你说、你说、继续说、收到、请问、当然。"
+            "禁回: 好的你说、你说、继续说、收到、请问、当然、是啊、对啊、确实、嗯嗯。"
         )
 
     @classmethod
@@ -1203,6 +1236,12 @@ class DefaultReplyer:
                 llm_response.timing_logs = timing_logs
                 llm_response.timing["timing_logs"] = timing_logs
                 llm_response.timing["almost_zero"] = almost_zero_str
+                fast_low_info_context = False
+                if fast_path:
+                    fast_target_text = self._message_text(reply_message) if reply_message is not None else ""
+                    fast_low_info_context = bool(self._build_low_info_input_guard(fast_target_text)) or (
+                        "【低信息输入约束】" in str(prompt_for_log or prompt or "")
+                    )
                 if fast_path and self._looks_reception_fast_reply(content):
                     logger.warning(f"[fast_path] 生成接待话术，取消发送: {content[:30]}")
                     if log_reply:
@@ -1217,6 +1256,26 @@ class DefaultReplyer:
                                 reasoning=reasoning_content,
                                 think_level=think_level,
                                 error="fast_path_reception_reply",
+                                success=False,
+                            )
+                        except Exception:
+                            logger.exception("记录reply日志失败")
+                    llm_response.content = ""
+                    return False, llm_response
+                if fast_path and fast_low_info_context and self._looks_generic_ack_fast_reply(content):
+                    logger.warning(f"[fast_path] 低信息输入生成泛泛附和，取消发送: {content[:30]}")
+                    if log_reply:
+                        try:
+                            PlanReplyLogger.log_reply(
+                                chat_id=self.chat_stream.stream_id,
+                                prompt=prompt,
+                                output=content,
+                                processed_output=None,
+                                model=model_name,
+                                timing=llm_response.timing,
+                                reasoning=reasoning_content,
+                                think_level=think_level,
+                                error="fast_path_generic_ack_reply",
                                 success=False,
                             )
                         except Exception:
@@ -3042,6 +3101,7 @@ class DefaultReplyer:
                 "不要复读、不要照抄、不要同音改写对方原句；不要把对方词尾改成“我/你”当回复。"
                 "如果信息不完整，轻轻接住或追问半句，不要猜词义。"
                 "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”。"
+                "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和。"
                 f"{sleepy_guard}"
             )
             prompt = get_group_responder_prompt(
