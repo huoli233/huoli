@@ -249,6 +249,7 @@ class ReplyCoordinator:
         request_type: str,
         think_level: int = 1,
         fast_path: bool = False,
+        fast_path_deadline: Optional[float] = None,
         enable_splitter: bool = True,
         enable_chinese_typo: bool = True,
     ):
@@ -263,11 +264,14 @@ class ReplyCoordinator:
         )
 
         available_actions: Dict[str, Any] = {}
-        try:
-            await action_modifier.modify_actions()
-            available_actions = action_manager.get_using_actions()
-        except Exception as exc:
-            logger.warning(f"[回复协调] {channel_id} 获取可用动作失败: {exc}")
+        if fast_path:
+            logger.debug(f"[回复协调] {channel_id} 直接快回跳过动作与工具准备")
+        else:
+            try:
+                await action_modifier.modify_actions()
+                available_actions = action_manager.get_using_actions()
+            except Exception as exc:
+                logger.warning(f"[回复协调] {channel_id} 获取可用动作失败: {exc}")
 
         return await generator_api.generate_reply(
             chat_stream=chat_stream,
@@ -276,7 +280,7 @@ class ReplyCoordinator:
             chosen_actions=[],
             reply_reason=reply_reason,
             unknown_words=None,
-            enable_tool=global_config.tool.enable_tool,
+            enable_tool=(False if fast_path else global_config.tool.enable_tool),
             request_type=request_type,
             from_plugin=False,
             reply_time_point=_tm.time(),
@@ -285,6 +289,7 @@ class ReplyCoordinator:
             enable_splitter=enable_splitter,
             enable_chinese_typo=enable_chinese_typo,
             fast_path=fast_path,
+            fast_path_deadline=fast_path_deadline,
         )
 
     def select_reply_target(

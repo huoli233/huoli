@@ -1594,3 +1594,28 @@
 - 删除后启动时不会再注册 `TelemetryHeartBeatTask`，因此不会再出现 `[远程连接] 状态未发生: TimeoutError: 未知错误`。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T08:08:02+08:00 - Task: 修复直接快回预算外慢构建
+
+### What was done:
+- 定位用户日志中 `直接快回整体超时(10.0s)` 但整轮仍耗时 32 秒的原因：快回前置仍在做同步目标重选、关系/风格解析、动作准备、工具执行器初始化和最近历史 DB 读取，`asyncio.wait_for` 无法打断这些同步阻塞。
+- 直接快回链路不再执行慢目标重选、骚扰分析和风格路由解析，改用当前最新真人消息与固定直回风格。
+- 直接快回使用轻量关系快照，不再为了摘要重新读取实时关系/情绪状态。
+- `ReplyCoordinator.generate_reply()` 在 `fast_path=True` 时跳过 `action_modifier.modify_actions()` 和工具动作收集，并强制 `enable_tool=False`。
+- 群聊/私聊回复器的 `ToolExecutor` 改为懒加载，只在真正需要工具链时初始化；直接快回不会再出现工具执行器初始化。
+- 将 `fast_path_deadline` 从心流执行链一路传到 `generator_api` 和回复器；快回构建 Prompt 前后都会检查预算，预算耗尽就直接退出。
+- 群聊 fast_path 不再读取最近历史 DB，只使用当前消息和上层传入的灵魂/目标信息构建短 prompt。
+- 更新 `scripts/heartflow_state_regression.py`，锁定直接快回 deadline、工具链跳过和 DB 历史跳过契约。
+
+### Testing:
+- `uv run ruff check src\chat\heart_flow\enhanced_modules\proactive_reactive_flow_mixin.py src\chat\heart_flow\reply_coordinator.py src\plugin_system\apis\generator_api.py src\chat\replyer\group_generator.py src\chat\replyer\private_generator.py scripts\heartflow_state_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新增 `direct_fast_deadline_enforced=true`、`direct_fast_tool_chain_skipped=true`、`direct_fast_db_history_skipped=true`。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 这轮修复的是直接快回链路，不改变 deep_think 深思路径；复杂消息仍可走规划器/深度链路。
+- 直接快回目标是低信息、管理员强制或 simple direct 场景下尽快生成一句话；不再等工具、DB 历史和慢风格路由。
+- 如果后续仍有超过预算的卡顿，下一步应继续把 LLM HTTP 请求层做可取消/更短 timeout，而不是在心流外层继续套 `wait_for`。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

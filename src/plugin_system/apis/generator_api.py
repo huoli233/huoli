@@ -120,6 +120,7 @@ async def generate_reply(
     from_plugin: bool = True,
     reply_time_point: Optional[float] = None,
     fast_path: bool = False,
+    fast_path_deadline: Optional[float] = None,
 ) -> Tuple[bool, Optional["LLMGenerationDataModel"]]:
     """生成回复
 
@@ -142,6 +143,7 @@ async def generate_reply(
         from_plugin: 是否来自插件
         reply_time_point: 回复时间点
         fast_path: 是否使用快回复路径，跳过非关键后处理
+        fast_path_deadline: 快回路径的单调时钟截止点，超过后不再继续构建或调用模型
     Returns:
         Tuple[bool, List[Tuple[str, Any]], Optional[str]]: (是否成功, 回复集合, 提示词)
     """
@@ -191,6 +193,7 @@ async def generate_reply(
             reply_time_point=reply_time_point,
             log_reply=False,
             fast_path=fast_path,
+            fast_path_deadline=fast_path_deadline,
         )
         if not success:
             logger.warning("[GeneratorAPI] 回复生成失败")

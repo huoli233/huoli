@@ -97,11 +97,6 @@ class ProactiveReactiveFlowMixin:
                     if not self._is_bot_message_obj(msg):
                         target_message = msg
                         break
-            target_message = self._select_preferred_reply_message(target_message, list(incoming_batch[-10:]))
-            if target_message is None:
-                self._last_flow_blocker = "voice缺少可回复目标"
-                logger.info(f"{self.log_prefix} 💭 内心驱动回复缺少目标消息，转为观察")
-                return False
 
             gateway_gate = str(getattr(self, "_last_gateway_gate", "allow") or "allow")
             force_bypass = bool(force_reply_message is not None or gateway_gate == "force_reply")
@@ -109,6 +104,18 @@ class ProactiveReactiveFlowMixin:
             direct_fast_reply_generation = self._should_use_direct_fast_reply_generation(
                 force_bypass=force_bypass,
             )
+            direct_fast_timeout: Optional[float] = None
+            direct_fast_deadline: Optional[float] = None
+            if direct_fast_reply_generation:
+                direct_fast_timeout = max(0.5, _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds"))
+                direct_fast_deadline = time.monotonic() + direct_fast_timeout
+            else:
+                target_message = self._select_preferred_reply_message(target_message, list(incoming_batch[-10:]))
+            if target_message is None:
+                self._last_flow_blocker = "voice缺少可回复目标"
+                logger.info(f"{self.log_prefix} 💭 内心驱动回复缺少目标消息，转为观察")
+                return False
+
             if direct_fast_reply_generation:
                 restraint = {"allow": True, "mode": "short_only", "reason": "直接快回跳过自省深检"}
             else:
@@ -151,7 +158,15 @@ class ProactiveReactiveFlowMixin:
             current_target_block = self._build_current_target_message_block(target_message)
             if current_target_block:
                 extra_info_parts.append(current_target_block)
-            relation_view = self._resolve_relation_view()
+            if direct_fast_reply_generation:
+                try:
+                    relation_view = self._normalize_relation_snapshot(
+                        getattr(self, "_last_relation_snapshot", {}) or {}
+                    )
+                except Exception:
+                    relation_view = {}
+            else:
+                relation_view = self._resolve_relation_view()
             context_execution_block = ""
             if direct_fast_reply_generation:
                 extra_info_parts.append("[直接快回] 一句短口语，直接回应当前消息；不做长篇解释，不二次改写，不补充追发。")
@@ -204,23 +219,32 @@ class ProactiveReactiveFlowMixin:
                 self._takeover_decision = None
                 self._takeover_action = None
 
-            harassment_signal = self._analyze_harassment_pressure(incoming_batch)
+            harassment_signal = None if direct_fast_reply_generation else self._analyze_harassment_pressure(incoming_batch)
             from src.chat.heart_flow.reply_coordinator import acquire_reply_coordinator
 
-            style_route = acquire_reply_coordinator().resolve_style_route(
-                delivery_form="",
-                target_message=target_message,
-                reference_user_name="",
-                mention_user_name="",
-                fallback_selector=lambda msg, rel, hs: self._decide_reply_style(
-                    target_message=msg,
-                    relation_snapshot=rel,
-                    harassment_signal=hs,
-                ),
-                relation_view=relation_view,
-                harassment_signal=harassment_signal,
-                is_bot_message=self._is_bot_message_obj,
-            )
+            if direct_fast_reply_generation:
+                style_route = {
+                    "reply_style": "direct",
+                    "quote_message": False,
+                    "quote_policy": "none",
+                    "target_user_id": str(getattr(target_message, "user_id", "") or "").strip(),
+                    "reason": "直接快回固定直回",
+                }
+            else:
+                style_route = acquire_reply_coordinator().resolve_style_route(
+                    delivery_form="",
+                    target_message=target_message,
+                    reference_user_name="",
+                    mention_user_name="",
+                    fallback_selector=lambda msg, rel, hs: self._decide_reply_style(
+                        target_message=msg,
+                        relation_snapshot=rel,
+                        harassment_signal=hs,
+                    ),
+                    relation_view=relation_view,
+                    harassment_signal=harassment_signal,
+                    is_bot_message=self._is_bot_message_obj,
+                )
             from src.chat.replyer.context_block_builder import append_reply_style
 
             append_reply_style(extra_info_parts, style_route)
@@ -247,22 +271,38 @@ class ProactiveReactiveFlowMixin:
                 logger.warning(
                     f"{self.log_prefix} ⚠️ 传入LLM的extra_info中没有灵魂数据！extra_info长度={len(extra_info or '')}"
                 )
-            self._emit_reply_generation_summary(
-                target_message=target_message,
-                style_route=style_route,
-                relation_snapshot=relation_view,
-                context_execution_block=context_execution_block,
-                extra_info=extra_info,
-                source="voice_driven",
-            )
+            if direct_fast_reply_generation:
+                logger.info(
+                    f"{self.log_prefix} 回复生成摘要 来源=voice_driven_fast "
+                    f"对象={str(getattr(target_message, 'user_id', '') or '')[:8] or 'none'} "
+                    f"形式=direct 引用=否 引用策略=none 前情块=无 提示长度={len(extra_info)}"
+                )
+            else:
+                self._emit_reply_generation_summary(
+                    target_message=target_message,
+                    style_route=style_route,
+                    relation_snapshot=relation_view,
+                    context_execution_block=context_execution_block,
+                    extra_info=extra_info,
+                    source="voice_driven",
+                )
 
             from src.chat.heart_flow.reply_coordinator import acquire_reply_coordinator
 
             generation_failure_reason = "voice_generation_failed"
             force_reply_timeout = _rt_float("heartfc_force_reply_generation_timeout_seconds")
             if direct_fast_reply_generation:
-                direct_fast_timeout = _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds")
-                logger.debug(f"{self.log_prefix} ⚡ 直接快回生成预算={direct_fast_timeout:.1f}s")
+                if direct_fast_timeout is None:
+                    direct_fast_timeout = max(0.5, _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds"))
+                if direct_fast_deadline is None:
+                    direct_fast_deadline = time.monotonic() + direct_fast_timeout
+                _remaining_fast_budget = max(0.0, direct_fast_deadline - time.monotonic())
+                if _remaining_fast_budget <= 0.0:
+                    self._last_flow_blocker = "direct_fast_reply_generation_budget_exhausted"
+                    self._mark_message_content_deferred(target_message, self._last_flow_blocker)
+                    logger.warning(f"{self.log_prefix} 💭 直接快回预算已耗尽，取消发送")
+                    return False
+                logger.debug(f"{self.log_prefix} ⚡ 直接快回剩余生成预算={_remaining_fast_budget:.1f}s")
             elif forced_reply_generation:
                 logger.debug(f"{self.log_prefix} 👑 强制回复完整生成预算={force_reply_timeout:.1f}s")
             reply_generation = acquire_reply_coordinator().generate_reply(
@@ -276,6 +316,7 @@ class ProactiveReactiveFlowMixin:
                 request_type="voice_driven_reply",
                 think_level=1,
                 fast_path=direct_fast_reply_generation,
+                fast_path_deadline=direct_fast_deadline,
                 enable_splitter=not direct_fast_reply_generation,
                 enable_chinese_typo=not direct_fast_reply_generation,
             )
@@ -283,7 +324,7 @@ class ProactiveReactiveFlowMixin:
                 try:
                     success, llm_response = await asyncio.wait_for(
                         reply_generation,
-                        timeout=direct_fast_timeout,
+                        timeout=max(0.5, direct_fast_deadline - time.monotonic()) if direct_fast_deadline else direct_fast_timeout,
                     )
                 except asyncio.TimeoutError:
                     success = False

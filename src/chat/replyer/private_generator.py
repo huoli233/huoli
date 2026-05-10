@@ -180,13 +180,18 @@ class PrivateReplyer:
         self.heart_fc_sender = UniversalMessageSender()
         # self.memory_activator = MemoryActivator()
 
-        from src.plugin_system.core.tool_use import (
-            ToolExecutor,
-        )  # 延迟导入ToolExecutor，不然会循环依赖
+        self._tool_executor = None
 
-        self.tool_executor = ToolExecutor(
-            chat_id=self.chat_stream.stream_id, enable_cache=True, cache_ttl=3
-        )
+    def _get_tool_executor(self):
+        if self._tool_executor is None:
+            from src.plugin_system.core.tool_use import (
+                ToolExecutor,
+            )  # 延迟导入ToolExecutor，不然会循环依赖
+
+            self._tool_executor = ToolExecutor(
+                chat_id=self.chat_stream.stream_id, enable_cache=True, cache_ttl=3
+            )
+        return self._tool_executor
 
     @staticmethod
     def _metric_or_default(value: Any, default: float) -> float:
@@ -617,6 +622,7 @@ class PrivateReplyer:
         unknown_words: Optional[List[str]] = None,
         log_reply: bool = True,
         fast_path: bool = False,
+        fast_path_deadline: Optional[float] = None,
     ) -> Tuple[bool, LLMGenerationDataModel]:
         # sourcery skip: merge-nested-ifs
         """
@@ -643,6 +649,10 @@ class PrivateReplyer:
         if available_actions is None:
             available_actions = {}
         try:
+            if fast_path and fast_path_deadline is not None and time.monotonic() >= fast_path_deadline:
+                logger.warning("[fast_path] 私聊快回预算已耗尽，跳过prompt构建")
+                return False, llm_response
+
             # 3. 构建 Prompt
             with Timer("构建Prompt", {}):  # 内部计时器，可选保留
                 prompt, selected_expressions = (
@@ -656,6 +666,9 @@ class PrivateReplyer:
                         unknown_words=unknown_words,
                     )
                 )
+            if fast_path and fast_path_deadline is not None and time.monotonic() >= fast_path_deadline:
+                logger.warning("[fast_path] 私聊快回预算已耗尽，跳过LLM生成")
+                return False, llm_response
             llm_response.prompt = prompt
             llm_response.selected_expressions = selected_expressions
 
@@ -952,7 +965,7 @@ class PrivateReplyer:
         try:
             # 使用工具执行器获取信息
             tool_results, _, _ = (
-                await self.tool_executor.execute_from_chat_message(
+                await self._get_tool_executor().execute_from_chat_message(
                     sender=sender,
                     target_message=target,
                     chat_history=chat_history,

@@ -1686,6 +1686,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     coordinator_source = (ROOT / "src/chat/heart_flow/reply_coordinator.py").read_text(encoding="utf-8")
     generator_source = (ROOT / "src/plugin_system/apis/generator_api.py").read_text(encoding="utf-8")
     group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
+    private_reply_source = (ROOT / "src/chat/replyer/private_generator.py").read_text(encoding="utf-8")
     tool_executor_source = (ROOT / "src/plugin_system/core/tool_use.py").read_text(encoding="utf-8")
     core_config_source = (ROOT / "config/core_config.toml").read_text(encoding="utf-8")
     core_template_source = (ROOT / "template/core_config_template.toml").read_text(encoding="utf-8")
@@ -1745,6 +1746,10 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "_voice_reply_timeout = max(" in loop_source
     assert "direct_fast_reply_total_timeout" in loop_source
     assert "直接快回整体超时" in loop_source
+    assert "direct_fast_deadline = time.monotonic() + direct_fast_timeout" in flow_source
+    assert "fast_path_deadline=direct_fast_deadline" in flow_source
+    assert "直接快回预算已耗尽" in flow_source
+    assert "来源=voice_driven_fast" in flow_source
     assert "heartfc_direct_fastlane_background_voice_timeout_seconds" in loop_source
     assert "direct_fastlane_background" in loop_source
     assert "get_intention_pool().ingest_voice_verdict" in loop_source
@@ -1771,6 +1776,17 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "self_reference_parts = self._build_self_reference_parts(target_message)\n                if self_reference_parts.get(\"self_memory\")" not in flow_source
     assert "fast_path: bool = False" in coordinator_source
     assert "fast_path: bool = False" in generator_source
+    assert "fast_path_deadline: Optional[float] = None" in coordinator_source
+    assert "fast_path_deadline: Optional[float] = None" in generator_source
+    assert "fast_path_deadline: Optional[float] = None" in group_reply_source
+    assert "fast_path_deadline: Optional[float] = None" in private_reply_source
+    assert "直接快回跳过动作与工具准备" in coordinator_source
+    assert "enable_tool=(False if fast_path else global_config.tool.enable_tool)" in coordinator_source
+    assert "self._tool_executor = None" in group_reply_source
+    assert "self._tool_executor = None" in private_reply_source
+    assert "self.tool_executor" not in group_reply_source
+    assert "self.tool_executor" not in private_reply_source
+    assert "chat_talking_prompt_fast = \"\"" in group_reply_source
     assert "[reply_postprocess] 跳过自然化错字和二次改写" in group_reply_source
     assert "_apply_adaptive_recall(content" not in group_reply_source
     assert "await self._apply_rewrite_if_needed(" not in group_reply_source
@@ -1790,6 +1806,9 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "direct_fast_reply_path": True,
         "force_reply_uses_direct_fast_path": True,
         "explicit_full_generation_override": True,
+        "direct_fast_deadline_enforced": True,
+        "direct_fast_tool_chain_skipped": True,
+        "direct_fast_db_history_skipped": True,
     }
 
 

@@ -248,14 +248,18 @@ class DefaultReplyer:
         self._active_persona: Optional[Dict[str, Any]] = None
         self._persona_sync_ts: float = 0.0
         self.log_prefix = f"[回复生成:{self.chat_stream.stream_id[:8] if hasattr(self, 'chat_stream') else 'unknown'}]"
-
-        from src.plugin_system.core.tool_use import (
-            ToolExecutor,
-        )  # 延迟导入ToolExecutor，不然会循环依赖
-
-        self.tool_executor = ToolExecutor(chat_id=self.chat_stream.stream_id, enable_cache=True, cache_ttl=3)
+        self._tool_executor = None
         self._recent_context_text: str = ""
         self._pending_followup_task: Optional[asyncio.Task] = None
+
+    def _get_tool_executor(self):
+        if self._tool_executor is None:
+            from src.plugin_system.core.tool_use import (
+                ToolExecutor,
+            )  # 延迟导入ToolExecutor，不然会循环依赖
+
+            self._tool_executor = ToolExecutor(chat_id=self.chat_stream.stream_id, enable_cache=True, cache_ttl=3)
+        return self._tool_executor
 
     @staticmethod
     def _metric_or_default(value: Any, default: float) -> float:
@@ -952,6 +956,7 @@ class DefaultReplyer:
         log_reply: bool = True,
         use_multi_turn: Optional[bool] = None,
         fast_path: bool = False,
+        fast_path_deadline: Optional[float] = None,
     ) -> Tuple[bool, LLMGenerationDataModel]:
         # sourcery skip: merge-nested-ifs
         """
@@ -989,6 +994,10 @@ class DefaultReplyer:
             use_multi_turn = global_config.chat.enable_multi_turn
 
         try:
+            if fast_path and fast_path_deadline is not None and time.monotonic() >= fast_path_deadline:
+                logger.warning("[fast_path] 快回预算已耗尽，跳过prompt构建")
+                return False, llm_response
+
             # 3. 构建 Prompt
             timing_logs = []
             almost_zero_str = ""
@@ -1008,6 +1017,16 @@ class DefaultReplyer:
                     fast_path=fast_path,
                 )
             prompt_duration_ms = (time.perf_counter() - prompt_start) * 1000
+
+            if fast_path and fast_path_deadline is not None and time.monotonic() >= fast_path_deadline:
+                logger.warning("[fast_path] 快回预算已耗尽，跳过LLM生成")
+                llm_response.timing = {
+                    "prompt_ms": round(prompt_duration_ms or 0.0, 2),
+                    "overall_ms": round((time.perf_counter() - overall_start) * 1000, 2),
+                    "timing_logs": timing_logs,
+                    "almost_zero": almost_zero_str,
+                }
+                return False, llm_response
 
             # 处理消息列表用于日志记录
             prompt_for_log = None  # 初始化变量
@@ -1348,7 +1367,7 @@ class DefaultReplyer:
 
         try:
             # 使用工具执行器获取信息
-            tool_results, _, _ = await self.tool_executor.execute_from_chat_message(
+            tool_results, _, _ = await self._get_tool_executor().execute_from_chat_message(
                 sender=sender,
                 target_message=target,
                 chat_history=chat_history,
@@ -2891,22 +2910,7 @@ class DefaultReplyer:
         target = self._replace_picids_with_descriptions(target)
 
         if fast_path:
-            message_list_fast = get_raw_msg_before_timestamp_with_chat(
-                chat_id=chat_id,
-                timestamp=reply_time_point,
-                limit=min(int(global_config.chat.max_context_size * 0.25), 6),
-                filter_intercept_message_level=1,
-            )
-            sanitized_messages_fast = self._sanitize_prompt_history_messages(message_list_fast)
-            chat_talking_prompt_fast = build_readable_messages(
-                sanitized_messages_fast,
-                replace_bot_name=True,
-                timestamp_mode="relative",
-                read_mark=0.0,
-                show_actions=True,
-                long_time_notice=False,
-            )
-            chat_talking_prompt_fast = self._sanitize_history_prompt_text(chat_talking_prompt_fast)
+            chat_talking_prompt_fast = ""
             prompt_extra_info = self._prune_redundant_context_sources(
                 extra_info,
                 recent_context_present=bool(chat_talking_prompt_fast),
