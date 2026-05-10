@@ -1817,6 +1817,13 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "self.tool_executor" not in private_reply_source
     assert "if fast_path:\n                person_name = self._message_sender_name(reply_message) or user_id" in group_reply_source
     assert "chat_talking_prompt_fast = \"\"" in group_reply_source
+    assert "fast_low_info_text = text_part if has_text else target" in group_reply_source
+    assert "low_info_guard = self._build_low_info_input_guard(fast_low_info_text)" in group_reply_source
+    assert "low_info_input=bool(low_info_guard)" in group_reply_source
+    assert "identity=fast_identity_hint" in group_reply_source
+    assert "不要复读、不要照抄、不要同音改写对方原句" in group_reply_source
+    assert "不要把对方词尾改成“我/你”当回复" in group_reply_source
+    assert "信息不完整就自然追问或轻接一句" in group_reply_source
     assert "[reply_postprocess] 跳过自然化错字和二次改写" in group_reply_source
     assert "_apply_adaptive_recall(content" not in group_reply_source
     assert "await self._apply_rewrite_if_needed(" not in group_reply_source
@@ -1824,7 +1831,11 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "管理员强制快回" not in group_reply_source
     assert "直接快回通道" in group_reply_source
     assert "fast_path=fast_path" in private_reply_source
-    assert "if fast_path:\n            extra_info_block = build_reply_context_block" in private_reply_source
+    assert "if fast_path:\n            fast_low_info_text = text_part if has_text else target" in private_reply_source
+    assert "low_info_guard = self._build_low_info_input_guard(fast_low_info_text)" in private_reply_source
+    assert "low_info_input=bool(low_info_guard)" in private_reply_source
+    assert "identity=fast_identity_hint" in private_reply_source
+    assert "不要复读、不要照抄、不要同音改写对方原句" in private_reply_source
     assert "_cond_tasks" not in group_reply_source
     assert "_reply_context_tasks" in group_reply_source
     assert "asyncio.gather(*_reply_context_tasks)" in group_reply_source
@@ -1845,6 +1856,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "direct_fast_budget_starts_at_generation": True,
         "direct_fast_temp_record_skipped": True,
         "direct_fast_budget_matches_model_timeout": True,
+        "direct_fast_low_info_guard_restored": True,
     }
 
 

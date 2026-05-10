@@ -1712,3 +1712,27 @@
 - 这次只改日志/状态栏显示层，不删除夜间节律、困意计算或回复语气约束。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T08:50:31+08:00 - Task: 修复直接快回低信息短句复读与乱改写
+
+### What was done:
+- 根据用户日志确认当前失败点已经从“生成超时/预算耗尽”变成“快回 prompt 过薄导致模型乱改写”：`voice_driven_fast` 能进入 Gemini 并返回，但输出了 `嗯，曹氏我。` 这类把低信息短句机械改写成第一人称的回复。
+- 对比回滚记录确认上一轮速度优化保留了不读 DB、不跑工具链的快路径，但把低信息输入护栏、主人格口语提示和避免复读约束从 fast_path prompt 中削掉了。
+- 群聊 fast_path 恢复 `_build_low_info_input_guard()`，并把 `low_info_input=bool(low_info_guard)` 传入 compact planner，低信息短句会进入“别脑补、轻接或追问”的策略。
+- 私聊 fast_path 同步恢复低信息护栏，并补齐与群聊一致的“不要没活/找茬/阴阳怪气”等无证据脑补禁止项。
+- 为群聊/私聊 fast_path 增加轻量主人格提示和短句护栏：不要复读、不要照抄、不要同音改写对方原句，不要把对方词尾改成“我/你”当回复。
+- 更新 `scripts/heartflow_state_regression.py`，锁定直接快回低信息护栏、身份提示和反复读约束不得再次被删。
+
+### Testing:
+- `uv run ruff check src\chat\replyer\group_generator.py src\chat\replyer\private_generator.py scripts\heartflow_state_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新增 `direct_fast_low_info_guard_restored=true`。
+- 本地 fast_path prompt 探针通过：用 `曹氏你` 构造群聊/私聊快回 prompt，不调用 LLM；群聊 prompt 约 312 字、私聊 prompt 约 258 字，均包含低信息判断、主人格口语提示和禁止词尾改写约束。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 这次不是把慢历史 DB 读取加回直接快回；速度优化仍保留，修的是 fast_path prompt 语义护栏缺失。
+- 预期效果：`曹氏你`、`我的刀盾` 这类信息不完整短句不会再被快回模型机械改成 `曹氏我`、`我的刀盾我` 这类复读/错改写。
+- 变更需要重启主程序后生效。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

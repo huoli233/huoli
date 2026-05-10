@@ -654,6 +654,13 @@ class DefaultReplyer:
         )
 
     @classmethod
+    def _build_fast_path_identity_hint(cls) -> str:
+        return (
+            "按主人格自然口语说，别像脚本。"
+            "不要复读、照抄、同音改写原句，也别把对方词尾改成我/你。"
+        )
+
+    @classmethod
     def _should_skip_tools_for_low_info_input(cls, target_text: str, has_text: bool = True) -> bool:
         """短低信息输入不跑工具链，避免查词/历史检索拖慢并制造机械回复。"""
         if not has_text:
@@ -2950,15 +2957,26 @@ class DefaultReplyer:
 
         if fast_path:
             chat_talking_prompt_fast = ""
+            fast_low_info_text = text_part if has_text else target
+            low_info_guard = self._build_low_info_input_guard(fast_low_info_text)
+            fast_identity_hint = self._build_fast_path_identity_hint()
             prompt_extra_info = self._prune_redundant_context_sources(
                 extra_info,
                 recent_context_present=bool(chat_talking_prompt_fast),
             )
+            fast_extra_info = "\n".join(
+                part
+                for part in (
+                    self._sanitize_extra_info(prompt_extra_info),
+                    "短句护栏: 不要复读、不要照抄、不要同音改写对方原句；信息不完整就自然追问或轻接一句。",
+                )
+                if str(part or "").strip()
+            )
             extra_info_block = build_reply_context_block(
                 recent_context=chat_talking_prompt_fast,
                 relevant_context="",
-                extra_info=self._sanitize_extra_info(prompt_extra_info),
-                recent_reply_guard="",
+                extra_info=fast_extra_info,
+                recent_reply_guard=low_info_guard,
                 max_total_tokens=180,
             )
             if sender:
@@ -2974,7 +2992,7 @@ class DefaultReplyer:
                 reply_target_block = ""
             planner_reasoning = self._build_compact_planner_reasoning(
                 reply_reason,
-                low_info_input=False,
+                low_info_input=bool(low_info_guard),
             )
             sleepy_guard = ""
             if _night_state_is_sleepy(extra_info) or _target_asks_sleep(reply_message):
@@ -2985,6 +3003,8 @@ class DefaultReplyer:
                 )
             fast_behavioral_directive = (
                 "直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
+                "不要复读、不要照抄、不要同音改写对方原句；不要把对方词尾改成“我/你”当回复。"
+                "如果信息不完整，轻轻接住或追问半句，不要猜词义。"
                 f"{sleepy_guard}"
             )
             prompt = get_group_responder_prompt(
@@ -2995,7 +3015,7 @@ class DefaultReplyer:
                 knowledge_prompt="",
                 extra_info_block=extra_info_block,
                 jargon_explanation="",
-                identity="",
+                identity=fast_identity_hint,
                 dialogue_prompt="",
                 time_block="",
                 reply_target_block=reply_target_block,

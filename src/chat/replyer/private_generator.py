@@ -417,6 +417,15 @@ class PrivateReplyer:
             "【低信息输入约束】对方这句信息不完整，禁止脑补对方态度、禁止训斥、禁止说教或审问式表达。"
             "可以自由接话，但保持短句、口语、低攻击；优先轻松追问、顺着话头接一句或温和调侃。"
             "不要出现“复读机”“一次性说全”“你到底想说啥”“建议您”等表达。"
+            "不要说“没活了”“找茬”“挑衅”“阴阳怪气”，这些属于无证据脑补。"
+            "如果已经是重复短句，不要机械说“又来这句”或“没反应过来”，换成更自然的一句。"
+        )
+
+    @classmethod
+    def _build_fast_path_identity_hint(cls) -> str:
+        return (
+            "按主人格自然口语说，别像脚本。"
+            "不要复读、照抄、同音改写原句，也别把对方词尾改成我/你。"
         )
 
     @staticmethod
@@ -1404,10 +1413,22 @@ class PrivateReplyer:
             target = self._replace_picids_with_descriptions(target)
 
         if fast_path:
+            fast_low_info_text = text_part if has_text else target
+            low_info_guard = self._build_low_info_input_guard(fast_low_info_text)
+            fast_identity_hint = self._build_fast_path_identity_hint()
+            fast_extra_info = "\n".join(
+                part
+                for part in (
+                    sanitize_extra_info(extra_info, max_tokens=140),
+                    "短句护栏: 不要复读、不要照抄、不要同音改写对方原句；信息不完整就自然追问或轻接一句。",
+                )
+                if str(part or "").strip()
+            )
             extra_info_block = build_reply_context_block(
                 recent_context="",
                 relevant_context="",
-                extra_info=sanitize_extra_info(extra_info, max_tokens=140),
+                extra_info=fast_extra_info,
+                recent_reply_guard=low_info_guard,
                 max_total_tokens=180,
             )
             if sender:
@@ -1423,14 +1444,20 @@ class PrivateReplyer:
                 reply_target_block = f"这轮对方说：{target}"
             planner_reasoning = self._build_compact_planner_reasoning(
                 reply_reason,
-                low_info_input=False,
+                low_info_input=bool(low_info_guard),
+            )
+            fast_reply_style = (
+                "直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
+                "不要复读、不要照抄、不要同音改写对方原句；不要把对方词尾改成“我/你”当回复。"
+                "如果信息不完整，轻轻接住或追问半句，不要猜词义。"
             )
             prompt = get_private_responder_prompt(
                 sender_name=sender or "对方",
+                identity=fast_identity_hint,
                 extra_info_block=extra_info_block,
                 reply_target_block=reply_target_block,
                 planner_reasoning=planner_reasoning,
-                reply_style="直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。",
+                reply_style=fast_reply_style,
             )
             return prompt, []
 
