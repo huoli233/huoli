@@ -255,13 +255,17 @@ class ReplyCoordinator:
     ):
         from src.plugin_system.apis import generator_api
         from src.config.config import global_config
-        from src.chat.utils.utils import record_replyer_action_temp
 
-        record_replyer_action_temp(
-            chat_id=channel_id,
-            reason=reply_reason,
-            think_level=think_level,
-        )
+        if fast_path:
+            logger.debug(f"[回复协调] {channel_id} 直接快回跳过临时动作记录")
+        else:
+            from src.chat.utils.utils import record_replyer_action_temp
+
+            record_replyer_action_temp(
+                chat_id=channel_id,
+                reason=reply_reason,
+                think_level=think_level,
+            )
 
         available_actions: Dict[str, Any] = {}
         if fast_path:

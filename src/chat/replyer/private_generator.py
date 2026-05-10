@@ -194,6 +194,40 @@ class PrivateReplyer:
         return self._tool_executor
 
     @staticmethod
+    def _message_user_id(message: Any) -> str:
+        info = getattr(message, "user_info", None)
+        if info is None:
+            info = getattr(getattr(message, "message_info", None), "user_info", None)
+        return str(
+            getattr(message, "user_id", "")
+            or getattr(info, "user_id", "")
+            or ""
+        ).strip()
+
+    @staticmethod
+    def _message_sender_name(message: Any) -> str:
+        info = getattr(message, "user_info", None)
+        if info is None:
+            info = getattr(getattr(message, "message_info", None), "user_info", None)
+        return str(
+            getattr(message, "user_cardname", "")
+            or getattr(info, "user_cardname", "")
+            or getattr(message, "user_nickname", "")
+            or getattr(info, "user_nickname", "")
+            or ""
+        ).strip()
+
+    @staticmethod
+    def _message_text(message: Any) -> str:
+        return str(
+            getattr(message, "processed_plain_text", "")
+            or getattr(message, "plain_text", "")
+            or getattr(message, "display_message", "")
+            or getattr(message, "content", "")
+            or ""
+        )
+
+    @staticmethod
     def _metric_or_default(value: Any, default: float) -> float:
         if value is None or value == "":
             return float(default)
@@ -664,6 +698,7 @@ class PrivateReplyer:
                         reply_message=reply_message,
                         reply_reason=reply_reason,
                         unknown_words=unknown_words,
+                        fast_path=fast_path,
                     )
                 )
             if fast_path and fast_path_deadline is not None and time.monotonic() >= fast_path_deadline:
@@ -1317,6 +1352,7 @@ class PrivateReplyer:
         chosen_actions: Optional[List[ActionPlannerInfo]] = None,
         enable_tool: bool = True,
         unknown_words: Optional[List[str]] = None,
+        fast_path: bool = False,
     ) -> Tuple[str, List[int]]:
         """
         构建回复器上下文
@@ -1344,15 +1380,19 @@ class PrivateReplyer:
         target = "消息"
 
         if reply_message:
-            user_id = reply_message.user_id
-            person = Person(platform=platform, user_id=user_id)
-            person_name = person.person_name or user_id
+            user_id = self._message_user_id(reply_message)
+            if fast_path:
+                person_name = self._message_sender_name(reply_message) or user_id
+            else:
+                person = Person(platform=platform, user_id=user_id)
+                person_name = person.person_name or user_id
             sender = person_name
-            target = reply_message.processed_plain_text
+            target = self._message_text(reply_message)
 
-        target = replace_user_references(
-            target, chat_stream.platform, replace_bot_name=True
-        )
+        if "回复<" in target or "@<" in target:
+            target = replace_user_references(
+                target, chat_stream.platform, replace_bot_name=True
+            )
 
         # 在picid替换之前分析内容类型（防止prompt注入）
         has_only_pics, has_text, pic_part, text_part = (
@@ -1360,7 +1400,39 @@ class PrivateReplyer:
         )
 
         # 将[picid:xxx]替换为具体的图片描述
-        target = self._replace_picids_with_descriptions(target)
+        if "[picid:" in target:
+            target = self._replace_picids_with_descriptions(target)
+
+        if fast_path:
+            extra_info_block = build_reply_context_block(
+                recent_context="",
+                relevant_context="",
+                extra_info=sanitize_extra_info(extra_info, max_tokens=140),
+                max_total_tokens=180,
+            )
+            if sender:
+                if has_only_pics and not has_text:
+                    reply_target_block = f"这轮是{sender}发来的图：{pic_part}"
+                elif has_text and pic_part:
+                    reply_target_block = f"这轮是{sender}发图并说：{text_part}"
+                elif has_text:
+                    reply_target_block = f"这轮是{sender}说：{text_part}"
+                else:
+                    reply_target_block = f"这轮是{sender}说：{target}"
+            else:
+                reply_target_block = f"这轮对方说：{target}"
+            planner_reasoning = self._build_compact_planner_reasoning(
+                reply_reason,
+                low_info_input=False,
+            )
+            prompt = get_private_responder_prompt(
+                sender_name=sender or "对方",
+                extra_info_block=extra_info_block,
+                reply_target_block=reply_target_block,
+                planner_reasoning=planner_reasoning,
+                reply_style="直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。",
+            )
+            return prompt, []
 
         message_list_before_now_long = get_raw_msg_before_timestamp_with_chat(
             chat_id=chat_id,

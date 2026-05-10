@@ -1643,6 +1643,30 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
 
+## 2026-05-10T08:27:08+08:00 - Task: 修复直接快回生成前预算耗尽
+
+### What was done:
+- 定位用户日志中 `[fast_path] 快回预算已耗尽，跳过LLM生成` 的直接原因：直接快回 8 秒 deadline 从执行入口过早开始计时，`record_replyer_action_temp()` 同步 DB 写入、回复器获取和 prompt 前置处理都在消耗同一个 LLM 前预算，导致模型调用前被 fast_path 自己拦掉。
+- 将直接快回 deadline 延后到真正准备调用回复器前重新计算，前面的心流状态拼装仍由外层整体超时保护。
+- `ReplyCoordinator.generate_reply()` 在 `fast_path=True` 时跳过非必要的临时动作 DB 记录，避免 SQLite/表创建/写入锁阻塞吞掉快回预算。
+- 群聊和私聊 fast_path prompt 构建改为从消息对象直接读取用户昵称/文本，不再为了快回发起 `Person` 数据库读取；无引用/无图片时也不再调用引用替换和图片描述解析。
+- 补齐私聊 fast_path prompt 分支，避免私聊快回仍走完整历史、记忆、表达和工具上下文构建。
+- 更新心流回归契约，锁定快回 deadline 起点、临时动作记录跳过、群聊/私聊快回轻量构建。
+
+### Testing:
+- `uv run ruff check src\chat\heart_flow\enhanced_modules\proactive_reactive_flow_mixin.py src\chat\heart_flow\reply_coordinator.py src\chat\replyer\group_generator.py src\chat\replyer\private_generator.py scripts\heartflow_state_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新增 `direct_fast_budget_starts_at_generation=true`、`direct_fast_temp_record_skipped=true`。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+- 本地 fast_path 探针通过：`DatabaseMessages` 形态下群聊 prompt 约 0.0057s、私聊 prompt 约 0.0002s，均能生成有效 prompt。
+
+### Notes:
+- 这次失败不是 LLM 输出空，而是快回 deadline 在进入 LLM 前已经过期，回复器按设计直接返回失败。
+- 修复后仍保留直接快回整体超时；如果模型请求本身慢，会走 `direct_fast_reply_generation_timeout`，而不是在 prompt 前被误判为预算耗尽。
+- 变更需要重启主程序后生效。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
 ## 2026-05-10T08:22:05+08:00 - Task: 优化心流状态栏困倦显示
 
 ### What was done:

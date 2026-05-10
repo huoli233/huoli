@@ -1760,6 +1760,11 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "direct_fast_reply_total_timeout" in loop_source
     assert "直接快回整体超时" in loop_source
     assert "direct_fast_deadline = time.monotonic() + direct_fast_timeout" in flow_source
+    assert (
+        "if direct_fast_reply_generation:\n"
+        "                direct_fast_timeout = max(0.5, _rt_float(\"heartfc_direct_fast_reply_generation_timeout_seconds\"))\n"
+        "                direct_fast_deadline = time.monotonic() + direct_fast_timeout"
+    ) not in flow_source
     assert "fast_path_deadline=direct_fast_deadline" in flow_source
     assert "直接快回预算已耗尽" in flow_source
     assert "来源=voice_driven_fast" in flow_source
@@ -1799,11 +1804,14 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "fast_path_deadline: Optional[float] = None" in group_reply_source
     assert "fast_path_deadline: Optional[float] = None" in private_reply_source
     assert "直接快回跳过动作与工具准备" in coordinator_source
+    assert "直接快回跳过临时动作记录" in coordinator_source
     assert "enable_tool=(False if fast_path else global_config.tool.enable_tool)" in coordinator_source
+    assert "if fast_path:\n            logger.debug(f\"[回复协调] {channel_id} 直接快回跳过临时动作记录\")" in coordinator_source
     assert "self._tool_executor = None" in group_reply_source
     assert "self._tool_executor = None" in private_reply_source
     assert "self.tool_executor" not in group_reply_source
     assert "self.tool_executor" not in private_reply_source
+    assert "if fast_path:\n                person_name = self._message_sender_name(reply_message) or user_id" in group_reply_source
     assert "chat_talking_prompt_fast = \"\"" in group_reply_source
     assert "[reply_postprocess] 跳过自然化错字和二次改写" in group_reply_source
     assert "_apply_adaptive_recall(content" not in group_reply_source
@@ -1811,6 +1819,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "跳过补充回复判断" in group_reply_source
     assert "管理员强制快回" not in group_reply_source
     assert "直接快回通道" in group_reply_source
+    assert "fast_path=fast_path" in private_reply_source
+    assert "if fast_path:\n            extra_info_block = build_reply_context_block" in private_reply_source
     assert "_cond_tasks" not in group_reply_source
     assert "_reply_context_tasks" in group_reply_source
     assert "asyncio.gather(*_reply_context_tasks)" in group_reply_source
@@ -1828,6 +1838,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "direct_fast_tool_chain_skipped": True,
         "direct_fast_db_history_skipped": True,
         "direct_fast_soul_state_uses_cache": True,
+        "direct_fast_budget_starts_at_generation": True,
+        "direct_fast_temp_record_skipped": True,
     }
 
 

@@ -262,6 +262,40 @@ class DefaultReplyer:
         return self._tool_executor
 
     @staticmethod
+    def _message_user_id(message: Any) -> str:
+        info = getattr(message, "user_info", None)
+        if info is None:
+            info = getattr(getattr(message, "message_info", None), "user_info", None)
+        return str(
+            getattr(message, "user_id", "")
+            or getattr(info, "user_id", "")
+            or ""
+        ).strip()
+
+    @staticmethod
+    def _message_sender_name(message: Any) -> str:
+        info = getattr(message, "user_info", None)
+        if info is None:
+            info = getattr(getattr(message, "message_info", None), "user_info", None)
+        return str(
+            getattr(message, "user_cardname", "")
+            or getattr(info, "user_cardname", "")
+            or getattr(message, "user_nickname", "")
+            or getattr(info, "user_nickname", "")
+            or ""
+        ).strip()
+
+    @staticmethod
+    def _message_text(message: Any) -> str:
+        return str(
+            getattr(message, "processed_plain_text", "")
+            or getattr(message, "plain_text", "")
+            or getattr(message, "display_message", "")
+            or getattr(message, "content", "")
+            or ""
+        )
+
+    @staticmethod
     def _metric_or_default(value: Any, default: float) -> float:
         """仅在值缺失时回退默认，保留合法的 0 和负值。"""
         if value is None or value == "":
@@ -2894,20 +2928,25 @@ class DefaultReplyer:
         target = "消息"
 
         if reply_message:
-            user_id = reply_message.user_id
-            person = Person(platform=platform, user_id=user_id)
-            person_name = person.person_name or user_id
+            user_id = self._message_user_id(reply_message)
+            if fast_path:
+                person_name = self._message_sender_name(reply_message) or user_id
+            else:
+                person = Person(platform=platform, user_id=user_id)
+                person_name = person.person_name or user_id
             sender = person_name
-            target = reply_message.processed_plain_text
+            target = self._message_text(reply_message)
 
-        target = replace_user_references(target, chat_stream.platform, replace_bot_name=True)
+        if "回复<" in target or "@<" in target:
+            target = replace_user_references(target, chat_stream.platform, replace_bot_name=True)
         self._recent_context_text = target[:500] if target else ""
 
         # 在picid替换之前分析内容类型（防止prompt注入）
         has_only_pics, has_text, pic_part, text_part = self._analyze_target_content(target)
 
         # 将[picid:xxx]替换为具体的图片描述
-        target = self._replace_picids_with_descriptions(target)
+        if "[picid:" in target:
+            target = self._replace_picids_with_descriptions(target)
 
         if fast_path:
             chat_talking_prompt_fast = ""
