@@ -72,6 +72,7 @@ class ProactiveReactiveFlowMixin:
         style_route: Optional[Dict[str, Any]] = None,
         reference_info: str = "",
         allow_followup: Optional[bool] = None,
+        repetition_signal: Optional[Dict[str, Any]] = None,
     ) -> ReplyIntentPacket:
         target_uid = str(getattr(target_message, "user_id", "") or "").strip()
         target_name = str(
@@ -124,11 +125,40 @@ class ProactiveReactiveFlowMixin:
             except Exception:
                 night_hint = ""
         quote_policy = str((style_route or {}).get("quote_policy", "none") or "none")
+        relation_payload = dict(relation_view or {})
+        repeat_detected = bool(
+            repetition_signal
+            and repetition_signal.get("detected")
+            and repetition_signal.get("latest_matches_repeat")
+            and repetition_signal.get("low_info_cluster")
+        )
+        if not repeat_detected and bool(getattr(target_message, "is_repeated_short_input", False)):
+            repeat_detected = True
+        if not repeat_detected and target_text and target_uid:
+            try:
+                normalized_target = self._normalize_repeat_text(target_text)
+                repeat_count = self._count_recent_user_repeats(normalized_target, target_uid)
+                repeat_detected = repeat_count >= 2 and len(normalized_target) <= 12
+                if repeat_detected:
+                    repetition_signal = {
+                        "detected": True,
+                        "latest_matches_repeat": True,
+                        "low_info_cluster": True,
+                        "exact_repeat_count": repeat_count,
+                        "reason": f"同一用户短句重复({repeat_count}次)",
+                    }
+            except Exception as exc:
+                logger.debug(f"{self.log_prefix} 回复意图包重复信号补检失败: {exc}")
+        if repeat_detected:
+            relation_payload["repeated_short_input"] = True
+            relation_payload["repeat_count"] = int((repetition_signal or {}).get("exact_repeat_count", 0) or 0)
+            relation_payload["repeat_reason"] = str((repetition_signal or {}).get("reason", "低信息短句重复") or "")
+            allow_followup = False
         packet = relation_to_reply_intent(
             target=target_name,
             target_text=target_text,
             trigger_reason=reply_reason,
-            relation_view=relation_view,
+            relation_view=relation_payload,
             response_mode=response_mode,
             reference_info=self._compose_reply_intent_reference(reference_info),
             quote_policy=quote_policy,
@@ -138,7 +168,8 @@ class ProactiveReactiveFlowMixin:
         )
         logger.info(
             f"{self.log_prefix} [回复意图包] 立场={packet.stance} 语气={packet.tone} "
-            f"低信息={packet.low_info_strategy} 追问={'是' if packet.allow_followup else '否'}"
+            f"低信息={packet.low_info_strategy} 追问={'是' if packet.allow_followup else '否'} "
+            f"重复={'是' if repeat_detected else '否'}"
         )
         self._last_reply_intent_packet = packet
         return packet
@@ -221,6 +252,7 @@ class ProactiveReactiveFlowMixin:
                 self._last_flow_blocker = "voice缺少可回复目标"
                 logger.info(f"{self.log_prefix} 💭 内心驱动回复缺少目标消息，转为观察")
                 return False
+            repetition_signal = self._analyze_repetition_pressure(incoming_batch)
 
             if direct_fast_reply_generation:
                 restraint = {"allow": True, "mode": "short_only", "reason": "直接快回跳过自省深检"}
@@ -228,7 +260,7 @@ class ProactiveReactiveFlowMixin:
                 restraint = await self._run_self_restraint_check(
                     incoming_batch,
                     source="voice_driven_reply",
-                    repetition_signal=self._analyze_repetition_pressure(incoming_batch),
+                    repetition_signal=repetition_signal,
                     harassment_signal=self._analyze_harassment_pressure(incoming_batch),
                     force_bypass=force_bypass,
                     targeted_to_bot=targeted_to_bot,
@@ -270,10 +302,7 @@ class ProactiveReactiveFlowMixin:
                     cached_relation = self._normalize_relation_snapshot(
                         getattr(self, "_last_relation_snapshot", {}) or {}
                     )
-                    if getattr(self, "_resolved_emo_state", None) is not None:
-                        relation_view = self._inject_realtime_emotion(cached_relation)
-                    else:
-                        relation_view = cached_relation
+                    relation_view = self._inject_realtime_emotion(cached_relation)
                 except Exception:
                     relation_view = {}
             else:
@@ -292,12 +321,12 @@ class ProactiveReactiveFlowMixin:
             else:
                 decision_context_packet = self._build_decision_context_packet(
                     list(incoming_batch),
-                    repetition_signal=self._analyze_repetition_pressure(incoming_batch),
+                    repetition_signal=repetition_signal,
                 )
                 context_execution_block = self._build_context_execution_block(
                     target_message=target_message,
                     voice_conclusion=voice_conclusion,
-                    repetition_signal=self._analyze_repetition_pressure(incoming_batch),
+                    repetition_signal=repetition_signal,
                     decision_context_packet=decision_context_packet,
                     relation_snapshot=relation_view,
                 )
@@ -360,6 +389,7 @@ class ProactiveReactiveFlowMixin:
                 reply_reason=reply_reason,
                 direct_fast_reply_generation=direct_fast_reply_generation,
                 style_route=style_route,
+                repetition_signal=repetition_signal,
             )
             from src.chat.replyer.context_block_builder import append_reply_style
 

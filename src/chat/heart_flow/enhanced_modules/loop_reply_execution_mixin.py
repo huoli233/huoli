@@ -382,6 +382,7 @@ class LoopReplyExecutionMixin:
                 style_route=style_route,
                 reference_info="\n".join(part for part in extra_parts if part),
                 allow_followup=gateway_gate != "hesitate",
+                repetition_signal=repetition_signal,
             )
             extra_info = "\n".join(part for part in extra_parts if part)
 

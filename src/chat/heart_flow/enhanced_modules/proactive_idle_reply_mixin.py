@@ -729,6 +729,7 @@ class ProactiveIdleReplyMixin:
                 style_route=style_route,
                 reference_info=extra_info,
                 allow_followup=bool(llm_decision.content_plan),
+                repetition_signal=repetition_signal,
             )
             self._emit_reply_generation_summary(
                 target_message=target_message,

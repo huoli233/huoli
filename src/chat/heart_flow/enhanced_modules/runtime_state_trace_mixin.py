@@ -229,7 +229,12 @@ class RuntimeStateTraceMixin:
         normalized = dict(source)
         normalized["social_value"] = self._safe_relation_float(source, "social_value", "favorability", default=0.0)
         normalized["affection"] = self._safe_relation_float(source, "affection", default=0.0)
-        normalized["trust_value"] = self._safe_relation_float(source, "trust_value", "trust_score", "trust", default=0.0)
+        normalized["trust_value"] = self._safe_relation_float(source, "trust_score", "trust_value", "trust", default=0.0)
+        source_trust_score = self._safe_relation_float(source, "trust_score", default=0.0)
+        if abs(source_trust_score) >= 1e-6:
+            normalized["trust_score"] = source_trust_score
+        elif "trust_score" in source:
+            normalized["trust_score"] = normalized["trust_value"]
         normalized["annoyance_value"] = self._safe_relation_float(
             source,
             "annoyance_value",

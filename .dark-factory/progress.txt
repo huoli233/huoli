@@ -855,6 +855,30 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`，本轮提交不会纳入这些文件。
 
+## 2026-05-10T11:25:48+08:00 - Task: 修复快回重试违背不追问意图
+
+### What was done:
+- 根据用户 11:20 日志确认：坏输出重试机制已生效，但重试提示错误地允许“让对方说清楚”，导致 `追问=否` 的意图包仍生成 `刀盾是什么？`。
+- `ReplyIntentPacket` 渲染增加明确的 `追问限制：禁止追问，禁止问句和问号；只给短态度或短判断。`
+- 群聊/私聊 fast_path 增加 `_looks_forbidden_followup_fast_reply()`，在 `allow_followup=False` 时把带问号、`什么/怎么/咋/说清楚/说全/展开说` 的问句式回复判为坏输出。
+- 群聊/私聊重试 prompt 改为读取 `allow_followup`：不允许追问时禁止“是什么/怎么/啥意思”和问号，不再诱导模型追问。
+- 关系视图归一化修正信任优先级，`trust_score` 优先于旧 `trust_value/trust`，并在非 compat 视图中保留有效 `trust_score`，避免意图摘要继续掉成 `信任1.0`。
+- 直接快回关系视图统一调用 `_inject_realtime_emotion()`，即使没有 `_resolved_emo_state` 也会尝试按 `_last_user_id` 读取实时情绪/关系状态。
+- 更新 `scripts/heartflow_state_regression.py`，锁定 `刀盾是什么？` 在 `追问=否` 下必须被拦截、重试 prompt 必须包含“不允许追问”、关系视图必须优先 `trust_score`。
+
+### Testing:
+- `$env:PYTHONDONTWRITEBYTECODE='1'; .\.venv\Scripts\python.exe -m py_compile ...` 通过。
+- `.\.venv\Scripts\python.exe -m ruff check ...` 通过。
+- `$env:PYTHONDONTWRITEBYTECODE='1'; .\.venv\Scripts\python.exe scripts/heartflow_state_regression.py` 通过，新增 `direct_fast_forbidden_followup_blocked=true`。
+- `$env:PYTHONDONTWRITEBYTECODE='1'; $env:PYTHONPYCACHEPREFIX=Join-Path $env:TEMP 'huoli_codex_compileall_no_followup'; .\.venv\Scripts\python.exe -m compileall -q src scripts` 通过。
+- `git diff --check -- ...` 通过，仅有既有 LF/CRLF 工作区提示。
+
+### Notes:
+- 这轮修的是“重试不能违背统一意图包”，不是禁止所有问句；只有 `allow_followup=False` 的快回低信息场景会拦截问句。
+- 如果下一轮仍出现 `关系=普通/信任1.0`，优先确认主程序是否已重启到最新提交；本轮代码已修正关系归一化优先级。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`，本轮提交不会纳入这些文件。
+
 ## 2026-05-10T11:13:20+08:00 - Task: 修复直接快回拦截后不重试
 
 ### What was done:
@@ -1484,6 +1508,30 @@
 - 变更需要重启主程序后生效。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T11:38:00+08:00 - Task: 修复直接快回重复短句追问与复读链路
+
+### What was done:
+- 根据用户 11:20 日志确认：首次 `我的刀盾` 已被复读拦截，但重试生成了 `刀盾是什么？`，违背 `追问=否`；同时状态激活仍显示 `重复=否`，说明短句重复记忆没有进入当前轮。
+- 群聊/私聊 fast_path 增加“不允许追问”硬拦截：`allow_followup=False` 时问号、`什么/怎么/说清楚/展开说` 等追问会被判为 `fast_path_forbidden_followup_reply`，重试仍不合格则取消发送。
+- 重试 prompt 按 `allow_followup` 生成约束：禁止追问时只允许短态度/短判断，不能再引导模型问“是什么/怎么/啥意思”。
+- `ReplyIntentPacket` 渲染增加追问限制，并把重复短句信号收敛为“带情绪短回、不能追问、不能照抄、按复读/低信息处理”。
+- 输入状态激活接回 `_remember_recent_user_input()`，修复最近短句记录只定义不调用的问题；同时拆出已记录计数与当前轮标记，避免同一条消息被重复计数。
+- voice/planner/proactive 三条回复入口都把 `repetition_signal` 传进 `_build_reply_intent_packet()`，让重复刷短句在生成前进入统一意图包，而不是回复后才由日志发现。
+- 关系归一化优先保留 `trust_score`，避免日志中有真实信任值但意图摘要掉成默认 `信任1.0/普通`。
+- 更新回归脚本，新增重复短句进入意图包、禁止追问拦截、最近输入记忆计数和 trust_score 优先级契约。
+
+### Testing:
+- `.venv\Scripts\python.exe -m py_compile src/chat/replyer/group_generator.py src/chat/replyer/private_generator.py src/chat/replyer/reply_intent.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py src/chat/heart_flow/enhanced_modules/runtime_state_trace_mixin.py src/chat/heart_flow/enhanced_modules/loop_resource_feedback_mixin.py src/chat/heart_flow/enhanced_modules/loop_reply_execution_mixin.py src/chat/heart_flow/enhanced_modules/proactive_idle_reply_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `.venv\Scripts\python.exe -m ruff check src/chat/replyer/group_generator.py src/chat/replyer/private_generator.py src/chat/replyer/reply_intent.py src/chat/heart_flow/enhanced_modules/proactive_reactive_flow_mixin.py src/chat/heart_flow/enhanced_modules/runtime_state_trace_mixin.py src/chat/heart_flow/enhanced_modules/loop_resource_feedback_mixin.py src/chat/heart_flow/enhanced_modules/loop_reply_execution_mixin.py src/chat/heart_flow/enhanced_modules/proactive_idle_reply_mixin.py scripts/heartflow_state_regression.py` 通过。
+- `.venv\Scripts\python.exe scripts/heartflow_state_regression.py` 通过，包含 `direct_fast_forbidden_followup_blocked=true`、`direct_fast_repeat_signal_enters_intent=true`、`recent_repeat_memory=true`。
+- `.venv\Scripts\python.exe -m compileall -q src scripts` 通过。
+- `git diff --check -- <本轮文件>` 通过，仅提示既有 LF/CRLF 工作区换行警告。
+
+### Notes:
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 本轮只 stage 心流快回/回复意图包/回归脚本/进度文件；不碰用户遗留删除项：`.gitmessage-cn.txt`、多个 `docs/*.md`，也不纳入 `.trae/`。
+- 变更需要重启主程序后生效。
 
 ## 2026-05-10T10:39:15+08:00 - Task: 深度排查并补齐统一回复意图包残留入口
 

@@ -377,6 +377,17 @@ class PrivateReplyer:
             return True
         return False
 
+    @staticmethod
+    def _looks_forbidden_followup_fast_reply(reply_text: str, allow_followup: bool) -> bool:
+        if allow_followup:
+            return False
+        payload = str(reply_text or "").strip()
+        if not payload:
+            return False
+        if "?" in payload or "？" in payload:
+            return True
+        return any(marker in payload for marker in ("什么", "怎么", "咋", "说清楚", "说全", "展开说"))
+
     @classmethod
     def _looks_hostile_history_reply(cls, text: str) -> bool:
         payload = str(text or "").strip()
@@ -391,17 +402,30 @@ class PrivateReplyer:
         return False
 
     @classmethod
-    def _augment_fast_retry_prompt(cls, prompt: str | List[Message], reason: str, bad_reply: str, target_text: str) -> str | List[Message]:
+    def _augment_fast_retry_prompt(
+        cls,
+        prompt: str | List[Message],
+        reason: str,
+        bad_reply: str,
+        target_text: str,
+        allow_followup: bool = True,
+    ) -> str | List[Message]:
         reason_map = {
             "fast_path_echo_target_reply": "上一版只是复述目标内容，不合格。",
             "fast_path_generic_ack_reply": "上一版是空泛附和，没有接住这轮意思。",
             "fast_path_reception_reply": "上一版是接待话术，像客服，不合格。",
+            "fast_path_forbidden_followup_reply": "上一版变成追问了，但本轮意图不允许追问。",
         }
+        followup_rule = (
+            " 不允许追问：不要问“是什么/怎么/啥意思”，不要加问号，只给短态度或短判断。"
+            if not allow_followup
+            else " 可以很轻地问半句，但仍然不能照抄目标。"
+        )
         directive = (
             f"{reason_map.get(reason, '上一版快回不合格。')}"
             f" 不要再输出“{cls._clip_prompt_hint(bad_reply, 32)}”。"
             f" 目标消息是“{cls._clip_prompt_hint(target_text, 32)}”，"
-            "这次换一个自然短句；可以表达没看懂、让对方说清楚，或冷一点收住，但绝对不要照抄目标。"
+            f"这次换一个自然短句；{followup_rule}绝对不要照抄目标。"
         )
         if isinstance(prompt, list):
             builder = MessageBuilder()
@@ -410,9 +434,17 @@ class PrivateReplyer:
             return [*prompt, builder.build()]
         return f"{prompt}\n\n{directive}"
 
-    def _classify_fast_bad_reply(self, content: str, fast_low_info_context: bool, fast_target_text: str) -> str:
+    def _classify_fast_bad_reply(
+        self,
+        content: str,
+        fast_low_info_context: bool,
+        fast_target_text: str,
+        allow_followup: bool = True,
+    ) -> str:
         if self._looks_reception_fast_reply(content):
             return "fast_path_reception_reply"
+        if fast_low_info_context and self._looks_forbidden_followup_fast_reply(content, allow_followup):
+            return "fast_path_forbidden_followup_reply"
         if fast_low_info_context and self._looks_echo_target_fast_reply(content, fast_target_text):
             return "fast_path_echo_target_reply"
         if fast_low_info_context and self._looks_generic_ack_fast_reply(content):
@@ -947,10 +979,12 @@ class PrivateReplyer:
                 fast_target_text = ""
                 if fast_path and reply_message is not None:
                     fast_target_text = self._message_text(reply_message)
+                fast_allow_followup = bool(reply_intent.allow_followup)
                 bad_fast_reply = self._classify_fast_bad_reply(
                     llm_response.content or "",
                     fast_low_info_context,
                     fast_target_text,
+                    fast_allow_followup,
                 )
                 if fast_path and bad_fast_reply:
                     logger.warning(
@@ -971,13 +1005,20 @@ class PrivateReplyer:
                         logger.warning("[fast_path] 私聊快回预算不足，无法重试不合格回复")
                         llm_response.content = ""
                         return False, llm_response
-                    retry_prompt = self._augment_fast_retry_prompt(prompt, bad_fast_reply, llm_response.content or "", fast_target_text)
+                    retry_prompt = self._augment_fast_retry_prompt(
+                        prompt,
+                        bad_fast_reply,
+                        llm_response.content or "",
+                        fast_target_text,
+                        fast_allow_followup,
+                    )
                     retry_content, retry_reasoning, retry_model_name, retry_tool_call = await self.llm_generate_content(retry_prompt)
                     logger.info(f"[fast_path] 私聊重试生成内容: {retry_content}")
                     retry_bad_reply = self._classify_fast_bad_reply(
                         retry_content or "",
                         fast_low_info_context,
                         fast_target_text,
+                        fast_allow_followup,
                     )
                     llm_response.content = retry_content
                     llm_response.reasoning = retry_reasoning

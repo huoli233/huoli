@@ -407,7 +407,10 @@ class LoopResourceFeedbackMixin:
             latest_nickname = _raw_nick or latest_user_id
             if _raw_nick and len(latest_user_id) > 16:
                 latest_user_id = f"{self.stream_id}_{_raw_nick[:12]}"
+            self._latest_user_input_record = {}
             repeat_count = self._count_recent_user_repeats(normalized_latest, latest_user_id)
+            if normalized_latest and latest_user_id:
+                self._remember_recent_user_input(normalized_latest, latest_user_id)
 
             if latest_user_id:
                 hub = get_unified_profile_hub()
@@ -448,13 +451,13 @@ class LoopResourceFeedbackMixin:
         if not normalized_text:
             return
         now = time.time()
-        self._recent_user_inputs.append(
-            {
-                "text": normalized_text,
-                "user_id": user_id,
-                "ts": now,
-            }
-        )
+        record = {
+            "text": normalized_text,
+            "user_id": user_id,
+            "ts": now,
+        }
+        self._recent_user_inputs.append(record)
+        self._latest_user_input_record = dict(record)
         cutoff = now - 300.0
         self._recent_user_inputs = [
             item
@@ -465,10 +468,18 @@ class LoopResourceFeedbackMixin:
     def _count_recent_user_repeats(self, normalized_text: str, user_id: str) -> int:
         if not normalized_text:
             return 0
+        recorded_count = self._count_recorded_user_repeats(normalized_text, user_id)
+        if self._has_current_user_input_record(normalized_text, user_id):
+            return recorded_count
+        return recorded_count + 1
+
+    def _count_recorded_user_repeats(self, normalized_text: str, user_id: str) -> int:
+        if not normalized_text:
+            return 0
         now = time.time()
         cutoff = now - 300.0
         count = 0
-        for item in self._recent_user_inputs:
+        for item in getattr(self, "_recent_user_inputs", []):
             if float(item.get("ts", 0.0) or 0.0) < cutoff:
                 continue
             if str(item.get("text", "") or "") != normalized_text:
@@ -477,7 +488,18 @@ class LoopResourceFeedbackMixin:
             if user_id and item_user and item_user != user_id:
                 continue
             count += 1
-        return count + 1
+        return count
+
+    def _has_current_user_input_record(self, normalized_text: str, user_id: str) -> bool:
+        if not normalized_text:
+            return False
+        item = getattr(self, "_latest_user_input_record", {}) or {}
+        if str(item.get("text", "") or "") != normalized_text:
+            return False
+        item_user = str(item.get("user_id", "") or "")
+        if user_id and item_user and item_user != user_id:
+            return False
+        return True
 
     @staticmethod
     def _normalize_repeat_text(text: str) -> str:

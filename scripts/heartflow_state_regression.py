@@ -1779,6 +1779,10 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "drowsiness >= 55.0" in flow_source
     assert "half_asleep >= 0.35" in flow_source
     assert "传入LLM的统一意图摘要" in flow_source
+    assert "repetition_signal: Optional[Dict[str, Any]] = None" in flow_source
+    assert "relation_payload[\"repeated_short_input\"] = True" in flow_source
+    assert "allow_followup = False" in flow_source
+    assert "重复={'是' if repeat_detected else '否'}" in flow_source
     planner_source = (ROOT / "src/chat/heart_flow/enhanced_modules/loop_reply_execution_mixin.py").read_text(
         encoding="utf-8"
     )
@@ -1789,9 +1793,11 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     manager_source = (ROOT / "src/chat/replyer/replyer_manager.py").read_text(encoding="utf-8")
     assert "reply_intent_packet = self._build_reply_intent_packet(" in planner_source
     assert "reference_info=\"\\n\".join(part for part in extra_parts if part)" in planner_source
+    assert "repetition_signal=repetition_signal" in planner_source
     assert "reply_intent=reply_intent_packet" in planner_source
     assert "reply_intent_packet = self._build_reply_intent_packet(" in proactive_source
     assert "reference_info=extra_info" in proactive_source
+    assert "repetition_signal=repetition_signal" in proactive_source
     assert "reply_intent=reply_intent_packet" in proactive_source
     assert "build_reply_intent_from_message" in brain_source
     assert "reply_reference_info = build_reply_context_block(" in brain_source
@@ -1881,6 +1887,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "_augment_fast_retry_prompt" in group_reply_source
     assert "重试生成内容" in group_reply_source
     assert "_classify_fast_bad_reply" in group_reply_source
+    assert "_looks_forbidden_followup_fast_reply" in group_reply_source
+    assert "fast_path_forbidden_followup_reply" in group_reply_source
     assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" not in group_reply_source
     assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" not in group_reply_source
     assert "DefaultReplyer._looks_reception_fast_reply(\"好的，你说。\") is True" not in group_reply_source
@@ -1909,6 +1917,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "_augment_fast_retry_prompt" in private_reply_source
     assert "私聊重试生成内容" in private_reply_source
     assert "_classify_fast_bad_reply" in private_reply_source
+    assert "_looks_forbidden_followup_fast_reply" in private_reply_source
+    assert "fast_path_forbidden_followup_reply" in private_reply_source
     assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" not in private_reply_source
     assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" not in private_reply_source
     assert "def _is_low_info_guarded_verdict" in inner_voice_source
@@ -1939,6 +1949,22 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "def _first_nonzero_float" in reply_intent_source
     assert "relation.get(\"trust_score\")" in reply_intent_source
     assert "relation.get(\"relationship_label\")" in reply_intent_source
+    assert "追问限制：禁止追问" in reply_intent_source
+    assert "repeated_short_input" in reply_intent_source
+    assert "按复读/低信息处理，不按新话题理解" in reply_intent_source
+    assert "不能追问，不能照抄" in reply_intent_source
+    runtime_state_source = (ROOT / "src/chat/heart_flow/enhanced_modules/runtime_state_trace_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'normalized["trust_value"] = self._safe_relation_float(source, "trust_score", "trust_value", "trust"' in runtime_state_source
+    assert 'normalized["trust_score"] = source_trust_score' in runtime_state_source
+    resource_feedback_source = (
+        ROOT / "src/chat/heart_flow/enhanced_modules/loop_resource_feedback_mixin.py"
+    ).read_text(encoding="utf-8")
+    assert "self._remember_recent_user_input(normalized_latest, latest_user_id)" in resource_feedback_source
+    assert "def _count_recorded_user_repeats" in resource_feedback_source
+    assert "def _has_current_user_input_record" in resource_feedback_source
+    assert "self._latest_user_input_record = dict(record)" in resource_feedback_source
     assert "low_info_strategy = \"带情绪短回\"" in reply_intent_source
     assert "def _pressure_signal" in reply_intent_source
     assert "LAYERED_TONE_TRANSLATIONS" in reply_intent_source
@@ -1971,8 +1997,28 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert PrivateReplyer._looks_echo_target_fast_reply("我的刀盾", "我的刀盾") is True
     assert PrivateReplyer._looks_echo_target_fast_reply("在", "在") is True
     assert PrivateReplyer._looks_echo_target_fast_reply("没看懂", "我的刀盾") is False
-    assert "上一版只是复述目标内容" in DefaultReplyer._augment_fast_retry_prompt("原prompt", "fast_path_echo_target_reply", "我的刀盾？", "我的刀盾")
-    assert "上一版只是复述目标内容" in PrivateReplyer._augment_fast_retry_prompt("原prompt", "fast_path_echo_target_reply", "我的刀盾？", "我的刀盾")
+    assert DefaultReplyer._looks_forbidden_followup_fast_reply("刀盾是什么？", False) is True
+    assert DefaultReplyer._looks_forbidden_followup_fast_reply("没看懂", False) is False
+    assert PrivateReplyer._looks_forbidden_followup_fast_reply("刀盾是什么？", False) is True
+    assert PrivateReplyer._looks_forbidden_followup_fast_reply("没看懂", False) is False
+    group_retry_prompt = DefaultReplyer._augment_fast_retry_prompt(
+        "原prompt",
+        "fast_path_echo_target_reply",
+        "我的刀盾？",
+        "我的刀盾",
+        allow_followup=False,
+    )
+    private_retry_prompt = PrivateReplyer._augment_fast_retry_prompt(
+        "原prompt",
+        "fast_path_echo_target_reply",
+        "我的刀盾？",
+        "我的刀盾",
+        allow_followup=False,
+    )
+    assert "上一版只是复述目标内容" in group_retry_prompt
+    assert "不允许追问" in group_retry_prompt
+    assert "上一版只是复述目标内容" in private_retry_prompt
+    assert "不允许追问" in private_retry_prompt
     assert "_cond_tasks" not in group_reply_source
     assert "_reply_context_tasks" in group_reply_source
     assert "asyncio.gather(*_reply_context_tasks)" in group_reply_source
@@ -1999,6 +2045,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "direct_fast_generic_ack_reply_blocked": True,
         "direct_fast_echo_target_reply_blocked": True,
         "direct_fast_bad_reply_retried": True,
+        "direct_fast_forbidden_followup_blocked": True,
+        "direct_fast_repeat_signal_enters_intent": True,
         "direct_fast_night_hint_realtime": True,
         "low_info_inner_voice_no_continue_topic": True,
         "low_info_inner_voice_intents_cleared": True,
@@ -2090,7 +2138,30 @@ def check_reply_intent_packet_contract() -> Dict[str, Any]:
     block = render_reply_intent_block(repeated)
     assert "嗯，是啊" in block
     assert "好的，你说" in block
+    assert "追问限制：禁止追问" in block
     assert repeated.allow_followup is False
+
+    repeated_direct = relation_to_reply_intent(
+        target="测试用户",
+        target_text="我的刀盾",
+        trigger_reason="强制触发进入回复",
+        relation_view={
+            "affection": 53,
+            "trust_value": 40,
+            "annoyance_value": 0,
+            "psychological_pressure": 20,
+            "repeated_short_input": True,
+            "repeat_count": 3,
+            "repeat_reason": "同一用户短句重复(3次)",
+        },
+        fast_path=True,
+    )
+    repeated_direct_block = render_reply_intent_block(repeated_direct)
+    assert repeated_direct.allow_followup is False
+    assert "重复低信息短句" in repeated_direct.stance
+    assert "不能追问，不能照抄" in repeated_direct.length_policy
+    assert "按复读/低信息处理" in repeated_direct_block
+    assert "刀盾是什么" in repeated_direct_block
 
     trust_score_priority = relation_to_reply_intent(
         target="测试用户",
@@ -2118,6 +2189,34 @@ def check_reply_intent_packet_contract() -> Dict[str, Any]:
         "sleepy_tone": True,
         "generic_ack_blocked": True,
         "trust_score_priority": True,
+        "repeated_short_intent_no_followup": True,
+    }
+
+
+def check_recent_repeat_memory_contract() -> Dict[str, Any]:
+    from src.chat.heart_flow.enhanced_modules.loop_resource_feedback_mixin import (
+        LoopResourceFeedbackMixin,
+    )
+
+    class _Probe(LoopResourceFeedbackMixin):
+        def __init__(self) -> None:
+            self._recent_user_inputs = []
+
+    probe = _Probe()
+    normalized = probe._normalize_repeat_text("我的刀盾")
+    assert probe._count_recent_user_repeats(normalized, "u1") == 1
+    probe._remember_recent_user_input(normalized, "u1")
+    assert probe._count_recorded_user_repeats(normalized, "u1") == 1
+    assert probe._count_recent_user_repeats(normalized, "u1") == 1
+    probe._latest_user_input_record = {}
+    assert probe._count_recent_user_repeats(normalized, "u1") == 2
+    probe._remember_recent_user_input(normalized, "u1")
+    assert probe._count_recent_user_repeats(normalized, "u1") == 2
+    assert probe._count_recent_user_repeats(normalized, "u2") == 1
+    return {
+        "recent_input_remembered": True,
+        "current_message_not_double_counted": True,
+        "same_user_repeat_counted": True,
     }
 
 
@@ -2384,6 +2483,7 @@ def main() -> None:
         "heartflow_gateway_naming": check_heartflow_gateway_naming_contract(),
         "force_reply_generation_failure": check_force_reply_generation_failure_contract(),
         "reply_intent_packet": check_reply_intent_packet_contract(),
+        "recent_repeat_memory": check_recent_repeat_memory_contract(),
         "statusbar_export": check_statusbar_export_contract(),
         "monitor_overview": check_monitor_overview_contract(),
         "night_status_labels": check_night_status_label_contract(),

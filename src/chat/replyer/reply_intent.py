@@ -24,6 +24,8 @@ TARGET_ECHO_AVOID_PATTERNS = (
     "不要把目标消息原样发回去",
 )
 
+DEFAULT_RELATION_LABELS = {"", "普通", "陌生", "陌生人", "未知"}
+
 LAYERED_TONE_TRANSLATIONS = {
     "neutral": "",
     "gentle": "轻一点、别硬撑",
@@ -71,6 +73,14 @@ def _first_nonzero_float(*values: Any, default: float = 0.0) -> float:
         if abs(parsed) >= 1e-6:
             return parsed
     return default
+
+
+def _first_meaningful_label(*values: Any, default: str = "普通") -> str:
+    cleaned = [_clean_text(value, 60) for value in values if _clean_text(value, 60)]
+    for label in cleaned:
+        if label not in DEFAULT_RELATION_LABELS:
+            return label
+    return cleaned[0] if cleaned else default
 
 
 def _as_text_list(value: Any) -> List[str]:
@@ -276,14 +286,17 @@ def relation_to_reply_intent(
     pressure = _safe_float(relation.get("psychological_pressure", relation.get("pressure")))
     trauma = _safe_float(relation.get("trauma_score"))
     blocked = bool(relation.get("is_user_blocked", False))
-    relation_label = _clean_text(
+    repeated_short = bool(relation.get("repeated_short_input", False))
+    repeat_count = int(_safe_float(relation.get("repeat_count", 0), 0.0) or 0)
+    repeat_reason = _clean_text(relation.get("repeat_reason", ""), 120)
+    relation_label = _first_meaningful_label(
         relation.get("personal_impression")
-        or relation.get("relationship")
-        or relation.get("relationship_label")
-        or relation.get("relationship_stage")
-        or relation.get("legacy_relationship_label")
-        or relation.get("custom_label")
-        or "普通"
+        or "",
+        relation.get("relationship_label") or "",
+        relation.get("relationship_stage") or "",
+        relation.get("custom_label") or "",
+        relation.get("legacy_relationship_label") or "",
+        relation.get("relationship") or "",
     )
     layered_tone = str(mode.get("tone", "") or "").strip()
     layered_length = str(mode.get("response_length", "") or "").strip()
@@ -368,7 +381,12 @@ def relation_to_reply_intent(
     low_info = is_low_info_input(target_text)
     low_info_strategy = "none"
     if low_info:
-        if blocked or trauma >= 5:
+        if repeated_short:
+            low_info_strategy = "带情绪短回"
+            repeat_note = f"{repeat_count}次" if repeat_count >= 2 else "多次"
+            stance = f"对方在重复低信息短句({repeat_note})，像在刷同一句；不要替他补剧情，短短收住"
+            allow = False
+        elif blocked or trauma >= 5:
             low_info_strategy = "观察不回"
             stance = "对方信息太少，本来不想接；被迫回复也只给很低承诺短句"
             allow = False
@@ -397,6 +415,16 @@ def relation_to_reply_intent(
 
     if allow_followup is not None:
         allow = bool(allow_followup)
+    if repeated_short:
+        allow = False
+        tone = _merge_tone(tone, "别热情，带一点不想猜的感觉")
+        length_policy = "一句短话，不能追问，不能照抄"
+        avoid.extend(["刀盾是什么", "是什么", "什么意思", "啥意思", "说清楚", "继续说"])
+        repeat_ref = f"重复信号={repeat_reason}" if repeat_reason else "重复信号=同一短句反复出现"
+        reference_info = _clean_text(
+            "；".join(part for part in (reference_info, repeat_ref, "按复读/低信息处理，不按新话题理解") if part),
+            420,
+        )
 
     packet = ReplyIntentPacket(
         target=_clean_text(target, 60),
@@ -450,5 +478,7 @@ def render_reply_intent_block(packet: ReplyIntentPacket) -> str:
         lines.append(f"必要参考：{intent.reference_info}")
     if avoid:
         lines.append(f"禁用模式：{avoid}")
+    if not intent.allow_followup:
+        lines.append("追问限制：禁止追问，禁止问句和问号；只给短态度或短判断。")
     lines.append("按这个意图包自然说一句；不要复述字段名，不要照抄目标内容，不要解释规则，只输出要发的话。")
     return "\n".join(lines)
