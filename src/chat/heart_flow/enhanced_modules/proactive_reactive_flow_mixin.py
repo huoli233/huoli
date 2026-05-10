@@ -57,6 +57,53 @@ class ProactiveReactiveFlowMixin:
             return False
         return bool(getattr(self, "_direct_fast_reply_generation", False) or force_bypass)
 
+    def _append_direct_fast_soul_state(self, extra_parts: List[str], relation_view: Dict[str, Any]) -> None:
+        """直接快回只读内存缓存，避免冷启动情绪/夜间系统把短回复拖死。"""
+        night_summary = getattr(self, "_cached_night_summary", {}) or {}
+        try:
+            hour = int(night_summary.get("current_hour", datetime.datetime.now().hour) or datetime.datetime.now().hour) % 24
+            time_label = str(night_summary.get("time_band_label", "") or night_summary.get("phase_label", "") or "")
+            drowsiness = float(night_summary.get("drowsiness_value", night_summary.get("drowsiness", 0.0)) or 0.0)
+            overnight_pressure = float(night_summary.get("overnight_pressure", 0.0) or 0.0)
+            half_asleep = float(night_summary.get("half_asleep_level", 0.0) or 0.0)
+            sleep_debt = float(night_summary.get("sleep_debt", 0.0) or 0.0)
+            dawn_like = 5 <= hour < 8 or str(night_summary.get("time_band", "") or "") == "dawn"
+            if dawn_like or drowsiness >= 20.0 or overnight_pressure >= 20.0 or half_asleep >= 0.2:
+                label = time_label or ("清晨" if dawn_like else "夜间")
+                extra_parts.append(
+                    "[夜间身体状态] "
+                    f"现在约{hour}点({label})，困意={drowsiness:.0f}，熬夜压力={overnight_pressure:.0f}，"
+                    f"半醒={half_asleep:.2f}，睡眠债={sleep_debt:.2f}。"
+                )
+                if dawn_like:
+                    extra_parts.append("[夜间语气约束] 回复短一点、轻一点，像刚醒的人，不要精神饱满。")
+                else:
+                    extra_parts.append("[夜间语气约束] 回复带一点累或迟钝，不展开。")
+        except Exception as exc:
+            logger.debug(f"{self.log_prefix} 直接快回夜间缓存读取失败: {exc}")
+
+        emo_state = getattr(self, "_resolved_emo_state", None)
+        try:
+            annoyance = float(relation_view.get("annoyance_value", 0.0) or 0.0)
+            pressure = float(relation_view.get("psychological_pressure", 0.0) or 0.0)
+            if emo_state is not None:
+                annoyance = max(annoyance, float(getattr(emo_state, "annoyance", 0.0) or 0.0))
+                pressure = max(pressure, float(getattr(emo_state, "psychological_pressure", 0.0) or 0.0))
+        except Exception:
+            annoyance = 0.0
+            pressure = 0.0
+        if annoyance >= 50:
+            mood_desc = "很不爽"
+            feeling = "非常烦躁和不耐烦"
+        elif annoyance >= 20:
+            mood_desc = "有些烦躁"
+            feeling = "有些不耐烦"
+        else:
+            mood_desc = "平静"
+            feeling = "感到平静"
+        extra_parts.append(f"[当前心理状态] 烦躁度{annoyance:.0f}，压力{pressure:.0f}，回复{mood_desc}。")
+        extra_parts.append(f"[当前情感状态] {feeling}")
+
     @staticmethod
     def _pick_runtime_text(key: str, seed_text: str) -> str:
         candidates = _rt_str_list(key)
@@ -132,7 +179,8 @@ class ProactiveReactiveFlowMixin:
                 self._last_flow_blocker = f"voice自省拦截:{restraint.get('reason', 'skip')}"
                 logger.info(f"{self.log_prefix} 🧯 自省闸门拦截 voice 回复: {restraint.get('reason', 'skip')}")
                 return False
-            self._mark_message_content_processing(target_message)
+            if not direct_fast_reply_generation:
+                self._mark_message_content_processing(target_message)
             forced_reply_generation = bool(force_bypass or getattr(self, "_is_admin_forced", False))
 
             # 获取目标用户的风格指导
@@ -170,7 +218,7 @@ class ProactiveReactiveFlowMixin:
             context_execution_block = ""
             if direct_fast_reply_generation:
                 extra_info_parts.append("[直接快回] 一句短口语，直接回应当前消息；不做长篇解释，不二次改写，不补充追发。")
-                self._inject_fallback_soul_state(extra_info_parts)
+                self._append_direct_fast_soul_state(extra_info_parts, relation_view)
                 target_text = str(
                     getattr(target_message, "processed_plain_text", "")
                     or getattr(target_message, "plain_text", "")
@@ -247,7 +295,8 @@ class ProactiveReactiveFlowMixin:
                 )
             from src.chat.replyer.context_block_builder import append_reply_style
 
-            append_reply_style(extra_info_parts, style_route)
+            if not direct_fast_reply_generation:
+                append_reply_style(extra_info_parts, style_route)
             if not direct_fast_reply_generation:
                 # 注入多维状态系统的LLM提示词
                 self._inject_dimension_state_prompt(extra_info_parts)
@@ -257,13 +306,16 @@ class ProactiveReactiveFlowMixin:
                 _meme_quick = self._build_meme_injection()
                 if _meme_quick:
                     extra_info_parts.append(_meme_quick)
-            extra_info = build_reply_context_block(
-                recent_context="",
-                relevant_context="",
-                extra_info="\n".join(part for part in extra_info_parts if part),
-                recent_reply_guard="",
-            )
-            extra_info = self._ensure_soul_data_in_extra_info(extra_info)
+            if direct_fast_reply_generation:
+                extra_info = "\n".join(part for part in extra_info_parts if part)
+            else:
+                extra_info = build_reply_context_block(
+                    recent_context="",
+                    relevant_context="",
+                    extra_info="\n".join(part for part in extra_info_parts if part),
+                    recent_reply_guard="",
+                )
+                extra_info = self._ensure_soul_data_in_extra_info(extra_info)
             _key_lines = self._summarize_soul_data_lines(extra_info)
             if _key_lines:
                 logger.info(f"{self.log_prefix} 🧠 传入LLM的灵魂数据摘要: {' | '.join(_key_lines)}")

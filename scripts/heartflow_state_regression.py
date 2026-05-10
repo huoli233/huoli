@@ -1744,12 +1744,18 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "回复成功后后台补感知/独白已排队" in loop_source
     assert "self._refresh_direct_fastlane_inner_state(decision_messages, ambient_info, now)" not in loop_source
     assert "_voice_reply_timeout = max(" in loop_source
+    assert "min(15.0, _rt_float(\"heartfc_direct_fast_reply_generation_timeout_seconds\") + 7.0)" in loop_source
     assert "direct_fast_reply_total_timeout" in loop_source
     assert "直接快回整体超时" in loop_source
     assert "direct_fast_deadline = time.monotonic() + direct_fast_timeout" in flow_source
     assert "fast_path_deadline=direct_fast_deadline" in flow_source
     assert "直接快回预算已耗尽" in flow_source
     assert "来源=voice_driven_fast" in flow_source
+    assert "def _append_direct_fast_soul_state" in flow_source
+    assert "self._append_direct_fast_soul_state(extra_info_parts, relation_view)" in flow_source
+    assert "self._inject_fallback_soul_state(extra_info_parts)" not in flow_source
+    assert "if not direct_fast_reply_generation:\n                append_reply_style(extra_info_parts, style_route)" in flow_source
+    assert "if direct_fast_reply_generation:\n                extra_info = \"\\n\".join" in flow_source
     assert "heartfc_direct_fastlane_background_voice_timeout_seconds" in loop_source
     assert "direct_fastlane_background" in loop_source
     assert "get_intention_pool().ingest_voice_verdict" in loop_source
@@ -1809,6 +1815,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "direct_fast_deadline_enforced": True,
         "direct_fast_tool_chain_skipped": True,
         "direct_fast_db_history_skipped": True,
+        "direct_fast_soul_state_uses_cache": True,
     }
 
 

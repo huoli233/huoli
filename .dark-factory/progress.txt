@@ -1619,3 +1619,26 @@
 - 如果后续仍有超过预算的卡顿，下一步应继续把 LLM HTTP 请求层做可取消/更短 timeout，而不是在心流外层继续套 `wait_for`。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T08:15:39+08:00 - Task: 修复直接快回灵魂注入耗尽预算
+
+### What was done:
+- 根据运行日志确认上一轮优化后仍然没有回复的原因：`开始执行` 到 `传入LLM的灵魂数据摘要` 之间耗尽了直接快回预算，说明卡在回复生成前置，而不是 LLM 生成。
+- 直接快回不再调用 `_inject_fallback_soul_state()`，避免冷启动情绪 tracker / 夜间系统 / 关系解析把短回复拖死。
+- 新增 `_append_direct_fast_soul_state()`，只读取 `_cached_night_summary`、`_resolved_emo_state` 和 `_last_relation_snapshot` 等内存缓存来拼最小灵魂状态。
+- 直接快回不再进入 `_ensure_soul_data_in_extra_info()`，避免为了补夜间/心理状态再次触发慢模块。
+- 直接快回不再追加完整 style 包，只保留固定直回策略和最小灵魂/当前消息信息。
+- 外层直接快回总预算改为 `min(15s, generation_timeout + 7s)`，避免前置短暂抖动后刚要进 LLM 就被外层取消。
+- 更新回归契约，锁定直接快回使用缓存灵魂状态、不走慢灵魂注入。
+
+### Testing:
+- `uv run ruff check src\chat\heart_flow\enhanced_modules\proactive_reactive_flow_mixin.py src\chat\heart_flow\enhanced_modules\loop_main_driver_mixin.py src\chat\heart_flow\reply_coordinator.py src\plugin_system\apis\generator_api.py src\chat\replyer\group_generator.py src\chat\replyer\private_generator.py scripts\heartflow_state_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新增 `direct_fast_soul_state_uses_cache=true`。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 这次直接针对用户日志中 `直接快回预算已耗尽，取消发送` 的原因修复。
+- 预期效果：直接快回应在灵魂摘要前置阶段明显缩短，并能继续进入 LLM 生成，而不是在前置阶段耗尽预算。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。

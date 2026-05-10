@@ -2399,8 +2399,8 @@ class LoopMainDriverMixin:
                             logger.debug(f"{self.log_prefix} 直接快回整体预算探测失败: {_timeout_probe_exc}")
                         if _direct_fast_execute_timeout:
                             _voice_reply_timeout = max(
-                                2.0,
-                                _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds") + 2.0,
+                                5.0,
+                                min(15.0, _rt_float("heartfc_direct_fast_reply_generation_timeout_seconds") + 7.0),
                             )
                         actual_reply_made = await asyncio.wait_for(
                             self._execute_voice_driven_reply(
