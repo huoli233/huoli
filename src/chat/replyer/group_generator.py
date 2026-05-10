@@ -538,6 +538,27 @@ class DefaultReplyer:
         return soft_hits >= 2
 
     @classmethod
+    def _looks_reception_fast_reply(cls, text: str) -> bool:
+        payload = str(text or "").strip()
+        if not payload:
+            return False
+        normalized = cls._normalize_repeat_guard_text(payload)
+        exact_bad = {
+            "好的你说",
+            "好你说",
+            "嗯你说",
+            "你说",
+            "继续说",
+            "说吧",
+            "收到",
+            "好的继续说",
+            "可以你说",
+        }
+        if normalized in exact_bad:
+            return True
+        return any(marker in payload for marker in ("好的，你说", "好的你说", "你继续说", "继续说吧"))
+
+    @classmethod
     def _looks_hostile_history_reply(cls, text: str) -> bool:
         payload = str(text or "").strip()
         if not payload:
@@ -658,6 +679,7 @@ class DefaultReplyer:
         return (
             "按主人格自然口语说，别像脚本。"
             "不要复读、照抄、同音改写原句，也别把对方词尾改成我/你。"
+            "禁回: 好的你说、你说、继续说、收到、请问、当然。"
         )
 
     @classmethod
@@ -1172,7 +1194,6 @@ class DefaultReplyer:
                     extra_info=extra_info,
                     reply_message=reply_message,
                 )
-
                 llm_response.content = content
                 llm_response.reasoning = reasoning_content
                 llm_response.model = model_name
@@ -1182,6 +1203,26 @@ class DefaultReplyer:
                 llm_response.timing_logs = timing_logs
                 llm_response.timing["timing_logs"] = timing_logs
                 llm_response.timing["almost_zero"] = almost_zero_str
+                if fast_path and self._looks_reception_fast_reply(content):
+                    logger.warning(f"[fast_path] 生成接待话术，取消发送: {content[:30]}")
+                    if log_reply:
+                        try:
+                            PlanReplyLogger.log_reply(
+                                chat_id=self.chat_stream.stream_id,
+                                prompt=prompt,
+                                output=content,
+                                processed_output=None,
+                                model=model_name,
+                                timing=llm_response.timing,
+                                reasoning=reasoning_content,
+                                think_level=think_level,
+                                error="fast_path_reception_reply",
+                                success=False,
+                            )
+                        except Exception:
+                            logger.exception("记录reply日志失败")
+                    llm_response.content = ""
+                    return False, llm_response
                 try:
                     if log_reply:
                         PlanReplyLogger.log_reply(
@@ -2969,16 +3010,11 @@ class DefaultReplyer:
                 for part in (
                     self._sanitize_extra_info(prompt_extra_info),
                     "短句护栏: 不要复读、不要照抄、不要同音改写对方原句；信息不完整就自然追问或轻接一句。",
+                    low_info_guard,
                 )
                 if str(part or "").strip()
             )
-            extra_info_block = build_reply_context_block(
-                recent_context=chat_talking_prompt_fast,
-                relevant_context="",
-                extra_info=fast_extra_info,
-                recent_reply_guard=low_info_guard,
-                max_total_tokens=180,
-            )
+            extra_info_block = fast_extra_info
             if sender:
                 if has_only_pics and not has_text:
                     reply_target_block = f"这会儿{sender}发了张图：{pic_part}"
@@ -3005,6 +3041,7 @@ class DefaultReplyer:
                 "直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
                 "不要复读、不要照抄、不要同音改写对方原句；不要把对方词尾改成“我/你”当回复。"
                 "如果信息不完整，轻轻接住或追问半句，不要猜词义。"
+                "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”。"
                 f"{sleepy_guard}"
             )
             prompt = get_group_responder_prompt(

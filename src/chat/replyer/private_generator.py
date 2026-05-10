@@ -307,6 +307,27 @@ class PrivateReplyer:
         return soft_hits >= 2
 
     @classmethod
+    def _looks_reception_fast_reply(cls, text: str) -> bool:
+        payload = str(text or "").strip()
+        if not payload:
+            return False
+        normalized = cls._normalize_repeat_guard_text(payload)
+        exact_bad = {
+            "好的你说",
+            "好你说",
+            "嗯你说",
+            "你说",
+            "继续说",
+            "说吧",
+            "收到",
+            "好的继续说",
+            "可以你说",
+        }
+        if normalized in exact_bad:
+            return True
+        return any(marker in payload for marker in ("好的，你说", "好的你说", "你继续说", "继续说吧"))
+
+    @classmethod
     def _looks_hostile_history_reply(cls, text: str) -> bool:
         payload = str(text or "").strip()
         if not payload:
@@ -426,6 +447,7 @@ class PrivateReplyer:
         return (
             "按主人格自然口语说，别像脚本。"
             "不要复读、照抄、同音改写原句，也别把对方词尾改成我/你。"
+            "禁回: 好的你说、你说、继续说、收到、请问、当然。"
         )
 
     @staticmethod
@@ -800,6 +822,25 @@ class PrivateReplyer:
                         llm_response.reasoning = (
                             modified_message.llm_response_reasoning
                         )
+                if fast_path and self._looks_reception_fast_reply(llm_response.content or ""):
+                    logger.warning(f"[fast_path] 私聊生成接待话术，取消发送: {str(llm_response.content or '')[:30]}")
+                    if log_reply:
+                        try:
+                            PlanReplyLogger.log_reply(
+                                chat_id=self.chat_stream.stream_id,
+                                prompt=str(llm_response.prompt or ""),
+                                output=llm_response.content,
+                                processed_output=None,
+                                model=llm_response.model,
+                                reasoning=llm_response.reasoning,
+                                think_level=think_level,
+                                error="fast_path_reception_reply",
+                                success=False,
+                            )
+                        except Exception as exc:
+                            logger.debug(f"记录private reply日志失败: {exc}")
+                    llm_response.content = ""
+                    return False, llm_response
             except UserWarning as e:
                 raise e
             except Exception as llm_e:
@@ -1421,16 +1462,11 @@ class PrivateReplyer:
                 for part in (
                     sanitize_extra_info(extra_info, max_tokens=140),
                     "短句护栏: 不要复读、不要照抄、不要同音改写对方原句；信息不完整就自然追问或轻接一句。",
+                    low_info_guard,
                 )
                 if str(part or "").strip()
             )
-            extra_info_block = build_reply_context_block(
-                recent_context="",
-                relevant_context="",
-                extra_info=fast_extra_info,
-                recent_reply_guard=low_info_guard,
-                max_total_tokens=180,
-            )
+            extra_info_block = fast_extra_info
             if sender:
                 if has_only_pics and not has_text:
                     reply_target_block = f"这轮是{sender}发来的图：{pic_part}"
@@ -1450,6 +1486,7 @@ class PrivateReplyer:
                 "直接快回通道：只回当前这句话，一句短口语，别铺垫，别二次发挥。"
                 "不要复读、不要照抄、不要同音改写对方原句；不要把对方词尾改成“我/你”当回复。"
                 "如果信息不完整，轻轻接住或追问半句，不要猜词义。"
+                "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”。"
             )
             prompt = get_private_responder_prompt(
                 sender_name=sender or "对方",

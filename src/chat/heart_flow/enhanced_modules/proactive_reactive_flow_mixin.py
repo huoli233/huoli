@@ -105,6 +105,62 @@ class ProactiveReactiveFlowMixin:
         extra_parts.append(f"[当前心理状态] 烦躁度{annoyance:.0f}，压力{pressure:.0f}，回复{mood_desc}。")
         extra_parts.append(f"[当前情感状态] {feeling}")
 
+    def _append_direct_fast_relation_style(self, extra_parts: List[str], relation_view: Dict[str, Any]) -> None:
+        """直接快回补最小关系风格，避免绕过好感/信任/厌烦后变成客服接话。"""
+        view = relation_view or {}
+        try:
+            affection = float(view.get("affection", 0.0) or 0.0)
+            trust = float(view.get("trust_value", 0.0) or 0.0)
+            annoyance = float(view.get("annoyance_value", 0.0) or 0.0)
+            pressure = float(view.get("psychological_pressure", 0.0) or 0.0)
+            trauma = float(view.get("trauma_score", 0.0) or 0.0)
+        except Exception:
+            affection, trust, annoyance, pressure, trauma = 0.0, 0.0, 0.0, 0.0, 0.0
+        relation_label = str(
+            view.get("personal_impression")
+            or view.get("relationship")
+            or view.get("legacy_relationship_label")
+            or view.get("custom_label")
+            or ""
+        ).strip()
+        if not relation_label:
+            try:
+                level = int(view.get("relationship_level", 2) or 2)
+            except Exception:
+                level = 2
+            relation_label = {
+                0: "关系紧张",
+                1: "不太熟悉",
+                2: "有些熟悉",
+                3: "比较熟悉",
+                4: "关系亲密",
+                5: "非常信任",
+            }.get(level, "有些熟悉")
+        extra_parts.append(
+            "[当前对象关系] "
+            f"关系={relation_label}，好感={affection:.1f}，信任={trust:.1f}，"
+            f"厌烦={annoyance:.1f}，压力={pressure:.1f}。"
+        )
+
+        style_lines: List[str] = []
+        blocked = bool(view.get("is_user_blocked", False))
+        if blocked or trauma >= 5:
+            style_lines.append("你对对方有防备，短回也要留距离，别热情接待。")
+        elif annoyance >= 70:
+            style_lines.append("你现在明显烦，回得短、冷一点，别装配合。")
+        elif annoyance >= 35:
+            style_lines.append("你有点不耐烦，语气可以淡一点，但别攻击。")
+        elif trust < 15:
+            style_lines.append("你对对方信任很低，别主动展开，别显得熟络。")
+        elif affection <= 10:
+            style_lines.append("你对对方好感不高，正常短回，不要服务式接话。")
+        elif affection >= 55 and trust >= 35:
+            style_lines.append("你对对方印象不错，可以稍微松一点，但仍然短。")
+        if pressure >= 7:
+            style_lines.append("心理压力已经顶上来，回复别殷勤，少解释。")
+        style_lines.append("不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”这类接待话术。")
+        extra_parts.append("[直接快回关系语气] " + " ".join(style_lines[:3]))
+
     @staticmethod
     def _pick_runtime_text(key: str, seed_text: str) -> str:
         candidates = _rt_str_list(key)
@@ -208,9 +264,13 @@ class ProactiveReactiveFlowMixin:
                 extra_info_parts.append(current_target_block)
             if direct_fast_reply_generation:
                 try:
-                    relation_view = self._normalize_relation_snapshot(
+                    cached_relation = self._normalize_relation_snapshot(
                         getattr(self, "_last_relation_snapshot", {}) or {}
                     )
+                    if getattr(self, "_resolved_emo_state", None) is not None:
+                        relation_view = self._inject_realtime_emotion(cached_relation)
+                    else:
+                        relation_view = cached_relation
                 except Exception:
                     relation_view = {}
             else:
@@ -218,6 +278,7 @@ class ProactiveReactiveFlowMixin:
             context_execution_block = ""
             if direct_fast_reply_generation:
                 extra_info_parts.append("[直接快回] 一句短口语，直接回应当前消息；不做长篇解释，不二次改写，不补充追发。")
+                self._append_direct_fast_relation_style(extra_info_parts, relation_view)
                 self._append_direct_fast_soul_state(extra_info_parts, relation_view)
                 target_text = str(
                     getattr(target_message, "processed_plain_text", "")

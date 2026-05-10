@@ -130,12 +130,15 @@ def _compress_chat_block(text: str, max_tokens: int = 180) -> str:
     text = str(text).strip()
     if estimate_prompt_token_count(text) <= max_tokens:
         return text
+    raw_lines = [str(raw_line or "").strip() for raw_line in text.splitlines() if str(raw_line or "").strip()]
+    priority_markers = ("关系", "好感", "信任", "厌烦", "压力", "禁回", "不要", "禁止", "当前")
+    prioritized = [
+        line for line in raw_lines if any(marker in line for marker in priority_markers)
+    ]
+    rest = [line for line in raw_lines if line not in prioritized]
     lines = []
     used_tokens = 0
-    for raw_line in text.splitlines():
-        line = str(raw_line or "").strip()
-        if not line:
-            continue
+    for line in prioritized + rest:
         line_tokens = estimate_prompt_token_count(line)
         if used_tokens + line_tokens > max_tokens:
             break

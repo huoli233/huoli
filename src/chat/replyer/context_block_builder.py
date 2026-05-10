@@ -19,6 +19,7 @@ LIGHTWEIGHT_EXTRA_PREFIXES = (
     "当前对象:",
     "最新用户话头:",
     "你上一句:",
+    "直接快回关系语气:",
 )
 
 LIGHTWEIGHT_EXTRA_INLINE_MARKERS = (
@@ -28,6 +29,8 @@ LIGHTWEIGHT_EXTRA_INLINE_MARKERS = (
     "当前对象:",
     "最新用户话头:",
     "你上一句:",
+    "厌烦=",
+    "压力=",
 )
 
 STYLE_GUIDANCE_KEYWORDS = (
@@ -87,6 +90,8 @@ LEGACY_EXTRA_HEADER_PREFIX_MAP = {
     "[主动行为意图]": "这轮:",
     "[内容规划]": "这轮:",
     "[当前感受]": "当前状态:",
+    "[当前对象关系]": "关系:",
+    "[直接快回关系语气]": "直接快回关系语气:",
     "[最近观察]": "补充:",
     "[投递指令]": "这轮:",
     "[群聊氛围感知]": "当前状态:",

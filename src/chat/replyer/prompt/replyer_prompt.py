@@ -178,7 +178,7 @@ def _smart_compress_context_block(text: str, max_tokens: int = 150) -> str:
             accumulated_tokens += line_tokens
         elif any(
             marker in line
-            for marker in ["问题", "回复", "关键", "重要", "注意", "当前"]
+            for marker in ["问题", "回复", "关键", "重要", "注意", "当前", "关系", "好感", "信任", "厌烦", "压力", "禁回"]
         ):
             compressed_lines.append(line)
             accumulated_tokens += line_tokens

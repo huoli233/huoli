@@ -1774,6 +1774,16 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "来源=voice_driven_fast" in flow_source
     assert "def _append_direct_fast_soul_state" in flow_source
     assert "self._append_direct_fast_soul_state(extra_info_parts, relation_view)" in flow_source
+    assert "def _append_direct_fast_relation_style" in flow_source
+    assert "self._append_direct_fast_relation_style(extra_info_parts, relation_view)" in flow_source
+    assert (
+        "self._append_direct_fast_relation_style(extra_info_parts, relation_view)\n"
+        "                self._append_direct_fast_soul_state(extra_info_parts, relation_view)"
+    ) in flow_source
+    assert "[当前对象关系]" in flow_source
+    assert "[直接快回关系语气]" in flow_source
+    assert "不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" in flow_source
+    assert "relation_view = self._inject_realtime_emotion(cached_relation)" in flow_source
     assert "self._inject_fallback_soul_state(extra_info_parts)" not in flow_source
     assert "if not direct_fast_reply_generation:\n                append_reply_style(extra_info_parts, style_route)" in flow_source
     assert "if direct_fast_reply_generation:\n                extra_info = \"\\n\".join" in flow_source
@@ -1821,9 +1831,15 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "low_info_guard = self._build_low_info_input_guard(fast_low_info_text)" in group_reply_source
     assert "low_info_input=bool(low_info_guard)" in group_reply_source
     assert "identity=fast_identity_hint" in group_reply_source
+    assert "禁回: 好的你说、你说、继续说、收到、请问、当然" in group_reply_source
+    assert "extra_info_block = fast_extra_info" in group_reply_source
     assert "不要复读、不要照抄、不要同音改写对方原句" in group_reply_source
     assert "不要把对方词尾改成“我/你”当回复" in group_reply_source
     assert "信息不完整就自然追问或轻接一句" in group_reply_source
+    assert "_looks_reception_fast_reply" in group_reply_source
+    assert "fast_path_reception_reply" in group_reply_source
+    assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" in group_reply_source
+    assert "DefaultReplyer._looks_reception_fast_reply(\"好的，你说。\") is True" not in group_reply_source
     assert "[reply_postprocess] 跳过自然化错字和二次改写" in group_reply_source
     assert "_apply_adaptive_recall(content" not in group_reply_source
     assert "await self._apply_rewrite_if_needed(" not in group_reply_source
@@ -1835,7 +1851,29 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "low_info_guard = self._build_low_info_input_guard(fast_low_info_text)" in private_reply_source
     assert "low_info_input=bool(low_info_guard)" in private_reply_source
     assert "identity=fast_identity_hint" in private_reply_source
+    assert "禁回: 好的你说、你说、继续说、收到、请问、当然" in private_reply_source
+    assert "extra_info_block = fast_extra_info" in private_reply_source
     assert "不要复读、不要照抄、不要同音改写对方原句" in private_reply_source
+    assert "_looks_reception_fast_reply" in private_reply_source
+    assert "fast_path_reception_reply" in private_reply_source
+    assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" in private_reply_source
+    context_block_source = (ROOT / "src/chat/replyer/context_block_builder.py").read_text(encoding="utf-8")
+    assert "[当前对象关系]" in context_block_source
+    assert "[直接快回关系语气]" in context_block_source
+    assert "厌烦=" in context_block_source
+    assert "压力=" in context_block_source
+    reply_prompt_source = (ROOT / "src/chat/replyer/prompt/replyer_prompt.py").read_text(encoding="utf-8")
+    private_prompt_source = (ROOT / "src/chat/replyer/prompt/replyer_private_prompt.py").read_text(encoding="utf-8")
+    assert "\"好感\", \"信任\", \"厌烦\", \"压力\", \"禁回\"" in reply_prompt_source
+    assert "priority_markers = (\"关系\", \"好感\", \"信任\", \"厌烦\", \"压力\", \"禁回\"" in private_prompt_source
+    from src.chat.replyer.group_generator import DefaultReplyer
+    from src.chat.replyer.private_generator import PrivateReplyer
+
+    assert DefaultReplyer._looks_reception_fast_reply("好的，你说。") is True
+    assert DefaultReplyer._looks_reception_fast_reply("嗯你说") is True
+    assert DefaultReplyer._looks_reception_fast_reply("有点没看懂") is False
+    assert PrivateReplyer._looks_reception_fast_reply("继续说吧") is True
+    assert PrivateReplyer._looks_reception_fast_reply("啥意思") is False
     assert "_cond_tasks" not in group_reply_source
     assert "_reply_context_tasks" in group_reply_source
     assert "asyncio.gather(*_reply_context_tasks)" in group_reply_source
@@ -1857,6 +1895,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "direct_fast_temp_record_skipped": True,
         "direct_fast_budget_matches_model_timeout": True,
         "direct_fast_low_info_guard_restored": True,
+        "direct_fast_relation_style_restored": True,
+        "direct_fast_reception_reply_blocked": True,
     }
 
 

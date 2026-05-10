@@ -1736,3 +1736,30 @@
 - 变更需要重启主程序后生效。
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
+
+## 2026-05-10T09:28:17+08:00 - Task: 修复直接快回吞掉关系情绪风格
+
+### What was done:
+- 根据用户 08:58 日志确认：回复已能发送，但 `voice_driven_fast` 只生成 `好的，你说。`，说明直接快回绕过了好感、信任、厌烦、心理压力等关系风格，且客服式接话没有被拦截。
+- 在直接快回链路新增 `_append_direct_fast_relation_style()`，只读取本轮缓存关系快照和实时情绪覆盖，不触发慢 DB/工具链。
+- 将 `[当前对象关系]` 注入快回 prompt：关系、好感、信任、厌烦、压力会随 `extra_info` 进入群聊/私聊回复器。
+- 将 `[直接快回关系语气]` 注入快回 prompt：低信任、低好感、高厌烦、高压力会明确约束“短、冷、别服务式接话”。
+- 调整快回 extra_info 顺序：关系风格先于夜间身体状态进入 prompt，避免 token 裁剪优先保留困意却丢掉好感/信任/厌烦。
+- 群聊/私聊 fast_path 不再用 `build_reply_context_block()` 二次裁剪关系块，改为直接使用轻量 `fast_extra_info`。
+- 群聊/私聊回复器增加接待话术检测：`好的，你说`、`你说`、`继续说`、`收到` 等在 fast_path 下会作为生成失败取消发送，不再本地替换成固定模板。
+- 回复 prompt 压缩器提高关系字段优先级，确保好感、信任、厌烦、压力和禁回规则不会被裁掉。
+- 更新 `scripts/heartflow_state_regression.py`，锁定直接快回必须保留关系风格并拦截接待话术。
+
+### Testing:
+- `uv run ruff check src\chat\heart_flow\enhanced_modules\proactive_reactive_flow_mixin.py src\chat\replyer\group_generator.py src\chat\replyer\private_generator.py src\chat\replyer\context_block_builder.py src\chat\replyer\prompt\replyer_prompt.py src\chat\replyer\prompt\replyer_private_prompt.py scripts\heartflow_state_regression.py` 通过。
+- `uv run python scripts\heartflow_state_regression.py` 通过，新增 `direct_fast_relation_style_restored=true` 与 `direct_fast_reception_reply_blocked=true`。
+- 本地 fast_path prompt 探针通过：群聊 prompt 约 458 字、私聊 prompt 约 361 字，均包含关系=、好感、信任、厌烦、压力和禁回规则；`好的，你说。`、`继续说吧` 会被 fast_path 接待话术检测命中。
+- `$env:PYTHONPYCACHEPREFIX="$PWD\.dark-factory\pycache"; uv run python -m compileall -q src scripts` 通过。
+- `git diff --check` 通过，仅有既有 CRLF 提示。
+
+### Notes:
+- 这轮修复的是“快回为了速度绕过关系/情绪风格”的问题，不是恢复慢历史、慢人格或工具链。
+- 之后如果模型仍输出接待话术，快回会取消发送并记录 `fast_path_reception_reply`，不会再把 `好的，你说。` 发出去。
+- 变更需要重启主程序后生效。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
