@@ -708,6 +708,55 @@ class BrainChatting(ChatCoreBase):
                                 f"统一规划指定{
                                     '引用' if unified_quote else '直连'}回复"
                             )
+                        reply_reference_info = build_reply_context_block(
+                            recent_context="",
+                            relevant_context="",
+                            extra_info="\n".join(
+                                part
+                                for part in [
+                                    self._build_relation_style_hint(target_message),
+                                    self._build_relationship_target_hint(target_message),
+                                    (
+                                        f"[统一规划目标] 优先围绕 {unified_target_user_id} 当前表达组织回复"
+                                        if unified_target_user_id
+                                        else ""
+                                    ),
+                                    (
+                                        f"[统一规划决策理由] {unified_reason}"
+                                        if unified_reason
+                                        else ""
+                                    ),
+                                    (
+                                        f"[统一规划回复风格] {unified_reply_style}"
+                                        if unified_reply_style
+                                        else ""
+                                    ),
+                                    (
+                                        f"[统一规划内容意图] {unified_content_plan}"
+                                        if unified_content_plan
+                                        else ""
+                                    ),
+                                    (
+                                        f"[行为分类] {behavior_signal.get('category', 'neutral')} | "
+                                        f"强度={float(behavior_signal.get('severity', 0.0) or 0.0):.2f} | "
+                                        f"{behavior_signal.get('reason', '未知')}"
+                                    ),
+                                    f"[回复形式] {style_route['reply_style']} | {style_route['reason']}",
+                                ]
+                                if part
+                            ),
+                            recent_reply_guard="",
+                        )
+                        from src.chat.replyer.reply_intent import build_reply_intent_from_message
+
+                        reply_intent_packet = build_reply_intent_from_message(
+                            channel_id=self.stream_id,
+                            message=target_message,
+                            trigger_reason=reply_reason,
+                            reference_info=reply_reference_info,
+                            quote_policy="quote_reply" if style_route.get("quote_message") else "none",
+                            fast_path=False,
+                        )
 
                         success, llm_response = (
                             await generator_api.generate_reply(
@@ -720,49 +769,8 @@ class BrainChatting(ChatCoreBase):
                                 enable_tool=global_config.tool.enable_tool,
                                 request_type="replyer",
                                 from_plugin=False,
-                                extra_info=build_reply_context_block(
-                                    recent_context="",
-                                    relevant_context="",
-                                    extra_info="\n".join(
-                                        part
-                                        for part in [
-                                            self._build_relation_style_hint(
-                                                target_message
-                                            ),
-                                            self._build_relationship_target_hint(
-                                                target_message
-                                            ),
-                                            (
-                                                f"[统一规划目标] 优先围绕 {unified_target_user_id} 当前表达组织回复"
-                                                if unified_target_user_id
-                                                else ""
-                                            ),
-                                            (
-                                                f"[统一规划决策理由] {unified_reason}"
-                                                if unified_reason
-                                                else ""
-                                            ),
-                                            (
-                                                f"[统一规划回复风格] {unified_reply_style}"
-                                                if unified_reply_style
-                                                else ""
-                                            ),
-                                            (
-                                                f"[统一规划内容意图] {unified_content_plan}"
-                                                if unified_content_plan
-                                                else ""
-                                            ),
-                                            (
-                                                f"[行为分类] {behavior_signal.get('category', 'neutral')} | "
-                                                f"强度={float(behavior_signal.get('severity', 0.0) or 0.0):.2f} | "
-                                                f"{behavior_signal.get('reason', '未知')}"
-                                            ),
-                                            f"[回复形式] {style_route['reply_style']} | {style_route['reason']}",
-                                        ]
-                                        if part
-                                    ),
-                                    recent_reply_guard="",
-                                ),
+                                extra_info=reply_reference_info,
+                                reply_intent=reply_intent_packet,
                             )
                         )
 

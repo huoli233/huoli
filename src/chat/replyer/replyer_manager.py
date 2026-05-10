@@ -4,6 +4,11 @@ from src.common.logger import get_logger
 from src.chat.message_receive.chat_stream import ChatStream, get_chat_manager
 from src.chat.replyer.group_generator import DefaultReplyer
 from src.chat.replyer.private_generator import PrivateReplyer
+from src.chat.replyer.reply_intent import (
+    ReplyIntentPacket,
+    build_reply_intent_from_message,
+    relation_to_reply_intent,
+)
 
 logger = get_logger("ReplyerManager")
 
@@ -94,8 +99,16 @@ class ReplyerManager:
         if not replyer:
             return ""
         try:
+            reply_intent = self._build_manager_reply_intent(
+                stream_id=stream_id,
+                packet_data=packet_data,
+                mental_state=mental_state,
+                trigger_reason="群聊高层回复入口",
+                is_trauma_blocked=is_trauma_blocked,
+            )
             success, llm_response = await replyer.generate_reply_with_context(
                 think_level=think_level,
+                reply_intent=reply_intent,
             )
             if success and llm_response and llm_response.content:
                 text = llm_response.content
@@ -121,8 +134,15 @@ class ReplyerManager:
         if not replyer:
             return ""
         try:
+            reply_intent = self._build_manager_reply_intent(
+                stream_id=stream_id,
+                packet_data=packet_data,
+                mental_state=mental_state,
+                trigger_reason="私聊高层回复入口",
+            )
             success, llm_response = await replyer.generate_reply_with_context(
                 think_level=think_level,
+                reply_intent=reply_intent,
             )
             if success and llm_response and llm_response.content:
                 return llm_response.content
@@ -131,6 +151,62 @@ class ReplyerManager:
             logger.error(f"私聊回复生成失败: {exc}")
             self.clear_cache(stream_id)
             return ""
+
+    def _build_manager_reply_intent(
+        self,
+        *,
+        stream_id: str,
+        packet_data: Dict,
+        mental_state: Optional[Dict],
+        trigger_reason: str,
+        is_trauma_blocked: bool = False,
+    ) -> ReplyIntentPacket:
+        packet_data = packet_data or {}
+        mental_state = mental_state or {}
+        user_id = str(packet_data.get("sender_id") or packet_data.get("user_id") or "").strip()
+        user_name = str(packet_data.get("sender_name") or packet_data.get("nickname") or user_id or "对方").strip()
+        target_text = str(
+            packet_data.get("processed_plain_text")
+            or packet_data.get("plain_text")
+            or packet_data.get("content")
+            or packet_data.get("message")
+            or ""
+        ).strip()
+        relation: Dict[str, Any] = {}
+        if user_id:
+            try:
+                from src.core.world_snapshot import build_relation_rapport_snapshot
+
+                relation = build_relation_rapport_snapshot(channel_id=stream_id, user_id=user_id) or {}
+            except Exception as exc:
+                logger.debug(f"[ReplyerManager] 构造统一回复意图包读取关系失败: {exc}")
+        if mental_state:
+            relation.update(
+                {
+                    "affection": mental_state.get("affection", mental_state.get("favor", relation.get("affection", 0))),
+                    "trust_value": mental_state.get("trust", mental_state.get("trust_value", relation.get("trust_value", 0))),
+                    "annoyance_value": mental_state.get(
+                        "annoyance",
+                        mental_state.get("annoyance_value", relation.get("annoyance_value", 0)),
+                    ),
+                    "psychological_pressure": mental_state.get(
+                        "pressure",
+                        mental_state.get("psychological_pressure", relation.get("psychological_pressure", 0)),
+                    ),
+                    "mood": mental_state.get("mood", relation.get("mood", "")),
+                }
+            )
+        if is_trauma_blocked:
+            relation["trauma_score"] = max(float(relation.get("trauma_score", 0.0) or 0.0), 5.0)
+            relation["is_user_blocked"] = True
+        return relation_to_reply_intent(
+            target=user_name,
+            target_text=target_text,
+            trigger_reason=trigger_reason,
+            relation_view=relation,
+            reference_info="通用回复管理入口：没有心流执行块时仍必须按统一回复意图包收敛表达。",
+            fast_path=False,
+        )
 
     # ---- 状态日志 ----
 
@@ -238,6 +314,13 @@ class ResponseFactory:
         responder = self.acquire_responder(chat_stream=chat_stream)
         if not responder:
             return False, None
+        if kwargs.get("reply_intent") is None:
+            kwargs["reply_intent"] = build_reply_intent_from_message(
+                channel_id=chat_stream.stream_id,
+                message=reply_message,
+                trigger_reason=reply_reason or "响应工厂群聊回复入口",
+                reference_info="响应工厂入口：调用方未提供心流意图时，显式收敛为统一回复意图包。",
+            )
         return await responder.generate_reply_with_context(
             reply_message=reply_message,
             reply_reason=reply_reason,
@@ -255,6 +338,13 @@ class ResponseFactory:
         responder = self.acquire_responder(chat_stream=chat_stream)
         if not responder:
             return False, None
+        if kwargs.get("reply_intent") is None:
+            kwargs["reply_intent"] = build_reply_intent_from_message(
+                channel_id=chat_stream.stream_id,
+                message=reply_message,
+                trigger_reason=reply_reason or "响应工厂私聊回复入口",
+                reference_info="响应工厂入口：调用方未提供心流意图时，显式收敛为统一回复意图包。",
+            )
         return await responder.generate_reply_with_context(
             reply_message=reply_message,
             reply_reason=reply_reason,

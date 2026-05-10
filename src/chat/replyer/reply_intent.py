@@ -184,6 +184,60 @@ def ensure_reply_intent_packet(
     )
 
 
+def build_reply_intent_from_message(
+    *,
+    channel_id: str = "",
+    message: Any = None,
+    trigger_reason: str = "",
+    reference_info: str = "",
+    quote_policy: str = "none",
+    fast_path: bool = False,
+    allow_followup: Optional[bool] = None,
+    relation_view: Optional[Dict[str, Any]] = None,
+) -> ReplyIntentPacket:
+    target_uid = str(getattr(message, "user_id", "") or "").strip()
+    target_name = str(
+        getattr(message, "user_nickname", "")
+        or getattr(message, "user_cardname", "")
+        or getattr(message, "nickname", "")
+        or target_uid
+        or "对方"
+    ).strip()
+    target_text = str(
+        getattr(message, "processed_plain_text", "")
+        or getattr(message, "plain_text", "")
+        or getattr(message, "content", "")
+        or ""
+    ).strip()
+    relation = dict(relation_view or {})
+    if not relation and channel_id and target_uid:
+        try:
+            from src.core.world_snapshot import build_relation_rapport_snapshot
+
+            relation = build_relation_rapport_snapshot(channel_id=channel_id, user_id=target_uid) or {}
+        except Exception:
+            relation = {}
+    response_mode: Dict[str, Any] = {}
+    if channel_id and target_uid:
+        try:
+            from src.modules.modcore.dynamic_persona.emotion_tracker import get_emotion_tracker
+
+            response_mode = get_emotion_tracker(channel_id).get_layered_response_mode(target_uid) or {}
+        except Exception:
+            response_mode = {}
+    return relation_to_reply_intent(
+        target=target_name,
+        target_text=target_text,
+        trigger_reason=trigger_reason,
+        relation_view=relation,
+        response_mode=response_mode,
+        reference_info=reference_info,
+        quote_policy=quote_policy,
+        fast_path=fast_path,
+        allow_followup=allow_followup,
+    )
+
+
 def relation_to_reply_intent(
     *,
     target: str = "",
@@ -334,7 +388,7 @@ def relation_to_reply_intent(
         relation_attitude=relation_attitude,
         length_policy=length_policy,
         avoid_patterns=avoid,
-        reference_info=_clean_text(reference_info, 220),
+        reference_info=_clean_text(reference_info, 420),
         quote_policy=str(quote_policy or "none"),
         fast_path=bool(fast_path),
         allow_followup=bool(allow),

@@ -721,6 +721,15 @@ class ProactiveIdleReplyMixin:
             _style_parts: List[str] = []
             append_reply_style(_style_parts, style_route)
             extra_info = merge_extra_info(extra_info, *_style_parts)
+            reply_intent_packet = self._build_reply_intent_packet(
+                target_message=target_message,
+                relation_view=relation_view,
+                reply_reason=reply_reason,
+                direct_fast_reply_generation=False,
+                style_route=style_route,
+                reference_info=extra_info,
+                allow_followup=bool(llm_decision.content_plan),
+            )
             self._emit_reply_generation_summary(
                 target_message=target_message,
                 style_route=style_route,
@@ -742,6 +751,7 @@ class ProactiveIdleReplyMixin:
                 extra_info=extra_info,
                 request_type="proactive_reply",
                 think_level=1,
+                reply_intent=reply_intent_packet,
             )
 
             if not success or not llm_response or not llm_response.reply_set:

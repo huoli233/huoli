@@ -1733,10 +1733,12 @@ class PrivateReplyer:
             reply_reason,
             low_info_input=intent_packet.low_info_strategy not in ("", "none"),
         )
-        prompt_extra_info = self._prune_redundant_context_sources(
-            extra_info,
-            recent_context_present=bool(chat_talking_prompt_short),
-        )
+        prompt_extra_info = ""
+        if not intent_packet.reference_info:
+            prompt_extra_info = self._prune_redundant_context_sources(
+                extra_info,
+                recent_context_present=bool(chat_talking_prompt_short),
+            )
         combined_extra = "\n".join(
             part
             for part in (

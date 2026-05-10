@@ -70,6 +70,8 @@ class ProactiveReactiveFlowMixin:
         reply_reason: str,
         direct_fast_reply_generation: bool,
         style_route: Optional[Dict[str, Any]] = None,
+        reference_info: str = "",
+        allow_followup: Optional[bool] = None,
     ) -> ReplyIntentPacket:
         target_uid = str(getattr(target_message, "user_id", "") or "").strip()
         target_name = str(
@@ -110,10 +112,11 @@ class ProactiveReactiveFlowMixin:
             trigger_reason=reply_reason,
             relation_view=relation_view,
             response_mode=response_mode,
-            reference_info=str(getattr(self, "_latest_memory_hint", "") or ""),
+            reference_info=self._compose_reply_intent_reference(reference_info),
             quote_policy=quote_policy,
             fast_path=direct_fast_reply_generation,
             night_hint=night_hint,
+            allow_followup=allow_followup,
         )
         logger.info(
             f"{self.log_prefix} [回复意图包] 立场={packet.stance} 语气={packet.tone} "
@@ -121,6 +124,27 @@ class ProactiveReactiveFlowMixin:
         )
         self._last_reply_intent_packet = packet
         return packet
+
+    def _compose_reply_intent_reference(self, *parts: str) -> str:
+        candidates = [str(getattr(self, "_latest_memory_hint", "") or "").strip()]
+        candidates.extend(str(part or "").strip() for part in parts)
+        seen = set()
+        compacted: List[str] = []
+        for item in candidates:
+            if not item:
+                continue
+            for raw_line in item.splitlines():
+                line = str(raw_line or "").strip()
+                if not line:
+                    continue
+                normalized = " ".join(line.split())
+                if normalized in seen:
+                    continue
+                seen.add(normalized)
+                compacted.append(line[:160])
+                if len(compacted) >= 6:
+                    return "；".join(compacted)
+        return "；".join(compacted)
 
     @staticmethod
     def _pick_runtime_text(key: str, seed_text: str) -> str:
@@ -342,6 +366,10 @@ class ProactiveReactiveFlowMixin:
                     recent_reply_guard="",
                 )
                 extra_info = self._ensure_soul_data_in_extra_info(extra_info)
+            reply_intent_packet.reference_info = self._compose_reply_intent_reference(
+                reply_intent_packet.reference_info,
+                extra_info,
+            )
             _key_lines = self._summarize_soul_data_lines(extra_info)
             if _key_lines:
                 logger.info(f"{self.log_prefix} 🧠 传入LLM的灵魂数据摘要: {' | '.join(_key_lines)}")

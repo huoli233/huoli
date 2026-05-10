@@ -1437,6 +1437,32 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
 
+## 2026-05-10T10:39:15+08:00 - Task: 深度排查并补齐统一回复意图包残留入口
+
+### What was done:
+- 全量审计可见回复调用点：heartflow voice/planner/proactive、旧 `brain_chat`、`ReplyerManager`、`ResponseFactory`、`GeneratorAPI`、群聊/私聊 replyer。
+- 补齐 planner 路径：`_execute_planned_reply()` 在进入回复协调器前构造真实 `ReplyIntentPacket`，把关系、内容规划、前情执行块、维度状态、回复形式和自省约束收敛进意图包。
+- 补齐 proactive 路径：`_execute_proactive_reply()` 在生成前构造真实 `ReplyIntentPacket`，把主动意图、内容规划、当前感受、Governor、最近观察、前情和投递策略收敛进意图包。
+- 修正 voice 非快回路径：后补的夜间/心理/维度/自省 extra_info 会回写到 `reply_intent_packet.reference_info`，避免 replyer 因已有意图包而丢掉后补机制。
+- 新增 `build_reply_intent_from_message()`，让旧 `brain_chat`、`ReplyerManager`、`ResponseFactory` 也显式生成统一意图包，不再只靠 GeneratorAPI 默认补包。
+- 群聊/私聊普通路径在意图包已有 `reference_info` 时不再重复注入同一份散块，避免“统一包 + 旧碎片”并存。
+- 更新 `scripts/heartflow_state_regression.py`，锁定 planner/proactive/brain_chat/manager/factory 入口和 replyer 去散块合同。
+
+### Testing:
+- `.\.venv\Scripts\python.exe -m py_compile ...` 针对本轮 9 个改动文件通过。
+- `.\.venv\Scripts\python.exe -m ruff check ...` 针对本轮 9 个改动文件通过。
+- `.\.venv\Scripts\python.exe scripts/heartflow_state_regression.py` 通过。
+- `$env:PYTHONPYCACHEPREFIX=...; .\.venv\Scripts\python.exe -m compileall -q src scripts` 通过。
+- `git diff --check -- <本轮文件>` 通过，仅有既有 LF/CRLF 工作区提示。
+- `.\.venv\Scripts\python.exe -m ruff check src scripts` 未通过，失败为仓库既有未使用 import/变量等 116 项，分布在非本轮文件；本轮未混入无关 lint 清理。
+
+### Notes:
+- 本轮确认 heartflow 主链三类可见回复入口均不再依赖 GeneratorAPI 默认意图包兜底。
+- GeneratorAPI 仍保留 `reply_intent: Optional[ReplyIntentPacket] = None`，这是外部插件/通用入口防崩降级，不是 heartflow 主链的新旧双轨。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 本轮只 stage 回复意图包链路相关文件；不碰用户遗留删除项：`.gitmessage-cn.txt`、多个 `docs/*.md`，也不纳入 `.trae/`。
+- 变更需要重启主程序后生效。
+
 ## 2026-05-10T06:59:07+08:00 - Task: 优化强制短句快回构建链路
 
 ### What was done:

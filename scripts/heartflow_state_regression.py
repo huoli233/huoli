@@ -1773,7 +1773,30 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     ) not in flow_source
     assert "fast_path_deadline=direct_fast_deadline" in flow_source
     assert "reply_intent=reply_intent_packet" in flow_source
+    assert "reply_intent_packet.reference_info = self._compose_reply_intent_reference(" in flow_source
+    planner_source = (ROOT / "src/chat/heart_flow/enhanced_modules/loop_reply_execution_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    proactive_source = (ROOT / "src/chat/heart_flow/enhanced_modules/proactive_idle_reply_mixin.py").read_text(
+        encoding="utf-8"
+    )
+    brain_source = (ROOT / "src/chat/brain_chat/brain_chat.py").read_text(encoding="utf-8")
+    manager_source = (ROOT / "src/chat/replyer/replyer_manager.py").read_text(encoding="utf-8")
+    assert "reply_intent_packet = self._build_reply_intent_packet(" in planner_source
+    assert "reference_info=\"\\n\".join(part for part in extra_parts if part)" in planner_source
+    assert "reply_intent=reply_intent_packet" in planner_source
+    assert "reply_intent_packet = self._build_reply_intent_packet(" in proactive_source
+    assert "reference_info=extra_info" in proactive_source
+    assert "reply_intent=reply_intent_packet" in proactive_source
+    assert "build_reply_intent_from_message" in brain_source
+    assert "reply_reference_info = build_reply_context_block(" in brain_source
+    assert "reply_intent=reply_intent_packet" in brain_source
+    assert "_build_manager_reply_intent" in manager_source
+    assert "reply_intent=reply_intent" in manager_source
+    assert "kwargs[\"reply_intent\"] = build_reply_intent_from_message(" in manager_source
     assert "def _build_reply_intent_packet" in flow_source
+    assert "reference_info: str = \"\"" in flow_source
+    assert "def _compose_reply_intent_reference" in flow_source
     assert "relation_to_reply_intent(" in flow_source
     assert "get_layered_response_mode" in flow_source
     assert "[回复意图包]" in flow_source
@@ -1843,6 +1866,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "intent_block = render_reply_intent_block(intent_packet)" in group_reply_source
     assert "以【回复意图包】为准" in group_reply_source
     assert "extra_info_block = fast_extra_info" in group_reply_source
+    assert "if not intent_packet.reference_info:" in group_reply_source
     assert "_looks_reception_fast_reply" in group_reply_source
     assert "fast_path_reception_reply" in group_reply_source
     assert "_looks_generic_ack_fast_reply" in group_reply_source
@@ -1865,6 +1889,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "intent_block = render_reply_intent_block(intent_packet)" in private_reply_source
     assert "以【回复意图包】为准" in private_reply_source
     assert "extra_info_block = fast_extra_info" in private_reply_source
+    assert "if not intent_packet.reference_info:" in private_reply_source
     assert "_looks_reception_fast_reply" in private_reply_source
     assert "fast_path_reception_reply" in private_reply_source
     assert "_looks_generic_ack_fast_reply" in private_reply_source
@@ -1882,6 +1907,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     reply_intent_source = (ROOT / "src/chat/replyer/reply_intent.py").read_text(encoding="utf-8")
     assert "class ReplyIntentPacket" in reply_intent_source
     assert "def relation_to_reply_intent" in reply_intent_source
+    assert "def build_reply_intent_from_message" in reply_intent_source
     assert "def ensure_reply_intent_packet" in reply_intent_source
     assert "def render_reply_intent_block" in reply_intent_source
     assert "GENERIC_FAST_ACK_REPLIES" in reply_intent_source

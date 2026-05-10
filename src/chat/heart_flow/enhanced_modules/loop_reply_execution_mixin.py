@@ -374,6 +374,15 @@ class LoopReplyExecutionMixin:
             append_reply_style(extra_parts, style_route)
             # 注入多维状态系统的LLM提示词
             self._inject_dimension_state_prompt(extra_parts)
+            reply_intent_packet = self._build_reply_intent_packet(
+                target_message=target_message,
+                relation_view=relation_view,
+                reply_reason=reply_reason,
+                direct_fast_reply_generation=False,
+                style_route=style_route,
+                reference_info="\n".join(part for part in extra_parts if part),
+                allow_followup=gateway_gate != "hesitate",
+            )
             extra_info = "\n".join(part for part in extra_parts if part)
 
             self._emit_reply_generation_summary(
@@ -397,6 +406,7 @@ class LoopReplyExecutionMixin:
                 extra_info=extra_info,
                 request_type="planner_reply",
                 think_level=1,
+                reply_intent=reply_intent_packet,
             )
             if not success or not llm_response or not llm_response.reply_set:
                 self._last_flow_blocker = "planner回复生成失败"

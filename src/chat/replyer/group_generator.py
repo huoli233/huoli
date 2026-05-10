@@ -3408,10 +3408,12 @@ class DefaultReplyer:
             annoyance=_annoyance,
             trauma_score=_trauma_score,
         )
-        prompt_extra_info = self._prune_redundant_context_sources(
-            extra_info,
-            recent_context_present=bool(chat_talking_prompt_short),
-        )
+        prompt_extra_info = ""
+        if not intent_packet.reference_info:
+            prompt_extra_info = self._prune_redundant_context_sources(
+                extra_info,
+                recent_context_present=bool(chat_talking_prompt_short),
+            )
         prompt_extra_info = "\n".join(
             part for part in (intent_block, prompt_extra_info) if str(part or "").strip()
         )
