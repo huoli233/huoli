@@ -596,6 +596,18 @@ class DefaultReplyer:
         )
 
     @classmethod
+    def _looks_echo_target_fast_reply(cls, reply_text: str, target_text: str) -> bool:
+        reply = cls._normalize_repeat_guard_text(reply_text)
+        target = cls._normalize_repeat_guard_text(target_text)
+        if not reply or not target:
+            return False
+        if reply == target:
+            return True
+        if len(target) <= 8 and (reply in target or target in reply):
+            return True
+        return False
+
+    @classmethod
     def _looks_hostile_history_reply(cls, text: str) -> bool:
         payload = str(text or "").strip()
         if not payload:
@@ -1253,6 +1265,9 @@ class DefaultReplyer:
                 fast_low_info_context = False
                 if fast_path:
                     fast_low_info_context = bool(reply_intent.low_info_strategy not in ("", "none"))
+                fast_target_text = ""
+                if fast_path and reply_message is not None:
+                    fast_target_text = self._message_text(reply_message)
                 if fast_path and self._looks_reception_fast_reply(content):
                     logger.warning(f"[fast_path] 生成接待话术，取消发送: {content[:30]}")
                     if log_reply:
@@ -1287,6 +1302,26 @@ class DefaultReplyer:
                                 reasoning=reasoning_content,
                                 think_level=think_level,
                                 error="fast_path_generic_ack_reply",
+                                success=False,
+                            )
+                        except Exception:
+                            logger.exception("记录reply日志失败")
+                    llm_response.content = ""
+                    return False, llm_response
+                if fast_path and fast_low_info_context and self._looks_echo_target_fast_reply(content, fast_target_text):
+                    logger.warning(f"[fast_path] 低信息输入生成原句复读，取消发送: {content[:30]}")
+                    if log_reply:
+                        try:
+                            PlanReplyLogger.log_reply(
+                                chat_id=self.chat_stream.stream_id,
+                                prompt=prompt,
+                                output=content,
+                                processed_output=None,
+                                model=model_name,
+                                timing=llm_response.timing,
+                                reasoning=reasoning_content,
+                                think_level=think_level,
+                                error="fast_path_echo_target_reply",
                                 success=False,
                             )
                         except Exception:

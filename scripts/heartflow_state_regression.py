@@ -1699,6 +1699,7 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     generator_source = (ROOT / "src/plugin_system/apis/generator_api.py").read_text(encoding="utf-8")
     group_reply_source = (ROOT / "src/chat/replyer/group_generator.py").read_text(encoding="utf-8")
     private_reply_source = (ROOT / "src/chat/replyer/private_generator.py").read_text(encoding="utf-8")
+    inner_voice_source = (ROOT / "src/chat/heart_flow/inner_voice.py").read_text(encoding="utf-8")
     tool_executor_source = (ROOT / "src/plugin_system/core/tool_use.py").read_text(encoding="utf-8")
     shared_runtime_source = (ROOT / "src/chat/heart_flow/enhanced_modules/shared_runtime.py").read_text(encoding="utf-8")
     core_config_source = (ROOT / "config/core_config.toml").read_text(encoding="utf-8")
@@ -1774,6 +1775,10 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "fast_path_deadline=direct_fast_deadline" in flow_source
     assert "reply_intent=reply_intent_packet" in flow_source
     assert "reply_intent_packet.reference_info = self._compose_reply_intent_reference(" in flow_source
+    assert "get_night_cycle(self.stream_id).night_behavior_summary()" in flow_source
+    assert "drowsiness >= 55.0" in flow_source
+    assert "half_asleep >= 0.35" in flow_source
+    assert "传入LLM的统一意图摘要" in flow_source
     planner_source = (ROOT / "src/chat/heart_flow/enhanced_modules/loop_reply_execution_mixin.py").read_text(
         encoding="utf-8"
     )
@@ -1871,6 +1876,8 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "fast_path_reception_reply" in group_reply_source
     assert "_looks_generic_ack_fast_reply" in group_reply_source
     assert "fast_path_generic_ack_reply" in group_reply_source
+    assert "_looks_echo_target_fast_reply" in group_reply_source
+    assert "fast_path_echo_target_reply" in group_reply_source
     assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" not in group_reply_source
     assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" not in group_reply_source
     assert "DefaultReplyer._looks_reception_fast_reply(\"好的，你说。\") is True" not in group_reply_source
@@ -1894,8 +1901,14 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "fast_path_reception_reply" in private_reply_source
     assert "_looks_generic_ack_fast_reply" in private_reply_source
     assert "fast_path_generic_ack_reply" in private_reply_source
+    assert "_looks_echo_target_fast_reply" in private_reply_source
+    assert "fast_path_echo_target_reply" in private_reply_source
     assert "绝对不要回“好的，你说”“你说”“继续说”“收到”“请问”“当然”" not in private_reply_source
     assert "低信息输入时不要用“嗯，是啊”“是啊”“对啊”“确实”“嗯嗯”这类泛泛附和" not in private_reply_source
+    assert 'low_info_guarded = "low_info_guard" in' in inner_voice_source
+    assert "vague_low_info_thread = any(" in inner_voice_source
+    assert "and not low_info_guarded" in inner_voice_source
+    assert "and not vague_low_info_thread" in inner_voice_source
     context_block_source = (ROOT / "src/chat/replyer/context_block_builder.py").read_text(encoding="utf-8")
     assert "【回复意图包】" in context_block_source
     assert "当前立场：" in context_block_source
@@ -1911,8 +1924,10 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert "def ensure_reply_intent_packet" in reply_intent_source
     assert "def render_reply_intent_block" in reply_intent_source
     assert "GENERIC_FAST_ACK_REPLIES" in reply_intent_source
+    assert "TARGET_ECHO_AVOID_PATTERNS" in reply_intent_source
     assert "\"好的，你说\"" in reply_intent_source
     assert "\"嗯，是啊\"" in reply_intent_source
+    assert "不要照抄目标内容" in reply_intent_source
     assert "low_info_strategy = \"带情绪短回\"" in reply_intent_source
     assert "def _pressure_signal" in reply_intent_source
     assert "LAYERED_TONE_TRANSLATIONS" in reply_intent_source
@@ -1934,11 +1949,17 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
     assert DefaultReplyer._looks_generic_ack_fast_reply("对啊") is True
     assert DefaultReplyer._looks_generic_ack_fast_reply("确实") is True
     assert DefaultReplyer._looks_generic_ack_fast_reply("有点没看懂") is False
+    assert DefaultReplyer._looks_echo_target_fast_reply("我的刀盾", "我的刀盾") is True
+    assert DefaultReplyer._looks_echo_target_fast_reply("在", "在") is True
+    assert DefaultReplyer._looks_echo_target_fast_reply("没看懂", "我的刀盾") is False
     assert PrivateReplyer._looks_reception_fast_reply("继续说吧") is True
     assert PrivateReplyer._looks_reception_fast_reply("啥意思") is False
     assert PrivateReplyer._looks_generic_ack_fast_reply("嗯，是啊。") is True
     assert PrivateReplyer._looks_generic_ack_fast_reply("嗯嗯") is True
     assert PrivateReplyer._looks_generic_ack_fast_reply("啥意思") is False
+    assert PrivateReplyer._looks_echo_target_fast_reply("我的刀盾", "我的刀盾") is True
+    assert PrivateReplyer._looks_echo_target_fast_reply("在", "在") is True
+    assert PrivateReplyer._looks_echo_target_fast_reply("没看懂", "我的刀盾") is False
     assert "_cond_tasks" not in group_reply_source
     assert "_reply_context_tasks" in group_reply_source
     assert "asyncio.gather(*_reply_context_tasks)" in group_reply_source
@@ -1963,6 +1984,10 @@ def check_force_reply_generation_failure_contract() -> Dict[str, Any]:
         "reply_context_legacy_blocks_removed": True,
         "direct_fast_reception_reply_blocked": True,
         "direct_fast_generic_ack_reply_blocked": True,
+        "direct_fast_echo_target_reply_blocked": True,
+        "direct_fast_night_hint_realtime": True,
+        "low_info_inner_voice_no_continue_topic": True,
+        "direct_fast_intent_blocks_target_echo": True,
     }
 
 

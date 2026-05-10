@@ -96,12 +96,30 @@ class ProactiveReactiveFlowMixin:
                 logger.debug(f"{self.log_prefix} 回复意图包读取分层响应模式失败: {exc}")
         night_hint = ""
         if direct_fast_reply_generation:
-            night_summary = getattr(self, "_cached_night_summary", {}) or {}
+            night_summary = {}
+            try:
+                from src.core.night_cycle_system import get_night_cycle
+
+                night_summary = get_night_cycle(self.stream_id).night_behavior_summary() or {}
+            except Exception as exc:
+                logger.debug(f"{self.log_prefix} 回复意图包读取实时夜间状态失败: {exc}")
+                night_summary = getattr(self, "_cached_night_summary", {}) or {}
             try:
                 drowsiness = float(night_summary.get("drowsiness_value", night_summary.get("drowsiness", 0.0)) or 0.0)
                 overnight_pressure = float(night_summary.get("overnight_pressure", 0.0) or 0.0)
                 half_asleep = float(night_summary.get("half_asleep_level", 0.0) or 0.0)
-                if drowsiness >= 20.0 or overnight_pressure >= 20.0 or half_asleep >= 0.2:
+                sleep_window = bool(night_summary.get("is_sleep_window", False))
+                pressure_window = bool(night_summary.get("is_pressure_window", False))
+                time_band = str(night_summary.get("time_band", "") or "")
+                phase = str(night_summary.get("phase", "") or "")
+                if (
+                    sleep_window
+                    or time_band == "dawn"
+                    or phase in {"sleep", "deep_sleep", "half_asleep", "burned_out"}
+                    or half_asleep >= 0.35
+                    or drowsiness >= 55.0
+                    or (pressure_window and overnight_pressure >= 55.0)
+                ):
                     night_hint = "困倦或半醒"
             except Exception:
                 night_hint = ""
@@ -373,6 +391,12 @@ class ProactiveReactiveFlowMixin:
             _key_lines = self._summarize_soul_data_lines(extra_info)
             if _key_lines:
                 logger.info(f"{self.log_prefix} 🧠 传入LLM的灵魂数据摘要: {' | '.join(_key_lines)}")
+            elif direct_fast_reply_generation:
+                logger.info(
+                    f"{self.log_prefix} 🧠 传入LLM的统一意图摘要: "
+                    f"立场={reply_intent_packet.stance} | 语气={reply_intent_packet.tone} | "
+                    f"关系={reply_intent_packet.relation_attitude}"
+                )
             else:
                 logger.warning(
                     f"{self.log_prefix} ⚠️ 传入LLM的extra_info中没有灵魂数据！extra_info长度={len(extra_info or '')}"

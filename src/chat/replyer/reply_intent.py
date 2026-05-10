@@ -19,6 +19,11 @@ GENERIC_FAST_ACK_REPLIES = (
     "当然",
 )
 
+TARGET_ECHO_AVOID_PATTERNS = (
+    "不要照抄目标内容",
+    "不要把目标消息原样发回去",
+)
+
 LAYERED_TONE_TRANSLATIONS = {
     "neutral": "",
     "gentle": "轻一点、别硬撑",
@@ -282,7 +287,7 @@ def relation_to_reply_intent(
     )
     tone = "普通口语"
     length_policy = "一句短口语" if fast_path else "自然短句"
-    avoid = list(GENERIC_FAST_ACK_REPLIES) + layered_avoid
+    avoid = list(GENERIC_FAST_ACK_REPLIES) + list(TARGET_ECHO_AVOID_PATTERNS) + layered_avoid
 
     if blocked or trauma >= 5:
         stance = "保持防备，只给低承诺回应"
@@ -431,5 +436,5 @@ def render_reply_intent_block(packet: ReplyIntentPacket) -> str:
         lines.append(f"必要参考：{intent.reference_info}")
     if avoid:
         lines.append(f"禁用模式：{avoid}")
-    lines.append("按这个意图包自然说一句；不要复述字段名，不要解释规则，只输出要发的话。")
+    lines.append("按这个意图包自然说一句；不要复述字段名，不要照抄目标内容，不要解释规则，只输出要发的话。")
     return "\n".join(lines)

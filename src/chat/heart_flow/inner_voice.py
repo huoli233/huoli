@@ -1607,11 +1607,24 @@ class SelfDialogueEngine:
         else:
             self._silence_rationale = ""
         # 检测未完成话头 → 自动注入意图池实现跨轮回收
-        thinking_lower = (verdict.thinking or "").lower()
+        thinking_text = str(verdict.thinking or "")
+        thinking_lower = thinking_text.lower()
+        low_info_guarded = "low_info_guard" in str(getattr(verdict, "thinking_source", "") or "")
+        vague_low_info_thread = any(
+            marker in thinking_text
+            for marker in (
+                "信息太少",
+                "没说清楚",
+                "看不出",
+                "先按没说清楚处理",
+            )
+        )
         has_unfinished_hint = (
             verdict.reply_desire_level >= 3
             and verdict.reply_desire_level < 6
             and len(thinking_lower) > 4
+            and not low_info_guarded
+            and not vague_low_info_thread
         )
         if has_unfinished_hint:
             thread = f"{

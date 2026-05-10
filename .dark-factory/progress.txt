@@ -831,6 +831,30 @@
 - `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
 - 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`。
 
+## 2026-05-10T10:55:47+08:00 - Task: 修复直接快回原句复读与清醒态误判
+
+### What was done:
+- 根据用户 10:46/10:48 日志确认：统一回复意图包已经进入快回链路，关系/压力/低信息策略也已生效；真正坏输出是 replyer 最终没有拦截“生成内容等于目标消息”的原句复读，导致 `我的刀盾` 回 `我的刀盾`、`在` 回 `在`。
+- 群聊 `DefaultReplyer` 与私聊 `PrivateReplyer` 新增 `_looks_echo_target_fast_reply()`，在 fast_path 低信息上下文下命中原句复读或短目标互相包含时，记录 `fast_path_echo_target_reply` 并返回生成失败，不再发送。
+- `ReplyIntentPacket` 新增目标原句复读禁用模式，把“不要照抄目标内容/不要把目标消息原样发回去”纳入统一意图契约，先约束模型，出口再兜底拦截。
+- 直接快回夜间提示改为优先读取实时 `get_night_cycle(self.stream_id).night_behavior_summary()`，并把困倦阈值收紧到真实睡眠窗口、清晨、半醒 >= 0.35、困意 >= 55 或熬夜压力窗口 >= 55，避免白天清醒状态继续吃旧缓存里的困倦语气。
+- 直接快回不再因为 `extra_info` 没有旧灵魂块就误报“没有灵魂数据”，改为记录统一意图摘要：立场、语气、关系态度。
+- `inner_voice` 过滤 `low_info_guard` 与“信息太少/没说清楚/看不出”这类保护性想法，不再把它们当成未完成话头写入 `continue_topic` 意图池。
+- 更新 `scripts/heartflow_state_regression.py`，锁定原句复读拦截、实时夜间状态、统一意图防复读、低信息独白不回灌意图池四类合约。
+
+### Testing:
+- `$env:PYTHONDONTWRITEBYTECODE='1'; .\.venv\Scripts\python.exe -m py_compile ...` 通过。
+- `.\.venv\Scripts\python.exe -m ruff check ...` 通过。
+- `$env:PYTHONDONTWRITEBYTECODE='1'; .\.venv\Scripts\python.exe scripts/heartflow_state_regression.py` 通过，新增 `direct_fast_echo_target_reply_blocked=true`、`direct_fast_night_hint_realtime=true`、`low_info_inner_voice_no_continue_topic=true`、`direct_fast_intent_blocks_target_echo=true`。
+- `$env:PYTHONDONTWRITEBYTECODE='1'; $env:PYTHONPYCACHEPREFIX=Join-Path $env:TEMP 'huoli_codex_compileall_fast_echo'; .\.venv\Scripts\python.exe -m compileall -q src scripts` 通过。
+- `git diff --check -- ...` 通过，仅有既有 LF/CRLF 工作区提示。
+
+### Notes:
+- 这轮不是回退统一回复意图包；是把统一意图包继续收紧，并在 replyer 出口补上坏输出拦截。
+- 需要重启主程序后生效。
+- `.dark-factory/task.json` 当前不存在，因此不能更新任务 passes/completedAt。
+- 当前工作区仍存在非本轮改动/删除：`.gitmessage-cn.txt` 删除、多个 `docs/*.md` 删除、`.trae/`，本轮提交不会纳入这些文件。
+
 ## 2026-05-09T15:44:00+08:00 - Task: 移除回复生成失败本地兜底发送
 
 ### What was done:

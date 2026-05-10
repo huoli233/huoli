@@ -365,6 +365,18 @@ class PrivateReplyer:
         )
 
     @classmethod
+    def _looks_echo_target_fast_reply(cls, reply_text: str, target_text: str) -> bool:
+        reply = cls._normalize_repeat_guard_text(reply_text)
+        target = cls._normalize_repeat_guard_text(target_text)
+        if not reply or not target:
+            return False
+        if reply == target:
+            return True
+        if len(target) <= 8 and (reply in target or target in reply):
+            return True
+        return False
+
+    @classmethod
     def _looks_hostile_history_reply(cls, text: str) -> bool:
         payload = str(text or "").strip()
         if not payload:
@@ -874,6 +886,9 @@ class PrivateReplyer:
                     fast_low_info_context = bool(
                         reply_intent and reply_intent.low_info_strategy not in ("", "none")
                     )
+                fast_target_text = ""
+                if fast_path and reply_message is not None:
+                    fast_target_text = self._message_text(reply_message)
                 if fast_path and self._looks_reception_fast_reply(llm_response.content or ""):
                     logger.warning(f"[fast_path] 私聊生成接待话术，取消发送: {str(llm_response.content or '')[:30]}")
                     if log_reply:
@@ -887,6 +902,29 @@ class PrivateReplyer:
                                 reasoning=llm_response.reasoning,
                                 think_level=think_level,
                                 error="fast_path_reception_reply",
+                                success=False,
+                            )
+                        except Exception as exc:
+                            logger.debug(f"记录private reply日志失败: {exc}")
+                    llm_response.content = ""
+                    return False, llm_response
+                if (
+                    fast_path
+                    and fast_low_info_context
+                    and self._looks_echo_target_fast_reply(llm_response.content or "", fast_target_text)
+                ):
+                    logger.warning(f"[fast_path] 私聊低信息输入生成原句复读，取消发送: {str(llm_response.content or '')[:30]}")
+                    if log_reply:
+                        try:
+                            PlanReplyLogger.log_reply(
+                                chat_id=self.chat_stream.stream_id,
+                                prompt=str(llm_response.prompt or ""),
+                                output=llm_response.content,
+                                processed_output=None,
+                                model=llm_response.model,
+                                reasoning=llm_response.reasoning,
+                                think_level=think_level,
+                                error="fast_path_echo_target_reply",
                                 success=False,
                             )
                         except Exception as exc:
